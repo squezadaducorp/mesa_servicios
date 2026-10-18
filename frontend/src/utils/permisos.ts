@@ -1,0 +1,17 @@
+export const P = {
+  VER_TODOS: "ticket.ver_todos",
+  VER_AREA: "ticket.ver_area",
+  VER_ASIGNADOS: "ticket.ver_asignados",
+  CREAR: "ticket.crear",
+  ASIGNAR: "ticket.asignar",
+  REPORTE: "reporte.ver",
+  DASHBOARD: "dashboard.ver",
+  EXPORTAR: "datos.exportar",
+  SLA: "sla.modificar",
+  USUARIOS: "usuario.administrar",
+  ROLES: "rol.administrar",
+  CATALOGO: "categoria.administrar",
+  SISTEMA: "sistema.administrar",
+  AUDITORIA: "auditoria.ver",
+  IA: "ia.usar",
+} as const;

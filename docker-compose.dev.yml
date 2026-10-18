@@ -1,0 +1,27 @@
+# Superposición de desarrollo: expone SQL Server y agrega Mailpit para ver los correos
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile demo up -d --build
+services:
+  sqlserver:
+    ports:
+      - "1433:1433"
+  api:
+    environment:
+      APP_ENV: development
+      EMAIL_ENABLED: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
+      SMTP_USER: ""
+  worker:
+    environment:
+      APP_ENV: development
+      EMAIL_ENABLED: "true"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "false"
+      SMTP_USER: ""
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "8025:8025"
+    networks: [interna]

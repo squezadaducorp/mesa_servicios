@@ -1,0 +1,135 @@
+# Mesa de Servicios ADUCORP – despliegue on-premise
+#   docker compose up -d                         (producción, HTTP en el puerto WEB_PUERTO)
+#   docker compose --profile demo up -d          (carga además los 650 tickets de demostración)
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d   (desarrollo: expone SQL Server y Mailpit)
+name: aducorp-mesa
+
+x-api-env: &api-env
+  APP_ENV: ${APP_ENV:-production}
+  APP_URL: ${APP_URL:-http://localhost:8080}
+  CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:8080"]}
+  DATABASE_URL: mssql+pyodbc://${DB_APP_USER:-mesa_app}:${DB_APP_PASSWORD:?Defina DB_APP_PASSWORD}@sqlserver:1433/${DB_NAME:-AducorpMesaServicios}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+  JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET}
+  DOCS_ENABLED: ${DOCS_ENABLED:-true}
+  AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+  LDAP_URL: ${LDAP_URL:-}
+  LDAP_DOMINIO: ${LDAP_DOMINIO:-}
+  LDAP_BASE_DN: ${LDAP_BASE_DN:-}
+  LDAP_USUARIO_SERVICIO: ${LDAP_USUARIO_SERVICIO:-}
+  LDAP_CLAVE_SERVICIO: ${LDAP_CLAVE_SERVICIO:-}
+  LDAP_GRUPO_ROLES: ${LDAP_GRUPO_ROLES:-{}}
+  EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+  SMTP_FROM: ${SMTP_FROM:-Mesa de Servicios ADUCORP <mesa.servicios@aducorp.com.ec>}
+  STORAGE_PATH: /data/adjuntos
+  AI_PROVIDER: ${AI_PROVIDER:-local}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  WORKER_INTERVALO_SEG: ${WORKER_INTERVALO_SEG:-60}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: ${MSSQL_PID:-Developer}       # Use Standard/Enterprise con licencia en producción
+      MSSQL_SA_PASSWORD: ${SA_PASSWORD:?Defina SA_PASSWORD}
+      MSSQL_COLLATION: Modern_Spanish_CI_AS
+      TZ: America/Guayaquil
+    volumes:
+      - sqldata:/var/opt/mssql
+      - ./backups:/var/opt/mssql/backups
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks: [interna]
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    restart: "no"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/deploy/db-init.sh"]
+    environment:
+      SA_PASSWORD: ${SA_PASSWORD}
+      DB_NAME: ${DB_NAME:-AducorpMesaServicios}
+      DB_APP_USER: ${DB_APP_USER:-mesa_app}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+      CARGAR_DEMO: "false"
+    volumes:
+      - ./database:/database:ro
+      - ./deploy:/deploy:ro
+    networks: [interna]
+
+  db-demo:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    profiles: [demo]
+    restart: "no"
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/bash", "/deploy/db-init.sh"]
+    environment:
+      SA_PASSWORD: ${SA_PASSWORD}
+      DB_NAME: ${DB_NAME:-AducorpMesaServicios}
+      DB_APP_USER: ${DB_APP_USER:-mesa_app}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD}
+      CARGAR_DEMO: "true"
+      SOLO_DEMO: "true"
+    volumes:
+      - ./database:/database:ro
+      - ./deploy:/deploy:ro
+    networks: [interna]
+
+  api:
+    image: ${REGISTRO:-aducorp}/mesa-api:${VERSION:-latest}
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    environment: *api-env
+    volumes:
+      - adjuntos:/data/adjuntos
+    networks: [interna]
+
+  worker:
+    image: ${REGISTRO:-aducorp}/mesa-api:${VERSION:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *api-env
+    volumes:
+      - adjuntos:/data/adjuntos
+    healthcheck:
+      disable: true
+    networks: [interna]
+
+  web:
+    image: ${REGISTRO:-aducorp}/mesa-web:${VERSION:-latest}
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PUERTO:-8080}:8080"
+    networks: [interna]
+
+volumes:
+  sqldata:
+  adjuntos:
+
+networks:
+  interna:

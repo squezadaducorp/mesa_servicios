@@ -1,0 +1,96 @@
+# Integración continua: pruebas, auditoría de dependencias y prueba del stack completo con Docker Compose
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (pytest + pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r requirements-dev.txt pip-audit
+      - run: python -m pytest
+      - name: Vulnerabilidades conocidas en dependencias
+        run: pip-audit -r requirements.txt
+
+  frontend:
+    name: Frontend (TypeScript + build + npm audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Vulnerabilidades conocidas en dependencias de producción
+        run: npm audit --omit=dev --audit-level=high
+
+  stack:
+    name: Stack completo (SQL Server + API + worker + web)
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Generar .env de prueba con secretos aleatorios
+        run: |
+          cp .env.example .env
+          sed -i "s#^SA_PASSWORD=.*#SA_PASSWORD=Ci-$(openssl rand -hex 12)-A1#" .env
+          sed -i "s#^DB_APP_PASSWORD=.*#DB_APP_PASSWORD=App-$(openssl rand -hex 12)-B2#" .env
+          sed -i "s#^JWT_SECRET=.*#JWT_SECRET=$(openssl rand -hex 32)#" .env
+          sed -i "s#^APP_URL=.*#APP_URL=http://localhost:8080#" .env
+          sed -i 's#^CORS_ORIGINS=.*#CORS_ORIGINS=["http://localhost:8080"]#' .env
+      - name: Construir imágenes
+        run: docker compose build
+      - name: Levantar el stack con datos de demostración
+        run: docker compose --profile demo up -d
+      - name: Esperar a que la aplicación responda
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8080/api/v1/health; then echo; exit 0; fi
+            sleep 5
+          done
+          echo "La aplicación no respondió a tiempo"; exit 1
+      - name: Prueba de humo (login, tickets, dashboard, exportación)
+        run: |
+          B=http://localhost:8080/api/v1
+          T=$(curl -sf -X POST $B/auth/login -H 'Content-Type: application/json' \
+                -d '{"correo":"admin@aducorp.com.ec","clave":"Aducorp2026!"}' | jq -r .access_token)
+          test -n "$T" && test "$T" != null
+          N=$(curl -sf "$B/tickets?tamano=1" -H "Authorization: Bearer $T" | jq .total)
+          echo "Tickets de demostración: $N"; test "$N" -ge 600
+          curl -sf "$B/reportes/dashboard" -H "Authorization: Bearer $T" -o /dev/null
+          curl -sf "$B/reportes/exportar?formato=xlsx" -H "Authorization: Bearer $T" -o indicadores.xlsx
+          curl -sfI http://localhost:8080/ | grep -i content-security-policy
+      - name: Redespliegue idempotente de la base
+        run: docker compose run --rm db-init
+      - name: Registros de los contenedores
+        if: failure()
+        run: docker compose --profile demo logs --no-color
+      - name: Detener
+        if: always()
+        run: docker compose --profile demo down -v

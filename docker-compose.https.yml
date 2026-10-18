@@ -1,0 +1,10 @@
+# Superposición HTTPS: Nginx con TLS usando los certificados de ./certs (mesa.crt y mesa.key)
+#   docker compose -f docker-compose.yml -f docker-compose.https.yml up -d
+services:
+  web:
+    ports: !override
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - ./certs:/etc/nginx/certs:ro
+      - ./frontend/nginx/https.conf:/etc/nginx/conf.d/default.conf:ro
