@@ -1,0 +1,5 @@
+# Scripts que se ejecutan dentro de contenedores Linux: siempre con saltos de línea LF (también al clonar en Windows)
+*.sh   text eol=lf
+*.sql  text eol=lf
+*.conf text eol=lf
+Dockerfile text eol=lf
