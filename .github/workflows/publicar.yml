@@ -25,7 +25,7 @@ jobs:
           - imagen: mesa-web
             contexto: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Nombre del registro en minúsculas
         run: echo "REGISTRO=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@v3
@@ -58,7 +58,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Crear la versión con notas automáticas
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
