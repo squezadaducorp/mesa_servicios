@@ -1,0 +1,45 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "{{BOT_ID}}",
+  "developer": {
+    "name": "ADUCORP Asesores Aduaneros y Logísticos",
+    "websiteUrl": "{{APP_URL}}",
+    "privacyUrl": "{{APP_URL}}",
+    "termsOfUseUrl": "{{APP_URL}}"
+  },
+  "name": { "short": "Mesa ADUCORP", "full": "Mesa de Servicios ADUCORP" },
+  "description": {
+    "short": "Avisos y acciones de los tickets de la Mesa de Servicios",
+    "full": "Recibe en los canales los avisos de tickets nuevos, asignados, escalados, de SLA y cerrados, y permite aceptar, escalar o cambiar el estado de un ticket sin salir de Teams."
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "accentColor": "#10203C",
+  "bots": [
+    {
+      "botId": "{{BOT_ID}}",
+      "scopes": ["team", "personal"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": ["team"],
+          "commands": [
+            { "title": "vincular general", "description": "Este canal recibe los avisos de todos los tickets" },
+            { "title": "vincular", "description": "Este canal recibe los avisos de una categoría, por ejemplo: vincular Legal Aduanero" },
+            { "title": "desvincular", "description": "Este canal deja de recibir avisos" },
+            { "title": "ticket", "description": "Muestra la tarjeta de un ticket, por ejemplo: ticket ADU-2026-000123" }
+          ]
+        },
+        {
+          "scopes": ["personal"],
+          "commands": [{ "title": "ticket", "description": "Muestra la tarjeta de un ticket, por ejemplo: ticket ADU-2026-000123" }]
+        }
+      ]
+    }
+  ],
+  "permissions": ["identity", "messageTeamMembers"],
+  "validDomains": ["{{DOMINIO}}"],
+  "webApplicationInfo": { "id": "{{BOT_ID}}", "resource": "api://{{DOMINIO}}/{{BOT_ID}}" }
+}

@@ -1,6 +1,9 @@
 import type { TokenSalida } from "./types";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api/v1";
+
+/** URL absoluta de un endpoint (para navegaciones del navegador, como el inicio de sesión con Microsoft). */
+export const urlApi = (path: string) => `${BASE}${path}`;
 const CLAVE_REFRESH = "aducorp.refresh";
 
 export class ApiError extends Error {

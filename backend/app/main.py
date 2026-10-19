@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm.exc import StaleDataError
 
-from app.api.v1.routers import admin, auditoria, auth, catalogos, notificaciones, reportes, tickets
+from app.api.v1.routers import admin, auditoria, auth, catalogos, notificaciones, reportes, teams, tickets
 from app.application.errores import ErrorAplicacion
 from app.core.config import settings
 from app.infrastructure.db.session import engine
@@ -35,6 +35,7 @@ TAGS = [
     {"name": "Notificaciones", "description": "Centro de notificaciones"},
     {"name": "Auditoría", "description": "Trazabilidad completa"},
     {"name": "Administración", "description": "Usuarios, roles, catálogo, SLA y configuración"},
+    {"name": "Microsoft 365", "description": "Bot de Teams (Entra ID y Exchange Online se integran por el worker y /auth/entra)"},
 ]
 
 app = FastAPI(
@@ -98,7 +99,7 @@ async def error_inesperado(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
 
 
-for r in (auth, tickets, catalogos, reportes, notificaciones, auditoria, admin):
+for r in (auth, tickets, catalogos, reportes, notificaciones, auditoria, admin, teams):
     app.include_router(r.router, prefix=settings.API_PREFIX)
 
 

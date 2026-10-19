@@ -25,6 +25,8 @@ Este manual es para quienes administran la Mesa de Servicios desde la propia apl
 
 La lista muestra el nombre, el correo, el rol, el área y el cargo, el origen (local o Active Directory), el estado (Activo, Bloqueado o Inactivo) y el último ingreso. Puede filtrar por rol y buscar por nombre o correo.
 
+Cuando el login es con Microsoft 365, los usuarios aparecen con origen **Microsoft 365** y su rol lo decide el grupo de Entra ID al que pertenecen: cámbielo en Entra ID, no aquí. Vea [10-microsoft-365.md](10-microsoft-365.md).
+
 **Crear un usuario:** botón **Nuevo usuario**.
 
 * **Autenticación local:** si deja vacía la *contraseña inicial*, el sistema genera una contraseña temporal y la muestra una sola vez con el botón **Copiar**. Entréguela al usuario por un canal seguro; en su primer ingreso deberá cambiarla.

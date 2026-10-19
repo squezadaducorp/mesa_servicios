@@ -44,6 +44,34 @@ class Settings(BaseSettings):
     LDAP_CREAR_USUARIOS: bool = True        # alta automática con rol Cliente interno
     LDAP_GRUPO_ROLES: dict[str, str] = Field(default_factory=dict)   # {"CN=Mesa-Admin,...": "ADMIN_MESA"}
 
+    # Microsoft 365 · aplicación registrada en Entra ID (una sola app para SSO, Graph y el bot de Teams)
+    M365_TENANT_ID: str = ""                # GUID del inquilino de Aducorp
+    M365_CLIENT_ID: str = ""                # Id. de aplicación (cliente)
+    M365_CLIENT_SECRET: str = ""            # secreto de cliente
+    M365_AUTHORITY: str = "https://login.microsoftonline.com"
+    GRAPH_URL: str = "https://graph.microsoft.com/v1.0"
+
+    # Entra ID (AUTH_PROVIDER=entra): SSO OIDC; el MFA lo exige el Acceso Condicional de Entra
+    ENTRA_REDIRECT_URI: str = ""            # vacío = {APP_URL}/api/v1/auth/entra/callback
+    ENTRA_GRUPO_ROLES: dict[str, str] = Field(default_factory=dict)   # {"<id del grupo>": "ADMIN_MESA"}
+    ENTRA_ROL_DEFECTO: str = "CLIENTE"      # rol si el usuario no está en ningún grupo mapeado ("" = denegar acceso)
+    ENTRA_EXIGIR_MFA: bool = False          # rechaza tokens sin "mfa" en el claim amr (además del Acceso Condicional)
+    ENTRA_CUENTAS_EMERGENCIA: list[str] = Field(default_factory=list)  # cuentas locales permitidas con AUTH_PROVIDER=entra
+    ENTRA_SYNC_MINUTOS: int = 60            # sincronización de grupos por Graph (0 = solo al iniciar sesión)
+
+    # Exchange Online: buzón compartido leído y enviado por Microsoft Graph
+    BUZON_ENABLED: bool = False
+    BUZON_CORREO: str = "soporte@aducorp.com.ec"
+    BUZON_DOMINIOS_INTERNOS: list[str] = Field(default_factory=lambda: ["aducorp.com.ec"])
+    BUZON_LOTE: int = 25
+    EMAIL_TRANSPORTE: str = "smtp"          # smtp | graph (envía desde BUZON_CORREO)
+
+    # Microsoft Teams: bot de Azure Bot Service (mismo Id. de aplicación)
+    TEAMS_ENABLED: bool = False
+    TEAMS_BOT_ID: str = ""                  # vacío = M365_CLIENT_ID
+    TEAMS_EVENTOS: list[str] = Field(default_factory=lambda: [
+        "TICKET_CREADO", "TICKET_ASIGNADO", "TICKET_ESCALADO", "SLA_75", "SLA_90", "SLA_VENCIDO", "TICKET_CERRADO"])
+
     # Correo
     EMAIL_ENABLED: bool = False             # False = los correos quedan en cola marcados como simulados
     SMTP_HOST: str = ""
@@ -79,6 +107,22 @@ class Settings(BaseSettings):
     @property
     def es_produccion(self) -> bool:
         return self.APP_ENV == "production"
+
+    @property
+    def m365_configurado(self) -> bool:
+        return bool(self.M365_TENANT_ID and self.M365_CLIENT_ID and self.M365_CLIENT_SECRET)
+
+    @property
+    def entra_activo(self) -> bool:
+        return self.AUTH_PROVIDER == "entra" and self.m365_configurado
+
+    @property
+    def entra_redirect_uri(self) -> str:
+        return self.ENTRA_REDIRECT_URI or f"{self.APP_URL.rstrip('/')}{self.API_PREFIX}/auth/entra/callback"
+
+    @property
+    def teams_bot_id(self) -> str:
+        return self.TEAMS_BOT_ID or self.M365_CLIENT_ID
 
 
 @lru_cache

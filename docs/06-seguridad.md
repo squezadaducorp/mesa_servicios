@@ -58,6 +58,8 @@ de estos controles están en `backend/tests/test_seguridad.py` (10 casos) y `bac
 
 ## 4. Integración con Active Directory
 
+> Para Microsoft Entra ID (SSO con MFA y roles por grupos) vea [10-microsoft-365.md](10-microsoft-365.md). Allí el flujo es OIDC con PKCE, el `id_token` se valida contra las claves del tenant y no se guardan contraseñas en la Mesa.
+
 La autenticación contra AD se activa con variables de entorno, sin cambiar código:
 
 ```env

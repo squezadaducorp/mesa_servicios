@@ -115,6 +115,7 @@ Si ya existe un balanceador o proxy inverso corporativo que termina TLS, use sol
 
 * **Active Directory:** siga la guía paso a paso de [06-seguridad.md §4](06-seguridad.md#4-integración-con-active-directory). Con `AUTH_PROVIDER=ldap`, los usuarios entran con su cuenta del dominio. La cuenta `admin@aducorp.com.ec` sigue siendo local para no perder el acceso si el dominio falla.
 * **Correo:** con Microsoft 365 use `SMTP_HOST=smtp.office365.com`, `SMTP_PORT=587`, `SMTP_STARTTLS=true` y un buzón con SMTP AUTH habilitado. El worker envía los correos desde una cola. Si el servidor SMTP falla, reintenta a los 1, 2, 4, 8 y 16 minutos y, tras 6 intentos, lo marca como descartado. La notificación dentro del sistema no se pierde.
+* **Microsoft 365 (Entra ID, buzón soporte@ y Teams):** la configuración completa está en [10-microsoft-365.md](10-microsoft-365.md). Con `AUTH_PROVIDER=entra` el login es con la cuenta de Microsoft (MFA lo exige Acceso condicional) y con `EMAIL_TRANSPORTE=graph` los correos salen por Microsoft Graph, sin SMTP AUTH.
 
 ## 7. Actualización de versiones
 

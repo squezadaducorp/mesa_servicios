@@ -24,7 +24,7 @@ from app.core.security import utcnow
 from app.domain.enums import Estado
 from app.infrastructure.db import models as m
 from app.infrastructure.db.session import SessionLocal
-from app.infrastructure.email.smtp import EnviadorSmtp
+from app.infrastructure.email.smtp import enviador as crear_enviador
 from app.infrastructure.repositories.repositorios import CatalogoRepository, UsuarioRepository
 
 logging.basicConfig(level=settings.LOG_LEVEL, format="%(asctime)s %(levelname)s [worker] %(message)s")
@@ -96,7 +96,7 @@ def ciclo_cierre_automatico() -> int:
 
 
 def ciclo_correos(lote: int = 50) -> dict:
-    enviador = EnviadorSmtp()
+    enviador = crear_enviador()
     enviados = errores = 0
     with SessionLocal() as session:
         pendientes = session.scalars(
@@ -120,8 +120,51 @@ def ciclo_correos(lote: int = 50) -> dict:
     return {"enviados": enviados, "errores": errores}
 
 
+def ciclo_buzon() -> dict:
+    """Lee el buzón compartido de Exchange Online: crea tickets y agrega respuestas."""
+    if not settings.BUZON_ENABLED:
+        return {"omitido": "BUZON_ENABLED=false"}
+    from app.application.services.buzon_service import BuzonService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "buzon", settings.WORKER_INTERVALO_SEG * 3):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        return BuzonService(session).procesar()
+
+
+def ciclo_teams() -> dict:
+    if not settings.TEAMS_ENABLED:
+        return {"omitido": "TEAMS_ENABLED=false"}
+    from app.application.services.teams_service import TeamsService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "teams", settings.WORKER_INTERVALO_SEG * 3):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        return TeamsService(session).procesar_cola()
+
+
+_ultima_sync_entra = 0.0
+
+
+def ciclo_entra() -> dict:
+    """Sincroniza usuarios y roles desde los grupos de Entra ID cada ENTRA_SYNC_MINUTOS."""
+    global _ultima_sync_entra
+    if not settings.entra_activo or settings.ENTRA_SYNC_MINUTOS <= 0:
+        return {"omitido": "sin sincronización programada"}
+    if time.monotonic() - _ultima_sync_entra < settings.ENTRA_SYNC_MINUTOS * 60 and _ultima_sync_entra:
+        return {"omitido": "aún no corresponde"}
+    from app.application.services.entra_service import EntraService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "sync_entra", settings.ENTRA_SYNC_MINUTOS * 60):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        _ultima_sync_entra = time.monotonic()
+        return EntraService(session).sincronizar_grupos()
+
+
 def ejecutar_ciclo() -> None:
-    for nombre, fn in (("sla", ciclo_sla), ("cierre", ciclo_cierre_automatico), ("correo", ciclo_correos)):
+    for nombre, fn in (("sla", ciclo_sla), ("cierre", ciclo_cierre_automatico), ("buzon", ciclo_buzon), ("correo", ciclo_correos),
+                       ("teams", ciclo_teams), ("entra", ciclo_entra)):
         try:
             r = fn()
             log.info("Ciclo %s: %s", nombre, r)
@@ -135,8 +178,10 @@ def main() -> None:
     args = ap.parse_args()
     signal.signal(signal.SIGTERM, _senal)
     signal.signal(signal.SIGINT, _senal)
-    log.info("Worker iniciado (%s), intervalo %ss, correo %s", PROPIETARIO, settings.WORKER_INTERVALO_SEG,
-             "habilitado" if settings.EMAIL_ENABLED else "simulado")
+    log.info("Worker iniciado (%s), intervalo %ss, correo %s (%s), buzón %s, Teams %s, Entra ID %s", PROPIETARIO, settings.WORKER_INTERVALO_SEG,
+             "habilitado" if settings.EMAIL_ENABLED else "simulado", settings.EMAIL_TRANSPORTE,
+             settings.BUZON_CORREO if settings.BUZON_ENABLED else "apagado", "activo" if settings.TEAMS_ENABLED else "apagado",
+             "activo" if settings.entra_activo else "apagado")
     while not _detener:
         inicio = time.monotonic()
         ejecutar_ciclo()

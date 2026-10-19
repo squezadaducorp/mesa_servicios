@@ -449,7 +449,7 @@ class UsuarioCrear(BaseModel):
     telefono: str | None = None
     area_id: int | None = None
     supervisor_id: int | None = None
-    origen_autenticacion: Literal["LOCAL", "AD"] = "LOCAL"
+    origen_autenticacion: Literal["LOCAL", "AD", "ENTRA"] = "LOCAL"
     usuario_ad: str | None = None
     clave: str | None = Field(default=None, description="Si se omite, se genera una temporal")
 
@@ -463,7 +463,7 @@ class UsuarioEditar(BaseModel):
     supervisor_id: int | None = None
     activo: bool | None = None
     usuario_ad: str | None = None
-    origen_autenticacion: Literal["LOCAL", "AD"] | None = None
+    origen_autenticacion: Literal["LOCAL", "AD", "ENTRA"] | None = None
 
 
 class ClaveTemporalSalida(Modelo):

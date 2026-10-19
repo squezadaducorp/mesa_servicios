@@ -100,8 +100,10 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
     session.add(m.CalendarioExcepcion(fecha=date(2026, 11, 2), tipo="FERIADO", descripcion="Día de los Difuntos"))
     for codigo, asunto in (("TICKET_CREADO", "[{numero}] Ticket creado"), ("TICKET_ASIGNADO", "[{numero}] Ticket asignado"),
                            ("TICKET_ESCALADO", "[{numero}] Ticket escalado"), ("SLA_75", "[{numero}] Próximo a vencer"),
-                           ("SLA_90", "[{numero}] SLA 90 %"), ("SLA_VENCIDO", "[{numero}] SLA incumplido"), ("TICKET_CERRADO", "[{numero}] Ticket cerrado")):
-        session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} <a href='{url}'>ver</a></p>"))
+                           ("SLA_90", "[{numero}] SLA 90 %"), ("SLA_VENCIDO", "[{numero}] SLA incumplido"), ("TICKET_CERRADO", "[{numero}] Ticket cerrado"),
+                           ("ACUSE_CORREO", "[{numero}] Recibimos su solicitud: {asunto}"),
+                           ("RESPUESTA_TICKET", "[{numero}] Respuesta: {asunto}")):
+        session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} <a href='{url}'>ver</a></p>"))
     for k, v in (("empresa.nombre", "ADUCORP Asesores Aduaneros y Logísticos Cía. Ltda."), ("sla.umbral_aviso_1", "75"),
                  ("sla.umbral_aviso_2", "90"), ("ticket.cierre_automatico_h", "72"), ("adjuntos.max_mb", "20"),
                  ("adjuntos.extensiones", "pdf,doc,docx,xls,xlsx,csv,jpg,jpeg,png,txt,xml,zip,msg,eml"),

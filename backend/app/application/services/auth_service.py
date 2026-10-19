@@ -45,6 +45,11 @@ class AuthService:
     def login(self, identificador: str, clave: str, ctx: Contexto) -> dict:
         ahora = utcnow()
         identificador = identificador.strip()
+        if settings.AUTH_PROVIDER == "entra" and identificador.lower() not in {c.lower() for c in settings.ENTRA_CUENTAS_EMERGENCIA}:
+            # Con Entra ID no hay contraseñas locales, salvo las cuentas de emergencia declaradas
+            self.auditoria.registrar(ctx, AccionAuditoria.LOGIN_FALLIDO, "sesion", correo=identificador[:150], detalle={"motivo": "login local deshabilitado"}, resultado="ERROR")
+            self.session.commit()
+            raise NoAutorizado("Inicie sesión con su cuenta de Microsoft 365")
         usuario = self.usuarios.por_correo(identificador) or (
             self.usuarios.por_usuario_ad(identificador.split("\\")[-1]) if "@" not in identificador else None
         )
@@ -154,6 +159,8 @@ class AuthService:
     def cambiar_clave(self, usuario: m.Usuario, actual: str, nueva: str, ctx: Contexto) -> None:
         if usuario.origen_autenticacion == "AD":
             raise ReglaNegocio("La contraseña de esta cuenta se administra en Active Directory")
+        if usuario.origen_autenticacion == "ENTRA":
+            raise ReglaNegocio("La contraseña de esta cuenta se administra en Microsoft 365")
         if not verificar_clave(actual, usuario.clave_hash):
             raise ReglaNegocio("La contraseña actual no es correcta")
         errores = validar_politica_clave(nueva)

@@ -74,7 +74,7 @@ export default function Usuarios() {
     <>
       <Encabezado
         titulo="Usuarios"
-        subtitulo="Altas, roles, bloqueo y origen de autenticación (local o Active Directory)"
+        subtitulo="Altas, roles, bloqueo y origen de autenticación (local, Active Directory o Microsoft 365)"
         acciones={
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => setForm({ origen_autenticacion: "LOCAL", activo: true })}>
             Nuevo usuario
@@ -136,7 +136,7 @@ export default function Usuarios() {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip size="small" variant="outlined" label={u.origen_autenticacion === "AD" ? "Active Directory" : "Local"} />
+                      <Chip size="small" variant="outlined" label={u.origen_autenticacion === "AD" ? "Active Directory" : u.origen_autenticacion === "ENTRA" ? "Microsoft 365" : "Local"} />
                     </TableCell>
                     <TableCell>
                       {!u.activo ? <Chip size="small" label="Inactivo" /> : u.bloqueado ? <Chip size="small" color="error" label="Bloqueado" /> : <Chip size="small" color="success" label="Activo" />}
@@ -208,10 +208,11 @@ export default function Usuarios() {
                 fullWidth
                 label="Autenticación"
                 value={form?.origen_autenticacion ?? "LOCAL"}
-                onChange={(e) => set("origen_autenticacion", e.target.value as "LOCAL" | "AD")}
+                onChange={(e) => set("origen_autenticacion", e.target.value as "LOCAL" | "AD" | "ENTRA")}
               >
                 <MenuItem value="LOCAL">Local (contraseña de la mesa)</MenuItem>
                 <MenuItem value="AD">Active Directory</MenuItem>
+                <MenuItem value="ENTRA">Microsoft 365 (Entra ID)</MenuItem>
               </TextField>
               {form?.origen_autenticacion === "AD" && (
                 <TextField fullWidth label="Usuario de dominio" placeholder="ADUCORP\\usuario" value={form?.usuario_ad ?? ""} onChange={(e) => set("usuario_ad", e.target.value)} />
@@ -223,7 +224,7 @@ export default function Usuarios() {
                 <MenuItem value="0">Inactivo</MenuItem>
               </TextField>
             ) : (
-              form?.origen_autenticacion !== "AD" && (
+              form?.origen_autenticacion === "LOCAL" && (
                 <TextField label="Contraseña inicial (opcional)" type="password" value={form?.clave ?? ""} onChange={(e) => set("clave", e.target.value)} helperText="Si la deja vacía se genera una temporal; el usuario deberá cambiarla al ingresar." />
               )
             )}

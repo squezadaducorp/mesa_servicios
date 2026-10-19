@@ -58,6 +58,7 @@ class NotificacionService:
             "sla_pct": f"{float(t.sla_consumido_pct or 0):.0f}",
             "sla_respuesta_vence": f"{fecha_local(t.sla_respuesta_vence)} ({TZ_LABEL})",
             "sla_resolucion_vence": f"{fecha_local(t.sla_resolucion_vence)} ({TZ_LABEL})",
+            "estado": t.estado_rel.nombre if t.estado_rel else t.estado,
             "url": f"{settings.APP_URL}/tickets/{t.id}",
         }
         ctx.update({k: str(v) for k, v in extra.items()})
@@ -68,18 +69,34 @@ class NotificacionService:
         if plantilla is None:
             log.warning("Plantilla de correo %s no encontrada", codigo)
             return
-        enviados: set[str] = set()
+        enviados: set[str] = {settings.BUZON_CORREO.lower()}   # nunca se escribe al propio buzón de soporte
         for u in destinatarios:
-            if u is None or not u.activo or u.correo in enviados:
+            if u is None or not u.activo or u.correo.lower() in enviados:
                 continue
-            enviados.add(u.correo)
-            ctx = self.contexto_ticket(ticket, destinatario=u.nombre, **extra)
-            asunto, cuerpo = plantilla.asunto, plantilla.cuerpo_html
-            for k, v in ctx.items():
-                seguro = v if k == "url" else html.escape(v)
-                asunto = asunto.replace("{" + k + "}", v)
-                cuerpo = cuerpo.replace("{" + k + "}", seguro)
-            self.session.add(
-                m.ColaCorreo(para=u.correo, asunto=asunto[:250], cuerpo_html=plantilla_base(cuerpo), ticket_id=ticket.id,
-                             plantilla=codigo, estado="PENDIENTE", proximo_intento=utcnow(), fecha_creacion=utcnow())
-            )
+            enviados.add(u.correo.lower())
+            self._encolar(plantilla, codigo, u.correo, u.nombre, ticket, extra)
+
+    def correo_directo(self, codigo: str, para: str, nombre: str, ticket: m.Ticket, **extra) -> None:
+        """Correo a una dirección que puede no ser usuario de la Mesa (remitente externo del buzón)."""
+        plantilla = self.catalogo.plantilla(codigo)
+        if plantilla is None or not para or para.lower() == settings.BUZON_CORREO.lower():
+            return
+        self._encolar(plantilla, codigo, para, nombre, ticket, extra)
+
+    def _encolar(self, plantilla: m.PlantillaCorreo, codigo: str, para: str, nombre: str, ticket: m.Ticket, extra: dict) -> None:
+        ctx = self.contexto_ticket(ticket, destinatario=nombre, **extra)
+        asunto, cuerpo = plantilla.asunto, plantilla.cuerpo_html
+        for k, v in ctx.items():
+            seguro = v if k == "url" else html.escape(v)
+            asunto = asunto.replace("{" + k + "}", v)
+            cuerpo = cuerpo.replace("{" + k + "}", seguro)
+        self.session.add(
+            m.ColaCorreo(para=para, asunto=asunto[:250], cuerpo_html=plantilla_base(cuerpo), ticket_id=ticket.id,
+                         plantilla=codigo, estado="PENDIENTE", proximo_intento=utcnow(), fecha_creacion=utcnow())
+        )
+
+    def teams(self, evento: str, ticket: m.Ticket, detalle: str | None = None) -> None:
+        """Encola la tarjeta de Teams; el worker la publica en el canal general y en el de la categoría."""
+        if settings.TEAMS_ENABLED and evento in settings.TEAMS_EVENTOS:
+            self.session.add(m.ColaTeams(ticket_id=ticket.id, evento=evento, detalle=(detalle or "")[:500] or None,
+                                         estado="PENDIENTE", proximo_intento=utcnow(), fecha_creacion=utcnow()))

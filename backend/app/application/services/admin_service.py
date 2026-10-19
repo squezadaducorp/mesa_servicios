@@ -119,6 +119,8 @@ class AdminService:
             raise NoEncontrado("Usuario no encontrado")
         if u.origen_autenticacion == "AD":
             raise ReglaNegocio("La contraseña de esta cuenta se administra en Active Directory")
+        if u.origen_autenticacion == "ENTRA":
+            raise ReglaNegocio("La contraseña de esta cuenta se administra en Microsoft 365")
         temporal = clave_temporal()
         u.clave_hash, u.debe_cambiar_clave, u.intentos_fallidos, u.bloqueado_hasta = hash_clave(temporal), True, 0, None
         RefreshTokenRepository(self.session).revocar_usuario(u.id, utcnow())

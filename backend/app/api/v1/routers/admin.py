@@ -160,3 +160,40 @@ def configuracion(ctx: Contexto = Depends(ADMIN_SISTEMA), session: Session = DbS
 def guardar_configuracion(dto: s.ConfiguracionEntrada, ctx: Contexto = Depends(ADMIN_SISTEMA), session: Session = DbSession):
     AdminService(session).guardar_configuracion(dto.valores, ctx)
     return {"mensaje": "Configuración guardada"}
+
+
+# ------------------------------------------------------------ Microsoft 365
+@router.get("/integraciones", summary="Estado de la integración con Microsoft 365 (Entra ID, buzón y Teams)")
+def integraciones(ctx: Contexto = Depends(ADMIN_SISTEMA), session: Session = DbSession):
+    from sqlalchemy import func, select
+
+    from app.core.config import settings
+    from app.infrastructure.db import models as m
+
+    correos = session.scalars(select(m.CorreoEntrante).order_by(m.CorreoEntrante.id.desc()).limit(10)).all()
+    canales = session.scalars(select(m.TeamsCanal).where(m.TeamsCanal.activo == True).order_by(m.TeamsCanal.nombre)).unique().all()
+    pendientes = session.scalar(select(func.count()).select_from(m.ColaTeams).where(m.ColaTeams.estado.in_(["PENDIENTE", "ERROR"])))
+    return {
+        "aplicacion_configurada": settings.m365_configurado,
+        "entra": {
+            "activo": settings.entra_activo,
+            "grupos_mapeados": len(settings.ENTRA_GRUPO_ROLES),
+            "rol_defecto": settings.ENTRA_ROL_DEFECTO or None,
+            "exigir_mfa": settings.ENTRA_EXIGIR_MFA,
+            "usuarios": session.scalar(select(func.count()).select_from(m.Usuario).where(m.Usuario.origen_autenticacion == "ENTRA",
+                                                                                        m.Usuario.eliminado == False)),
+        },
+        "buzon": {
+            "activo": settings.BUZON_ENABLED,
+            "correo": settings.BUZON_CORREO,
+            "envio_por_graph": settings.EMAIL_TRANSPORTE == "graph",
+            "ultimos": [{"fecha": c.fecha_proceso, "remitente": c.remitente, "asunto": c.asunto, "resultado": c.resultado,
+                         "ticket_id": c.ticket_id, "detalle": c.detalle} for c in correos],
+        },
+        "teams": {
+            "activo": settings.TEAMS_ENABLED,
+            "eventos": settings.TEAMS_EVENTOS,
+            "pendientes": pendientes,
+            "canales": [{"nombre": c.nombre, "categoria": c.categoria.nombre if c.categoria else "General (todas)"} for c in canales],
+        },
+    }

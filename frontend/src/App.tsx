@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthContext";
 import Layout from "./components/Layout";
 import { Cargando } from "./components/Comunes";
 import Login from "./pages/Login";
+import EntraRetorno from "./pages/EntraRetorno";
 import { P } from "./utils/permisos";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -44,6 +45,7 @@ export default function App() {
     <Suspense fallback={<Cargando alto={400} />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/auth/entra" element={<EntraRetorno />} />
         <Route
           element={
             <Protegida>

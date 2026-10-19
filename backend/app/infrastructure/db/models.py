@@ -1,4 +1,4 @@
-"""Modelos ORM. Reflejan exactamente database/01_tablas.sql (fuente de verdad del esquema)."""
+"""Modelos ORM. Reflejan exactamente database/01_tablas.sql y 07_microsoft365.sql (fuente de verdad del esquema)."""
 from __future__ import annotations
 
 from datetime import date, datetime, time
@@ -71,6 +71,7 @@ class Usuario(Base):
     nombre: Mapped[str] = mapped_column(Unicode(150))
     correo: Mapped[str] = mapped_column(Unicode(150), unique=True)
     usuario_ad: Mapped[str | None] = mapped_column(Unicode(100))
+    entra_oid: Mapped[str | None] = mapped_column(String(36))   # objectId del usuario en Entra ID
     origen_autenticacion: Mapped[str] = mapped_column(String(10), default="LOCAL")
     clave_hash: Mapped[str | None] = mapped_column(String(100))
     debe_cambiar_clave: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -499,3 +500,50 @@ class BloqueoProceso(Base):
     nombre: Mapped[str] = mapped_column(String(50), primary_key=True)
     propietario: Mapped[str] = mapped_column(String(100))
     expira: Mapped[datetime] = mapped_column(DateTime)
+
+
+# ------------------------------------------------------------ Microsoft 365
+class CorreoEntrante(Base):
+    """Cada mensaje del buzón compartido procesado una sola vez (idempotencia y trazabilidad)."""
+    __tablename__ = "correos_entrantes"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    message_id: Mapped[str] = mapped_column(String(300), unique=True)   # internetMessageId
+    graph_id: Mapped[str | None] = mapped_column(String(300))
+    remitente: Mapped[str] = mapped_column(Unicode(150))
+    asunto: Mapped[str] = mapped_column(Unicode(250))
+    ticket_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
+    resultado: Mapped[str] = mapped_column(String(20))                 # CREADO | ACTUALIZADO | IGNORADO | ERROR
+    detalle: Mapped[str | None] = mapped_column(Unicode(1000))
+    fecha_recepcion: Mapped[datetime | None] = mapped_column(DateTime)
+    fecha_proceso: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class TeamsCanal(Base):
+    """Canal de Teams vinculado con el comando «vincular» del bot. categoria_id NULL = canal general de la mesa."""
+    __tablename__ = "teams_canales"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nombre: Mapped[str] = mapped_column(Unicode(150))
+    conversation_id: Mapped[str] = mapped_column(String(300), unique=True)
+    service_url: Mapped[str] = mapped_column(String(300))
+    team_id: Mapped[str | None] = mapped_column(String(300))
+    categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categorias.id"))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    vinculado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    categoria: Mapped[Categoria | None] = relationship(lazy="joined")
+
+
+class ColaTeams(Base):
+    """Avisos pendientes de publicar en Teams (los envía el worker, con reintentos)."""
+    __tablename__ = "cola_teams"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    evento: Mapped[str] = mapped_column(String(30))
+    detalle: Mapped[str | None] = mapped_column(Unicode(500))
+    estado: Mapped[str] = mapped_column(String(12), default="PENDIENTE")
+    intentos: Mapped[int] = mapped_column(Integer, default=0)
+    ultimo_error: Mapped[str | None] = mapped_column(Unicode(1000))
+    proximo_intento: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_envio: Mapped[datetime | None] = mapped_column(DateTime)

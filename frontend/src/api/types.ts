@@ -271,7 +271,7 @@ export interface UsuarioAdmin {
   nombre: string;
   correo: string;
   usuario_ad: string | null;
-  origen_autenticacion: "LOCAL" | "AD";
+  origen_autenticacion: "LOCAL" | "AD" | "ENTRA";
   cargo: string | null;
   telefono: string | null;
   area_id: number | null;

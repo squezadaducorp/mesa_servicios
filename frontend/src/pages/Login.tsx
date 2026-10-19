@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Alert, Box, Button, IconButton, InputAdornment, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, Box, Button, Divider, IconButton, InputAdornment, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import { useAuth } from "../auth/AuthContext";
+import { get, urlApi } from "../api/client";
 import { mensajeError } from "../components/Aviso";
 import { marca } from "../theme";
 
@@ -17,6 +19,16 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const destino = (location.state as { desde?: string } | null)?.desde ?? "/";
+  const [params] = useSearchParams();
+  const errorSso = params.get("error_sso");
+  const [emergencia, setEmergencia] = useState(false);
+  const config = useQuery({
+    queryKey: ["auth", "entra"],
+    queryFn: () => get<{ activo: boolean; permitir_local: boolean }>("/auth/entra/config"),
+    staleTime: Infinity,
+  });
+  const sso = config.data?.activo ?? false;
+  const mostrarFormulario = !sso || emergencia;
 
   if (usuario) return <Navigate to={usuario.debe_cambiar_clave ? "/cambiar-clave" : destino} replace />;
 
@@ -66,8 +78,32 @@ export default function Login() {
             Iniciar sesión
           </Typography>
           <Typography variant="body2" sx={{ textAlign: "center", color: "text.secondary", mb: 3 }}>
-            Use su correo corporativo o usuario de dominio
+            {sso ? "Use su cuenta de Microsoft 365 de ADUCORP" : "Use su correo corporativo o usuario de dominio"}
           </Typography>
+          {errorSso && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {errorSso}
+            </Alert>
+          )}
+          {sso && (
+            <Stack spacing={1.5} sx={{ mb: mostrarFormulario ? 3 : 0 }}>
+              <Button
+                variant="contained"
+                size="large"
+                href={urlApi(`/auth/entra/login?destino=${encodeURIComponent(destino)}`)}
+                startIcon={<LogoMicrosoft />}
+              >
+                Iniciar sesión con Microsoft
+              </Button>
+              {config.data?.permitir_local && !emergencia && (
+                <Link component="button" type="button" variant="caption" onClick={() => setEmergencia(true)} sx={{ alignSelf: "center" }}>
+                  Acceso de emergencia
+                </Link>
+              )}
+              {mostrarFormulario && <Divider>o con cuenta de emergencia</Divider>}
+            </Stack>
+          )}
+          {mostrarFormulario && (
           <form onSubmit={enviar}>
             <Stack spacing={2}>
               {error && <Alert severity="error">{error}</Alert>}
@@ -93,13 +129,25 @@ export default function Login() {
                   },
                 }}
               />
-              <Button type="submit" variant="contained" size="large" disabled={enviando}>
+              <Button type="submit" variant={sso ? "outlined" : "contained"} size="large" disabled={enviando}>
                 {enviando ? "Ingresando…" : "Ingresar"}
               </Button>
             </Stack>
           </form>
+          )}
         </Paper>
       </Box>
+    </Box>
+  );
+}
+
+function LogoMicrosoft() {
+  return (
+    <Box component="svg" viewBox="0 0 21 21" sx={{ width: 18, height: 18 }} aria-hidden>
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
     </Box>
   );
 }

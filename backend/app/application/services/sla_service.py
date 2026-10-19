@@ -181,12 +181,14 @@ class SlaService:
                     notif.notificar([destino], "SLA_75", f"{t.numero}: SLA al {umbral} %",
                                     f"«{t.asunto}» consumió el {pct:.0f} % de su SLA.", t, "AVISO")
                     notif.correo("SLA_75", [destino], t)
+                    notif.teams("SLA_75", t)
                     escalado_a = destino
                 elif umbral == umbrales[1]:
                     stats["aviso_90"] += 1
                     notif.notificar([supervisor, *coord], "SLA_90", f"{t.numero}: SLA al {umbral} %",
                                     f"«{t.asunto}» ({t.responsable.nombre if t.responsable else 'sin responsable'}) está por vencer.", t, "AVISO")
                     notif.correo("SLA_90", [supervisor], t)
+                    notif.teams("SLA_90", t)
                     escalado_a = supervisor
                 else:
                     stats["vencidos"] += 1
@@ -201,6 +203,7 @@ class SlaService:
                     notif.notificar([t.responsable, supervisor, *coord], "SLA_VENCIDO", f"{t.numero}: SLA incumplido",
                                     f"«{t.asunto}» venció su SLA y fue escalado automáticamente.", t, "CRITICO")
                     notif.correo("SLA_VENCIDO", [supervisor, *coord], t)
+                    notif.teams("SLA_VENCIDO", t)
                     escalado_a = supervisor
                 self.session.add(
                     m.TicketEscalamiento(ticket_id=t.id, nivel=umbral, tipo="AUTOMATICO", escalado_a=escalado_a.id if escalado_a else None,

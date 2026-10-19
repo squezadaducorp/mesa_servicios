@@ -174,13 +174,16 @@ class TicketService:
         self.auditoria.registrar(ctx, AccionAuditoria.TICKET_CREADO, "ticket", t.id, {"numero": t.numero, "categoria": categoria.nombre})
 
         self.notif.notificar([solicitante], "TICKET_CREADO", f"{t.numero} registrado", f"Su solicitud «{t.asunto}» fue registrada.", t)
-        self.notif.correo("TICKET_CREADO", [solicitante], t)
+        if t.canal != "CORREO":   # los tickets que llegan por correo reciben el acuse del buzón
+            self.notif.correo("TICKET_CREADO", [solicitante], t)
         if responsable:
             self._asignar(t, responsable, u if dto.responsable_id else None, "MANUAL" if dto.responsable_id else "AUTOMATICA",
-                          "Asignación directa al registrar" if dto.responsable_id else f"Asignación automática ({categoria.modo_asignacion.lower()})", ctx, ahora)
+                          "Asignación directa al registrar" if dto.responsable_id else f"Asignación automática ({categoria.modo_asignacion.lower()})", ctx, ahora,
+                          teams=False)
         else:
             self.notif.notificar([self._supervisor(t), *coordinadores(self.session)], "TICKET_SIN_ASIGNAR",
                                  f"{t.numero} pendiente de asignación", f"«{t.asunto}» ({categoria.nombre}) no tiene responsable.", t, "AVISO")
+        self.notif.teams("TICKET_CREADO", t)
         self.session.flush()
         return t
 
@@ -190,7 +193,8 @@ class TicketService:
             raise ReglaNegocio("El responsable debe ser un usuario activo de la mesa de servicio (analista o supervisor)")
         return r
 
-    def _asignar(self, t: m.Ticket, nuevo: m.Usuario, por: m.Usuario | None, tipo: str, motivo: str | None, ctx: Contexto, ahora: datetime):
+    def _asignar(self, t: m.Ticket, nuevo: m.Usuario, por: m.Usuario | None, tipo: str, motivo: str | None, ctx: Contexto, ahora: datetime,
+                 teams: bool = True):
         anterior = t.responsable
         t.responsable_id = nuevo.id
         t.responsable = nuevo
@@ -205,6 +209,8 @@ class TicketService:
                                  {"numero": t.numero, "de": anterior.nombre if anterior else None, "a": nuevo.nombre, "tipo": tipo})
         self.notif.notificar([nuevo], "TICKET_ASIGNADO", f"{t.numero} asignado a usted", f"«{t.asunto}» · prioridad {t.prioridad.nombre}.", t)
         self.notif.correo("TICKET_ASIGNADO", [nuevo], t)
+        if teams:
+            self.notif.teams("TICKET_ASIGNADO", t)
         t.fecha_actualizacion = ahora
 
     # ================================================================= editar
@@ -260,6 +266,25 @@ class TicketService:
         self._asignar(t, nuevo, u, tipo, dto.motivo, ctx, utcnow())
         return t
 
+    def aceptar(self, ticket_id: int, ctx: Contexto) -> m.Ticket:
+        """Tomar el ticket e iniciar la atención (botón «Aceptar» de Teams)."""
+        u = ctx.usuario
+        t = self.repo.get(ticket_id)
+        if t is None or t.eliminado:
+            raise NoEncontrado("Ticket no encontrado")
+        if Estado(t.estado) not in (Estado.NUEVO, Estado.ASIGNADO, Estado.ESCALADO):
+            raise ReglaNegocio(f"El ticket está {t.estado_rel.nombre.lower() if t.estado_rel else t.estado} y no puede aceptarse")
+        if t.responsable_id != u.id:
+            atiende_categoria = any(r.usuario_id == u.id for r in t.categoria.responsables)
+            puede_asignar = self.repo.puede_ver(u, t.id) and "asignar" in self.acciones(u, t)
+            if not (puede_asignar or (atiende_categoria and t.responsable_id is None)):
+                raise Prohibido("Solo puede aceptar tickets sin responsable de sus categorías o los que ya tiene asignados")
+            self._validar_responsable(u.id)
+            self._asignar(t, u, u, "REASIGNACION" if t.responsable_id else "MANUAL", "Aceptado desde Microsoft Teams", ctx, utcnow(), teams=False)
+        if Estado(t.estado) != Estado.EN_PROCESO:
+            self._aplicar_estado(t, Estado(t.estado), Estado.EN_PROCESO, u, ctx, utcnow())
+        return t
+
     # ========================================================== cambiar estado
     def cambiar_estado(self, ticket_id: int, nuevo: str, comentario: str | None, ctx: Contexto, *, accion: str = "cambiar_estado") -> m.Ticket:
         u = ctx.usuario
@@ -282,7 +307,21 @@ class TicketService:
         self._aplicar_estado(t, actual, destino, u, ctx, ahora)
         if comentario and comentario.strip():
             self._agregar_comentario(t, u, comentario.strip(), False, "COMENTARIO", None, ahora)
+            if self.es_gestor(u, t):
+                self.responder_por_correo(t, u, comentario.strip())
         return t
+
+    def correo_solicitante(self, codigo: str, t: m.Ticket, **extra) -> None:
+        """Al usuario solicitante o, si el ticket vino de un remitente externo, a la dirección del correo original."""
+        if settings.BUZON_ENABLED and t.solicitante.correo.lower() == settings.BUZON_CORREO.lower():
+            self.notif.correo_directo(codigo, t.correo, t.correo, t, **extra)
+        else:
+            self.notif.correo(codigo, [t.solicitante], t, **extra)
+
+    def responder_por_correo(self, t: m.Ticket, autor: m.Usuario, texto: str) -> None:
+        """Los tickets que llegaron por correo reciben las respuestas del equipo en el mismo hilo de correo."""
+        if settings.BUZON_ENABLED and t.canal == "CORREO":
+            self.correo_solicitante("RESPUESTA_TICKET", t, comentario=texto[:4000], autor=autor.nombre)
 
     def _aplicar_estado(self, t: m.Ticket, actual: Estado, destino: Estado, u: m.Usuario | None, ctx: Contexto, ahora: datetime) -> None:
         reapertura = es_reapertura(actual, destino)
@@ -316,7 +355,8 @@ class TicketService:
         solicitante = t.solicitante
         if destino == Estado.CERRADO:
             self.notif.notificar([solicitante], "TICKET_CERRADO", f"{t.numero} cerrado", f"Su solicitud «{t.asunto}» fue cerrada.", t)
-            self.notif.correo("TICKET_CERRADO", [solicitante], t)
+            self.correo_solicitante("TICKET_CERRADO", t)
+            self.notif.teams("TICKET_CERRADO", t)
         elif destino == Estado.RESUELTO:
             self.notif.notificar([solicitante], "TICKET_RESUELTO", f"{t.numero} resuelto",
                                  f"«{t.asunto}» fue resuelto. Puede confirmarlo o reabrirlo si persiste.", t)
@@ -351,6 +391,7 @@ class TicketService:
         destinatarios = [destino, *coordinadores(self.session)]
         self.notif.notificar(destinatarios, "TICKET_ESCALADO", f"{t.numero} escalado", f"«{t.asunto}»: {dto.motivo}", t, "AVISO")
         self.notif.correo("TICKET_ESCALADO", destinatarios, t, motivo=dto.motivo)
+        self.notif.teams("TICKET_ESCALADO", t, dto.motivo)
         return t
 
     # ========================================================== cerrar/reabrir
@@ -399,6 +440,7 @@ class TicketService:
             if not dto.es_interno:
                 self.sla.registrar_primera_respuesta(t, ahora)
                 self.notif.notificar([t.solicitante], "COMENTARIO", f"{t.numero}: respuesta del equipo", f"{u.nombre}: {dto.texto[:200]}", t)
+                self.responder_por_correo(t, u, dto.texto.strip())
         t.fecha_actualizacion = ahora
         return c
 
@@ -415,6 +457,10 @@ class TicketService:
         u = ctx.usuario
         t = self.obtener(ticket_id, u)
         self._exigir(u, t, "adjuntar")
+        return self.guardar_adjunto(t, u, nombre, tipo_mime, contenido, ctx)
+
+    def guardar_adjunto(self, t: m.Ticket, u: m.Usuario, nombre: str, tipo_mime: str, contenido: bytes, ctx: Contexto) -> m.TicketAdjunto:
+        """Valida (extensión, tamaño, contenido) y guarda el archivo. También lo usa el buzón de correo."""
         config = self.catalogo.configuracion()
         max_mb = int(config.get("adjuntos.max_mb", settings.ADJUNTOS_MAX_MB))
         permitidas = {e.strip().lower() for e in config.get("adjuntos.extensiones", settings.ADJUNTOS_EXTENSIONES).split(",")}
