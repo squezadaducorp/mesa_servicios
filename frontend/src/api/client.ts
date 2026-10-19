@@ -33,6 +33,7 @@ export const sesion = {
     accessToken = null;
     try {
       localStorage.removeItem(CLAVE_REFRESH);
+      sessionStorage.clear(); // filtros de la sesión anterior: no deben pasar al siguiente usuario
     } catch {
       /* almacenamiento no disponible */
     }
