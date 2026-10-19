@@ -87,8 +87,8 @@ Las variables obligatorias están marcadas con ★. Compose se niega a arrancar 
 | `AUTH_PROVIDER` | `local` o `ldap` | Inicio de sesión local o con Active Directory |
 | `LDAP_*` | ver [06-seguridad.md §4](06-seguridad.md#4-integración-con-active-directory) | Servidor, dominio, base DN, cuenta de servicio y mapeo de grupos a roles |
 | `EMAIL_ENABLED`, `SMTP_*` | `true`, `smtp.office365.com`, `587` | Envío de correos de asignación, avisos de SLA y cierre |
-| `AI_PROVIDER` | `local` o `anthropic` | Motor de IA: local (sin enviar datos fuera) o Claude |
-| `ANTHROPIC_API_KEY` | — | Solo si `AI_PROVIDER=anthropic` |
+| `AI_PROVIDER` | `local` o `llm` | Motor de IA: local (sin enviar datos fuera) o Claude (`llm`) |
+| `ANTHROPIC_API_KEY` | — | Solo si `AI_PROVIDER=llm` |
 | `WORKER_INTERVALO_SEG` | `60` | Frecuencia del motor de SLA |
 | `LOG_LEVEL` | `INFO` | `DEBUG` solo para diagnóstico |
 
