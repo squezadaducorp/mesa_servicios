@@ -10,6 +10,27 @@ La Mesa de Servicios se integra con el Microsoft 365 de ADUCORP en tres frentes.
 
 Los tres usan **una sola aplicación** registrada en Entra ID. Ninguna clave se guarda en el repositorio: van solo en el `.env` del servidor.
 
+## Configuración mínima: solo el correo
+
+Si por ahora solo quiere que los correos a `soporte@` creen tickets y avisen al responsable, el login y Teams quedan como están. Para el correo no hace falta HTTPS ni un dominio público, porque es la Mesa la que consulta el buzón.
+
+1. Cree el buzón compartido `soporte@aducorp.com.ec`, si no existe.
+2. Registre la aplicación (sección 2, pasos 1, 2, 4 y 5). Omita la URI de redirección, la notificación de grupos y los permisos de Graph: para el correo no se necesitan.
+3. Dé acceso a la aplicación solo a ese buzón con los comandos de la sección 3.
+4. Agregue al `.env` del servidor (el secreto lo escribe usted, nunca por chat ni en el repositorio):
+
+```env
+M365_TENANT_ID=<Id. de directorio (inquilino)>
+M365_CLIENT_ID=<Id. de aplicación (cliente)>
+M365_CLIENT_SECRET=<valor del secreto>
+BUZON_ENABLED=true
+EMAIL_TRANSPORTE=graph
+EMAIL_ENABLED=true
+```
+
+5. Reinicie con `docker compose up -d`. En **Administración › Configuración** verá el estado del buzón y los últimos correos procesados.
+6. Pruebe enviando a `soporte@` un correo con el asunto *Consulta Clasificación Arancelaria*. En un minuto debe aparecer el ticket asignado y llegar el acuse.
+
 ## 1. Requisitos
 
 * Un administrador global (o de aplicaciones y de Exchange) de Microsoft 365 para los pasos 2 a 6.
@@ -59,7 +80,9 @@ Test-ServicePrincipalAuthorization -Identity $app -Resource soporte@aducorp.com.
 
 * Cada minuto, el worker lee los correos **no leídos** de la bandeja de entrada.
 * Un correo **sin número de ticket** en el asunto crea un ticket con canal *Correo*:
-  * La IA lo clasifica, se asigna el responsable de la categoría y se envía el acuse `[ADU-2026-000123] Recibimos su solicitud: …`.
+  * **Categoría:** si el asunto nombra una categoría del catálogo (por ejemplo *Consulta Clasificación Arancelaria* o *Legal Aduanero - multa*), se usa esa. Si no nombra ninguna, la IA la elige por el asunto y el texto, con las palabras clave de cada subcategoría.
+  * Se asigna el responsable de esa categoría, que recibe el aviso en la Mesa y el correo `[ADU-2026-000123] Ticket asignado a usted`.
+  * Quien escribió recibe el acuse `[ADU-2026-000123] Recibimos su solicitud: …`.
   * Los adjuntos pasan por las mismas validaciones que en la web: extensión, tamaño y contenido.
 * Una **respuesta** cuyo asunto conserva el número se agrega al ticket con sus adjuntos. Si el ticket estaba *Pendiente cliente*, el SLA se reanuda.
   * Si el ticket ya estaba cerrado, se abre uno nuevo que cita al anterior.

@@ -198,6 +198,18 @@ def test_buzon_crea_ticket_acuse_y_respuesta(db, m365):
                    for c in s.scalars(select(m.TicketComentario).where(m.TicketComentario.ticket_id == t.id)))
 
 
+def test_buzon_categoria_del_asunto_y_aviso_al_responsable(db, m365):
+    # El asunto nombra la categoría: gana sobre la IA aunque el texto hable de partidas arancelarias
+    graph = GraphFalso([mensaje("m9", "maria.andrade@aducorp.com.ec", "Legal Aduanero - consulta urgente",
+                                "Nos notificaron una multa por la partida arancelaria declarada.")])
+    with SessionLocal() as s:
+        assert BuzonService(s, graph).procesar()["creados"] == 1
+        t = s.scalar(select(m.Ticket).where(m.Ticket.canal == "CORREO").order_by(m.Ticket.id.desc()))
+        assert t.categoria.codigo == "LEGAL_ADUANERO" and t.responsable_id is not None
+        aviso = s.scalar(select(m.ColaCorreo).where(m.ColaCorreo.plantilla == "TICKET_ASIGNADO", m.ColaCorreo.ticket_id == t.id))
+        assert aviso is not None and aviso.para == t.responsable.correo
+
+
 def test_buzon_remitente_externo_recibe_respuestas_por_correo(client, como, m365):
     graph = GraphFalso([mensaje("e1", "compras@importadora.com", "Trámite de garantía aduanera SENAE",
                                 "Por favor ayúdenos con la garantía aduanera del trámite en ECUAPASS."),

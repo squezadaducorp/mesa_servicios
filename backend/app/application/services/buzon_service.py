@@ -1,8 +1,9 @@
 """Buzón compartido de Exchange Online (soporte@): crea tickets desde correos y agrega las respuestas al ticket.
 
 Reglas:
-* Un correo sin número de ticket en el asunto crea un ticket (canal CORREO): la IA lo clasifica, se asigna
-  responsable y se envía el acuse de recepción con [ADU-AAAA-NNNNNN] en el asunto.
+* Un correo sin número de ticket en el asunto crea un ticket (canal CORREO). Si el asunto nombra una categoría
+  (p. ej. «Consulta Clasificación Arancelaria») se usa esa; si no, la IA lo clasifica. Se asigna el
+  responsable de la categoría (que recibe aviso por correo y en la Mesa) y se envía el acuse de recepción con [ADU-AAAA-NNNNNN] en el asunto.
 * Un correo cuyo asunto contiene el número de un ticket abierto o resuelto se agrega como comentario;
   si el ticket está cerrado o cancelado se crea uno nuevo relacionado.
 * Los adjuntos pasan por la misma validación que los subidos desde la web.
@@ -24,6 +25,7 @@ from app.application.services.ticket_service import TicketService
 from app.core.config import settings
 from app.core.security import utcnow
 from app.domain.enums import Estado, Rol
+from app.infrastructure.ai.local import normalizar
 from app.infrastructure.db import models as m
 from app.infrastructure.m365.graph import ClienteGraph
 from app.infrastructure.repositories.repositorios import UsuarioRepository
@@ -145,8 +147,21 @@ class BuzonService:
             self.session.refresh(u)
         return u
 
+    def _categoria_en_asunto(self, asunto: str) -> m.Categoria | None:
+        """Categoría nombrada en el asunto, p. ej. «Consulta Clasificación Arancelaria» (gana el nombre más largo)."""
+        texto = f" {normalizar(asunto)} "
+        candidatas = [c for c in self.tickets.catalogo.categorias()
+                      if normalizar(c.nombre) and f" {normalizar(c.nombre)} " in texto]
+        return max(candidatas, key=lambda c: len(c.nombre), default=None)
+
     def _clasificar(self, asunto: str, texto: str) -> tuple[int, int, str | None]:
         clasif, _ = self.tickets.ia.clasificar(f"{asunto}. {texto}")
+        elegida = self._categoria_en_asunto(asunto)
+        if elegida:
+            subs = [x for x in elegida.subcategorias if x.activo and not x.eliminado]
+            if subs:
+                sub = next((x for x in clasif if x.categoria_id == elegida.id), None)
+                return elegida.id, sub.subcategoria_id if sub else subs[0].id, None
         if clasif:
             return clasif[0].categoria_id, clasif[0].subcategoria_id, None
         for c in self.tickets.catalogo.categorias():
