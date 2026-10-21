@@ -1,5 +1,5 @@
 # Imagen de la API y del worker de la Mesa de Servicios ADUCORP
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 ACCEPT_EULA=Y
 
