@@ -46,6 +46,7 @@ docs/         Arquitectura, modelo de datos, seguridad, manuales, diagramas y ca
 | [Manual del administrador](docs/08-manual-administrador.md) | Super Admin y Admin Mesa: usuarios, roles, catálogo, SLA, auditoría, configuración |
 | [Manual de usuario](docs/09-manual-usuario.md) | Todos: crear y atender tickets, dashboard, reportes, notificaciones |
 | [Microsoft 365](docs/10-microsoft-365.md) | TI: login con Entra ID, buzón soporte@ en Exchange Online, app de Teams |
+| [Publicar en internet](docs/11-publicar-en-internet.md) | TI: dejar la Mesa disponible fuera de la oficina, gratis, con Cloudflare Tunnel |
 | [Diagramas](docs/diagramas/) | Arquitectura y modelo ER en SVG |
 
 ## Desarrollo
