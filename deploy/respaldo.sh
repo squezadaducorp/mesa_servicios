@@ -11,12 +11,15 @@ BASE=$(leer DB_NAME); BASE=${BASE:-AducorpMesaServicios}
 TIPO=${1:-completo}
 FECHA=$(date +%Y%m%d_%H%M)
 mkdir -p backups && chmod 777 backups   # SQL Server escribe como el usuario mssql (uid 10001)
-sql() { docker compose exec -T -e SQLCMDPASSWORD="$SA_PASSWORD" sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q "$1"; }
+sql() { docker compose exec -T -e SQLCMDPASSWORD="$SA_PASSWORD" sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -C -b -Q "$1" "${@:2}"; }
+# SQL Server Express (EngineEdition 4) no admite respaldos comprimidos
+COMPRIMIR="COMPRESSION, "
+[ "$(sql "SET NOCOUNT ON; SELECT SERVERPROPERTY('EngineEdition')" -h -1 | tr -d '[:space:]')" = 4 ] && COMPRIMIR=""
 
 if [ "$TIPO" = "log" ]; then
-  sql "BACKUP LOG [$BASE] TO DISK = N'/var/opt/mssql/backups/${BASE}_log_${FECHA}.trn' WITH COMPRESSION, CHECKSUM"
+  sql "BACKUP LOG [$BASE] TO DISK = N'/var/opt/mssql/backups/${BASE}_log_${FECHA}.trn' WITH ${COMPRIMIR}CHECKSUM"
 else
-  sql "BACKUP DATABASE [$BASE] TO DISK = N'/var/opt/mssql/backups/${BASE}_${FECHA}.bak' WITH COMPRESSION, CHECKSUM, INIT"
+  sql "BACKUP DATABASE [$BASE] TO DISK = N'/var/opt/mssql/backups/${BASE}_${FECHA}.bak' WITH ${COMPRIMIR}CHECKSUM, INIT"
   # Adjuntos (volumen Docker) comprimidos junto a los respaldos
   if docker volume inspect aducorp-mesa_adjuntos >/dev/null 2>&1; then
     docker run --rm -v aducorp-mesa_adjuntos:/datos:ro -v "$PWD/backups:/destino" alpine:3.20 \

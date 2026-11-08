@@ -10,7 +10,7 @@ Esta guía deja la Mesa disponible fuera de la oficina, con HTTPS y sin pagar ho
 | Azure SQL Database gratis + Azure Container Apps | Solo en parte | La base gratuita trae 100 000 segundos de vCore al mes. El motor de SLA consulta la base cada minuto, así que la base nunca se pausa y el cupo se agota en unos 2 o 3 días; después se apaga hasta el mes siguiente o empieza a cobrar. Además pide adaptar los scripts de la base (logins, modo de recuperación) |
 | Render, Railway, Fly.io, Koyeb y similares | Planes gratuitos pequeños | No ofrecen SQL Server. Habría que reescribir la base (procedimientos, vistas, triggers) para PostgreSQL, y los planes gratuitos se duermen y no guardan los adjuntos |
 
-Cuando la Mesa ya se use a diario y se quiera independizar del PC, lo natural es un servidor pequeño en la nube (o un servidor de la oficina) con el mismo Docker Compose de siempre; ese paso sí tiene costo mensual.
+Para no depender de un PC encendido, [12-publicar-en-la-nube.md](12-publicar-en-la-nube.md) instala la Mesa en un servidor en la nube con un solo comando (unos meses gratis con el crédito de una cuenta nueva de AWS; después tiene costo mensual).
 
 ## 2. Antes de empezar
 
