@@ -8,7 +8,7 @@ RUN npm run build
 
 # Servidor estático + proxy a la API (usuario sin privilegios, puertos 8080/8443)
 FROM nginxinc/nginx-unprivileged:1.27-alpine
-COPY nginx/aducorp-comun.conf nginx/aducorp-proxy.conf /etc/nginx/
+COPY nginx/aducorp-comun.conf nginx/aducorp-cabeceras.conf nginx/aducorp-proxy.conf /etc/nginx/
 COPY nginx/http.conf /etc/nginx/conf.d/default.conf
 COPY nginx/https.conf /etc/nginx/aducorp-https.conf
 COPY --from=build /app/dist /usr/share/nginx/html

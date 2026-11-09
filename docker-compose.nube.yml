@@ -1,0 +1,33 @@
+# Superposición para un servidor Linux en la nube: HTTPS automático con Caddy (Let's Encrypt).
+# La aplica deploy/nube/instalar.sh. Guía: docs/12-publicar-en-la-nube.md
+#   docker compose -f docker-compose.yml -f docker-compose.nube.yml --profile nube up -d
+services:
+  sqlserver:
+    environment:
+      MSSQL_MEMORY_LIMIT_MB: ${MSSQL_MEMORY_LIMIT_MB:-1536}   # deja memoria para la API, el worker y Caddy
+
+  web:
+    ports: !override
+      - "127.0.0.1:8080:8080"        # solo Caddy publica hacia internet (puertos 80 y 443)
+    volumes:
+      - ./deploy/nube/ip-real.conf:/etc/nginx/conf.d/ip-real.conf:ro
+
+  caddy:
+    image: caddy:2.11.2-alpine
+    profiles: [nube]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMINIO: ${DOMINIO:-}
+    volumes:
+      - ./deploy/nube/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_datos:/data
+      - caddy_config:/config
+    depends_on: [web]
+    networks: [interna]
+
+volumes:
+  caddy_datos:
+  caddy_config:

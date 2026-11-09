@@ -75,6 +75,11 @@ jobs:
             sleep 5
           done
           echo "La aplicación no respondió a tiempo"; exit 1
+      - name: Esperar la carga de los tickets de demostración
+        # La API responde antes de que db-demo termine de cargar 06_datos_demo.sql
+        run: |
+          codigo=$(docker wait "$(docker compose --profile demo ps -aq db-demo)")
+          echo "db-demo terminó con código $codigo"; test "$codigo" = 0
       - name: Prueba de humo (login, tickets, dashboard, exportación)
         run: |
           B=http://localhost:8080/api/v1

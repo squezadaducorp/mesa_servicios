@@ -1,0 +1,29 @@
+# Superposición para publicar la Mesa en internet con Cloudflare Tunnel (gratis, sin abrir puertos del router).
+# Guía completa: docs/11-publicar-en-internet.md. En Windows lo más simple es  .\deploy\publicar.ps1
+#   Prueba rápida (dirección aleatoria *.trycloudflare.com que cambia en cada arranque):
+#     docker compose -f docker-compose.yml -f docker-compose.publico.yml --profile prueba up -d
+#     docker compose -f docker-compose.yml -f docker-compose.publico.yml logs tunel-prueba
+#   Permanente (p. ej. https://mesa.aducorp.com.ec; requiere CLOUDFLARE_TUNNEL_TOKEN en .env):
+#     docker compose -f docker-compose.yml -f docker-compose.publico.yml --profile publico up -d
+services:
+  web:
+    volumes:
+      - ./deploy/cloudflare/ip-real.conf:/etc/nginx/conf.d/ip-real.conf:ro
+
+  tunel:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: [publico]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on: [web]
+    networks: [interna]
+
+  tunel-prueba:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: [prueba]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "--url", "http://web:8080"]
+    depends_on: [web]
+    networks: [interna]

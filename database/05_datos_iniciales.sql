@@ -173,6 +173,8 @@ FROM u
 JOIN dbo.roles r ON r.codigo = u.rol
 LEFT JOIN dbo.areas a ON a.nombre = u.area
 WHERE NOT EXISTS (SELECT 1 FROM dbo.usuarios x WHERE x.correo = u.correo)
+  /* Los de ejemplo no se crean si ya se cargó el personal real (scripts.importar_usuarios); admin@ siempre */
+  AND (u.orden = 1 OR NOT EXISTS (SELECT 1 FROM dbo.configuracion WHERE clave = 'usuarios.ejemplo' AND valor = N'no'))
 ORDER BY u.orden;
 
 /* Analistas reportan a su supervisor */

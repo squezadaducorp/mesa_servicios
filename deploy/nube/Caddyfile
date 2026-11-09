@@ -1,0 +1,5 @@
+# Caddy obtiene y renueva solo el certificado HTTPS de Let's Encrypt para DOMINIO (.env)
+{$DOMINIO} {
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy web:8080
+}
