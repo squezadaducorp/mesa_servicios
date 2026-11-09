@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link as RouterLink, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Box, Button, Divider, IconButton, InputAdornment, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import Visibility from "@mui/icons-material/Visibility";
@@ -30,7 +30,7 @@ export default function Login() {
   const sso = config.data?.activo ?? false;
   const mostrarFormulario = !sso || emergencia;
 
-  if (usuario) return <Navigate to={usuario.debe_cambiar_clave ? "/cambiar-clave" : destino} replace />;
+  if (usuario) return <Navigate to={usuario.debe_cambiar_clave ? "/cambiar-clave" : destino} replace state={{ desde: destino }} />;
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
@@ -38,7 +38,7 @@ export default function Login() {
     setEnviando(true);
     try {
       const u = await login(correo.trim(), clave);
-      navigate(u.debe_cambiar_clave ? "/cambiar-clave" : destino, { replace: true });
+      navigate(u.debe_cambiar_clave ? "/cambiar-clave" : destino, { replace: true, state: { desde: destino } });
     } catch (err) {
       setError(mensajeError(err));
     } finally {
@@ -135,6 +135,12 @@ export default function Login() {
             </Stack>
           </form>
           )}
+          <Typography variant="body2" sx={{ textAlign: "center", mt: 3, color: "text.secondary" }}>
+            ¿No tiene cuenta?{" "}
+            <Link component={RouterLink} to="/solicitud">
+              Registre su solicitud aquí
+            </Link>
+          </Typography>
         </Paper>
       </Box>
     </Box>

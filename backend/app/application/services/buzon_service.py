@@ -60,6 +60,32 @@ def texto_de(msg: dict) -> str:
     return re.sub(r"\n{3,}", "\n\n", texto)[:8000]
 
 
+def categoria_en_asunto(tickets: TicketService, asunto: str) -> m.Categoria | None:
+    """Categoría nombrada en el asunto, p. ej. «Consulta Clasificación Arancelaria» (gana el nombre más largo)."""
+    texto = f" {normalizar(asunto)} "
+    candidatas = [c for c in tickets.catalogo.categorias()
+                  if normalizar(c.nombre) and f" {normalizar(c.nombre)} " in texto]
+    return max(candidatas, key=lambda c: len(c.nombre), default=None)
+
+
+def clasificar(tickets: TicketService, asunto: str, texto: str) -> tuple[int, int, str | None]:
+    """(categoria_id, subcategoria_id, aviso) para un texto libre: categoría del asunto, si no la IA, si no la primera."""
+    clasif, _ = tickets.ia.clasificar(f"{asunto}. {texto}")
+    elegida = categoria_en_asunto(tickets, asunto)
+    if elegida:
+        subs = [x for x in elegida.subcategorias if x.activo and not x.eliminado]
+        if subs:
+            sub = next((x for x in clasif if x.categoria_id == elegida.id), None)
+            return elegida.id, sub.subcategoria_id if sub else subs[0].id, None
+    if clasif:
+        return clasif[0].categoria_id, clasif[0].subcategoria_id, None
+    for c in tickets.catalogo.categorias():
+        subs = [x for x in c.subcategorias if x.activo and not x.eliminado]
+        if subs:
+            return c.id, subs[0].id, "La IA no reconoció la categoría; se usó la primera del catálogo. Revise la clasificación."
+    raise ErrorAplicacion("No hay categorías activas para registrar el ticket")
+
+
 class BuzonService:
     def __init__(self, session: Session, graph: ClienteGraph | None = None):
         self.session = session
@@ -147,28 +173,8 @@ class BuzonService:
             self.session.refresh(u)
         return u
 
-    def _categoria_en_asunto(self, asunto: str) -> m.Categoria | None:
-        """Categoría nombrada en el asunto, p. ej. «Consulta Clasificación Arancelaria» (gana el nombre más largo)."""
-        texto = f" {normalizar(asunto)} "
-        candidatas = [c for c in self.tickets.catalogo.categorias()
-                      if normalizar(c.nombre) and f" {normalizar(c.nombre)} " in texto]
-        return max(candidatas, key=lambda c: len(c.nombre), default=None)
-
     def _clasificar(self, asunto: str, texto: str) -> tuple[int, int, str | None]:
-        clasif, _ = self.tickets.ia.clasificar(f"{asunto}. {texto}")
-        elegida = self._categoria_en_asunto(asunto)
-        if elegida:
-            subs = [x for x in elegida.subcategorias if x.activo and not x.eliminado]
-            if subs:
-                sub = next((x for x in clasif if x.categoria_id == elegida.id), None)
-                return elegida.id, sub.subcategoria_id if sub else subs[0].id, None
-        if clasif:
-            return clasif[0].categoria_id, clasif[0].subcategoria_id, None
-        for c in self.tickets.catalogo.categorias():
-            subs = [x for x in c.subcategorias if x.activo and not x.eliminado]
-            if subs:
-                return c.id, subs[0].id, "La IA no reconoció la categoría; se usó la primera del catálogo. Revise la clasificación."
-        raise ErrorAplicacion("No hay categorías activas para registrar el ticket")
+        return clasificar(self.tickets, asunto, texto)
 
     def _crear_ticket(self, correo: str, nombre: str, asunto: str, texto: str, msg: dict) -> tuple[m.Ticket, str | None]:
         solicitante = self._solicitante(correo, nombre)

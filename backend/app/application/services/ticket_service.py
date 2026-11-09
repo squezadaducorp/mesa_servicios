@@ -174,7 +174,7 @@ class TicketService:
         self.auditoria.registrar(ctx, AccionAuditoria.TICKET_CREADO, "ticket", t.id, {"numero": t.numero, "categoria": categoria.nombre})
 
         self.notif.notificar([solicitante], "TICKET_CREADO", f"{t.numero} registrado", f"Su solicitud «{t.asunto}» fue registrada.", t)
-        if t.canal != "CORREO":   # los tickets que llegan por correo reciben el acuse del buzón
+        if t.canal not in ("CORREO", "WEB"):   # correo y formulario público envían su propio acuse
             self.notif.correo("TICKET_CREADO", [solicitante], t)
         if responsable:
             self._asignar(t, responsable, u if dto.responsable_id else None, "MANUAL" if dto.responsable_id else "AUTOMATICA",
@@ -313,15 +313,23 @@ class TicketService:
 
     def correo_solicitante(self, codigo: str, t: m.Ticket, **extra) -> None:
         """Al usuario solicitante o, si el ticket vino de un remitente externo, a la dirección del correo original."""
-        if settings.BUZON_ENABLED and t.solicitante.correo.lower() == settings.BUZON_CORREO.lower():
+        cuenta = t.solicitante.correo.lower()
+        if cuenta == settings.FORMULARIO_WEB_CORREO.lower():
+            # Formulario público: el solicitante no tiene cuenta, el enlace lleva al formulario y no al ticket
+            extra.setdefault("url", f"{settings.APP_URL.rstrip('/')}/solicitud")
+            self.notif.correo_directo(codigo, t.correo, t.solicitante_nombre, t, **extra)
+        elif settings.BUZON_ENABLED and cuenta == settings.BUZON_CORREO.lower():
             self.notif.correo_directo(codigo, t.correo, t.correo, t, **extra)
         else:
             self.notif.correo(codigo, [t.solicitante], t, **extra)
 
     def responder_por_correo(self, t: m.Ticket, autor: m.Usuario, texto: str) -> None:
-        """Los tickets que llegaron por correo reciben las respuestas del equipo en el mismo hilo de correo."""
+        """Los tickets que llegaron por correo reciben las respuestas del equipo en el mismo hilo de correo;
+        los del formulario público, un aviso por correo (el solicitante no tiene cuenta para verlas)."""
         if settings.BUZON_ENABLED and t.canal == "CORREO":
             self.correo_solicitante("RESPUESTA_TICKET", t, comentario=texto[:4000], autor=autor.nombre)
+        elif t.canal == "WEB":
+            self.correo_solicitante("RESPUESTA_WEB", t, comentario=texto[:4000], autor=autor.nombre)
 
     def _aplicar_estado(self, t: m.Ticket, actual: Estado, destino: Estado, u: m.Usuario | None, ctx: Contexto, ahora: datetime) -> None:
         reapertura = es_reapertura(actual, destino)

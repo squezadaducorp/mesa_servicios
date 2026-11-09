@@ -20,13 +20,14 @@ const Catalogo = lazy(() => import("./pages/admin/Catalogo"));
 const Sla = lazy(() => import("./pages/admin/Sla"));
 const Auditoria = lazy(() => import("./pages/admin/Auditoria"));
 const Configuracion = lazy(() => import("./pages/admin/Configuracion"));
+const SolicitudPublica = lazy(() => import("./pages/SolicitudPublica"));
 
 function Protegida({ children }: { children: ReactNode }) {
   const { usuario, cargando } = useAuth();
   const location = useLocation();
   if (cargando) return <Cargando alto={400} />;
   if (!usuario) return <Navigate to="/login" replace state={{ desde: location.pathname }} />;
-  if (usuario.debe_cambiar_clave && location.pathname !== "/cambiar-clave") return <Navigate to="/cambiar-clave" replace />;
+  if (usuario.debe_cambiar_clave && location.pathname !== "/cambiar-clave") return <Navigate to="/cambiar-clave" replace state={{ desde: location.pathname }} />;
   return <>{children}</>;
 }
 
@@ -46,6 +47,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/auth/entra" element={<EntraRetorno />} />
+        <Route path="/solicitud" element={<SolicitudPublica />} />
         <Route
           element={
             <Protegida>

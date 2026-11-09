@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     BUZON_LOTE: int = 25
     EMAIL_TRANSPORTE: str = "smtp"          # smtp | graph (envía desde BUZON_CORREO)
 
+    # Formulario público (/solicitud): personas sin cuenta registran tickets
+    FORMULARIO_WEB_ENABLED: bool = True
+    FORMULARIO_WEB_CORREO: str = "formulario-web@aducorp.com.ec"   # cuenta de sistema que figura como solicitante
+    FORMULARIO_WEB_MAX_POR_HORA: int = 5    # solicitudes por IP y por correo en una hora (por proceso)
+
     # Microsoft Teams: bot de Azure Bot Service (mismo Id. de aplicación)
     TEAMS_ENABLED: bool = False
     TEAMS_BOT_ID: str = ""                  # vacío = M365_CLIENT_ID

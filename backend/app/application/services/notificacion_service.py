@@ -27,6 +27,11 @@ def fecha_local(d) -> str:
     return d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(settings.ZONA_HORARIA)).strftime("%d/%m/%Y %H:%M")
 
 
+def cuentas_sistema() -> set[str]:
+    """Direcciones de cuentas técnicas que figuran como solicitante pero no deben recibir correos."""
+    return {settings.BUZON_CORREO.lower(), settings.FORMULARIO_WEB_CORREO.lower()}
+
+
 class NotificacionService:
     def __init__(self, session: Session):
         self.session = session
@@ -69,7 +74,7 @@ class NotificacionService:
         if plantilla is None:
             log.warning("Plantilla de correo %s no encontrada", codigo)
             return
-        enviados: set[str] = {settings.BUZON_CORREO.lower()}   # nunca se escribe al propio buzón de soporte
+        enviados: set[str] = cuentas_sistema()   # nunca se escribe al buzón de soporte ni a la cuenta del formulario
         for u in destinatarios:
             if u is None or not u.activo or u.correo.lower() in enviados:
                 continue
@@ -79,7 +84,7 @@ class NotificacionService:
     def correo_directo(self, codigo: str, para: str, nombre: str, ticket: m.Ticket, **extra) -> None:
         """Correo a una dirección que puede no ser usuario de la Mesa (remitente externo del buzón)."""
         plantilla = self.catalogo.plantilla(codigo)
-        if plantilla is None or not para or para.lower() == settings.BUZON_CORREO.lower():
+        if plantilla is None or not para or para.lower() in cuentas_sistema():
             return
         self._encolar(plantilla, codigo, para, nombre, ticket, extra)
 
