@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Alert, Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
 import { post } from "../api/client";
 import type { TokenSalida } from "../api/types";
@@ -18,6 +18,10 @@ export default function CambiarClave() {
   const { usuario, aplicarToken } = useAuth();
   const avisar = useAviso();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Página a la que iba antes del cambio obligatorio (p. ej. /tickets/nuevo desde el botón del sitio web)
+  const desde = (location.state as { desde?: string } | null)?.desde;
+  const destino = desde && desde.startsWith("/") && !desde.startsWith("//") && desde !== "/cambiar-clave" ? desde : "/";
   const [actual, setActual] = useState("");
   const [nueva, setNueva] = useState("");
   const [repetir, setRepetir] = useState("");
@@ -31,7 +35,7 @@ export default function CambiarClave() {
       const t = await post<TokenSalida>("/auth/cambiar-clave", { clave_actual: actual, clave_nueva: nueva });
       aplicarToken(t);
       avisar("Contraseña actualizada");
-      navigate("/", { replace: true });
+      navigate(destino, { replace: true });
     } catch (err) {
       setError(mensajeError(err));
     }

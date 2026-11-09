@@ -241,7 +241,7 @@ class TicketCrear(BaseModel):
     cliente_id: int | None = None
     telefono: str | None = None
     correo: EmailStr | None = None
-    canal: Literal["PORTAL", "CORREO", "TELEFONO", "PRESENCIAL"] = "PORTAL"
+    canal: Literal["PORTAL", "CORREO", "TELEFONO", "PRESENCIAL", "WEB"] = "PORTAL"
     solicitante_id: int | None = Field(default=None, description="Solo la mesa de servicio puede registrar a nombre de otro usuario")
     responsable_id: int | None = Field(default=None, description="Asignación directa (requiere permiso de asignar)")
 
@@ -553,3 +553,40 @@ class ConfiguracionEntrada(BaseModel):
 
 
 CategoriaEntrada.model_rebuild()
+
+
+# ------------------------------------------------------------------ formulario público
+class SubcategoriaPublica(BaseModel):
+    id: int
+    nombre: str
+
+
+class CategoriaPublica(BaseModel):
+    id: int
+    nombre: str
+    subcategorias: list[SubcategoriaPublica]
+
+
+class FormularioPublicoSalida(BaseModel):
+    habilitado: bool
+    empresa: str
+    categorias: list[CategoriaPublica]
+    token: str = Field(description="Ficha anti-spam: se devuelve al enviar el formulario")
+
+
+class SolicitudPublica(BaseModel):
+    nombre: str = Field(min_length=3, max_length=120)
+    correo: EmailStr
+    telefono: str | None = Field(default=None, max_length=30)
+    empresa: str | None = Field(default=None, max_length=150)
+    asunto: str = Field(min_length=5, max_length=200)
+    descripcion: str = Field(min_length=10, max_length=4000)
+    categoria_id: int | None = None
+    subcategoria_id: int | None = None
+    token: str = Field(max_length=200)
+    sitio_web: str | None = Field(default=None, description="Campo trampa: debe llegar vacío")
+
+
+class SolicitudPublicaSalida(BaseModel):
+    numero: str
+    mensaje: str

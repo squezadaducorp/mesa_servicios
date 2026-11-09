@@ -102,7 +102,9 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                            ("TICKET_ESCALADO", "[{numero}] Ticket escalado"), ("SLA_75", "[{numero}] Próximo a vencer"),
                            ("SLA_90", "[{numero}] SLA 90 %"), ("SLA_VENCIDO", "[{numero}] SLA incumplido"), ("TICKET_CERRADO", "[{numero}] Ticket cerrado"),
                            ("ACUSE_CORREO", "[{numero}] Recibimos su solicitud: {asunto}"),
-                           ("RESPUESTA_TICKET", "[{numero}] Respuesta: {asunto}")):
+                           ("RESPUESTA_TICKET", "[{numero}] Respuesta: {asunto}"),
+                           ("ACUSE_WEB", "[{numero}] Recibimos su solicitud: {asunto}"),
+                           ("RESPUESTA_WEB", "[{numero}] Respuesta: {asunto}")):
         session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} <a href='{url}'>ver</a></p>"))
     for k, v in (("empresa.nombre", "ADUCORP Asesores Aduaneros y Logísticos Cía. Ltda."), ("sla.umbral_aviso_1", "75"),
                  ("sla.umbral_aviso_2", "90"), ("ticket.cierre_automatico_h", "72"), ("adjuntos.max_mb", "20"),
