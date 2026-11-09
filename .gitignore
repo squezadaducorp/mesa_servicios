@@ -8,3 +8,4 @@ certs/
 *.db
 *.tsbuildinfo
 teams/*.zip
+usuarios.csv

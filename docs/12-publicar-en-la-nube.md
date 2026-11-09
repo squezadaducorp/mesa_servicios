@@ -73,6 +73,23 @@ Más adelante se puede usar `mesa.aducorp.com.ec` (sección 7).
 3. La base empieza **limpia** (sin los tickets de demostración). Por seguridad, el script **desactivó** a los demás usuarios iniciales, que traían la contraseña pública `Aducorp2026!`. Para habilitarlos o crear los usuarios reales: Administración > Usuarios > activar y **Generar contraseña temporal**.
 4. Revise en Administración la configuración de la empresa, categorías, SLA y feriados.
 
+### Cargar el personal real
+
+La base trae solo la cuenta `admin@` y unos usuarios de ejemplo. Para dejar únicamente al personal de ADUCORP:
+
+1. Prepare el listado en CSV separado por `;` con el encabezado `nombre;correo;cargo;rol;area;atiende;supervisa`. En `atiende` y `supervisa` van códigos de categoría separados por comas (`CLASIF_ARANCEL`, `LEGAL_ADUANERO`, `CONSULTAS_FEDEX`, `REGIMENES_ESP`, `TRAMITES_ADUANA`), y un `*` marca al responsable principal (`TRAMITES_ADUANA*`). El listado **no se sube a GitHub** porque tiene datos del personal.
+2. En la terminal del servidor, pegue el contenido así:
+
+   ```bash
+   sudo tee /opt/mesa-servicios/usuarios.csv > /dev/null <<'FIN'
+   nombre;correo;cargo;rol;area;atiende;supervisa
+   ...una línea por persona...
+   FIN
+   sudo /opt/mesa-servicios/deploy/nube/cargar-usuarios.sh /opt/mesa-servicios/usuarios.csv
+   ```
+
+3. El comando crea a cada persona con una **contraseña temporal** (la cambia al ingresar), asigna quién atiende y supervisa cada categoría, y borra los usuarios de ejemplo. Muestra las contraseñas en pantalla y guarda una copia en `/root/mesa-usuarios-claves.txt`. Se puede repetir con un listado corregido: actualiza a las personas que ya existen sin cambiar sus contraseñas.
+
 ## 6. Operación diaria
 
 | Tarea | Cómo |
