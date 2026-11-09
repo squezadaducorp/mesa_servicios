@@ -36,13 +36,14 @@ fi
 cd "$DIR"
 
 echo "== 4/6 Configuración"
-if [ ! -f .env ]; then
+# También se rehace si un intento anterior se cortó con las claves de ejemplo todavía puestas
+if [ ! -f .env ] || grep -q "^SA_PASSWORD=CAMBIAR" .env; then
   cp .env.example .env
   sed -i \
-    -e "s#^SA_PASSWORD=.*#SA_PASSWORD=Sa-$(openssl rand -hex 16)-X9#" \
-    -e "s#^DB_APP_PASSWORD=.*#DB_APP_PASSWORD=App-$(openssl rand -hex 16)-Y8#" \
-    -e "s#^JWT_SECRET=.*#JWT_SECRET=$(openssl rand -hex 48)#" \
-    -e "s#^MSSQL_PID=.*#MSSQL_PID=Express              # gratuita para producción (bases de hasta 10 GB)#" \
+    -e "s|^SA_PASSWORD=.*|SA_PASSWORD=Sa-$(openssl rand -hex 16)-X9|" \
+    -e "s|^DB_APP_PASSWORD=.*|DB_APP_PASSWORD=App-$(openssl rand -hex 16)-Y8|" \
+    -e "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 48)|" \
+    -e "s|^MSSQL_PID=.*|MSSQL_PID=Express              # gratuita para producción (bases de hasta 10 GB)|" \
     .env
   echo "Se creó .env con claves aleatorias."
 fi
