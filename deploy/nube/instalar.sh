@@ -5,6 +5,10 @@
 # Volver a ejecutarlo actualiza el código y conserva la base, el .env y los adjuntos.
 set -euo pipefail
 
+# Todo va dentro de main: con «curl | bash» el script llega por la entrada estándar, y sin esto
+# el primer «docker compose exec» se tragaba el resto del script y la instalación terminaba en silencio.
+main() {
+
 DOMINIO=${1:?Uso: instalar.sh <dominio>   por ejemplo: instalar.sh mesa-aducorp.duckdns.org}
 REPO=${REPO:-https://github.com/squezadaducorp/mesa_servicios.git}
 RAMA=${RAMA:-main}
@@ -71,7 +75,7 @@ echo "== 6/6 Cerrar las contraseñas conocidas y publicar"
 CLAVE_ADMIN=""
 if [ "$(sql -h -1 -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM dbo.usuarios WHERE correo = N'admin@aducorp.com.ec' AND clave_hash = '$CLAVE_INICIAL'" | tr -d '[:space:]')" != 0 ]; then
   CLAVE_ADMIN="Mesa9-$(openssl rand -hex 6)-$(openssl rand -hex 3 | tr a-f A-F)!"
-  HASH=$("${C[@]}" exec -T api python -c "import sys; from app.core.security import hash_clave; print(hash_clave(sys.argv[1]))" "$CLAVE_ADMIN")
+  HASH=$("${C[@]}" exec -T api python -c "import sys; from app.core.security import hash_clave; print(hash_clave(sys.argv[1]))" "$CLAVE_ADMIN" </dev/null)
   sql -Q "UPDATE dbo.usuarios SET clave_hash = '$HASH', debe_cambiar_clave = 1, intentos_fallidos = 0, bloqueado_hasta = NULL WHERE correo = N'admin@aducorp.com.ec'" >/dev/null
   umask 077; echo "admin@aducorp.com.ec  $CLAVE_ADMIN" > /root/mesa-clave-admin.txt
 fi
@@ -90,3 +94,6 @@ if [ -n "$CLAVE_ADMIN" ]; then
   echo "Usuario: admin@aducorp.com.ec"
   echo "Contraseña temporal: $CLAVE_ADMIN   (la Mesa pide cambiarla al ingresar; copia en /root/mesa-clave-admin.txt)"
 fi
+}
+
+main "$@" </dev/null
