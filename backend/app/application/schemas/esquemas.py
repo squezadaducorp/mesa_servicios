@@ -574,6 +574,9 @@ class FormularioPublicoSalida(BaseModel):
     empresa: str
     categorias: list[CategoriaPublica]
     token: str = Field(description="Ficha anti-spam: se devuelve al enviar el formulario")
+    adjuntos_max: int = Field(0, description="Archivos que se pueden adjuntar (0 = ninguno)")
+    adjuntos_max_mb: int = 0
+    adjuntos_extensiones: list[str] = []
 
 
 class SolicitudPublica(BaseModel):
@@ -592,3 +595,4 @@ class SolicitudPublica(BaseModel):
 class SolicitudPublicaSalida(BaseModel):
     numero: str
     mensaje: str
+    adjuntos: int = 0

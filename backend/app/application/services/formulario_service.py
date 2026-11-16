@@ -5,7 +5,8 @@ Protección contra abuso, sin servicios de terceros:
   FICHA_MIN_SEG (los robots envían al instante) o después de FICHA_MAX_SEG.
 * Campo trampa «sitio_web», oculto para las personas.
 * Límite de solicitudes por IP y por correo (FORMULARIO_WEB_MAX_POR_HORA) y limit_req de Nginx.
-* Sin adjuntos: el equipo los pide por correo si hacen falta.
+* Adjuntos limitados (FORMULARIO_WEB_ADJUNTOS_*): pocos archivos, tamaño menor que el interno, solo documentos e
+  imágenes, firma del contenido verificada y todo validado antes de crear el ticket. Nginx limita el cuerpo.
 
 El ticket queda a nombre de una cuenta técnica sin clave (FORMULARIO_WEB_CORREO). El nombre y correo
 reales van en el ticket (solicitante_nombre, correo, descripción) y los avisos se envían a ese correo.
@@ -13,6 +14,7 @@ reales van en el ticket (solicitante_nombre, correo, descripción) y los avisos 
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass
 import hmac
 import time
 
@@ -36,6 +38,13 @@ FICHA_MAX_SEG = 2 * 3600
 
 limitador_ip = Limitador(settings.FORMULARIO_WEB_MAX_POR_HORA, 3600)
 limitador_correo = Limitador(settings.FORMULARIO_WEB_MAX_POR_HORA, 3600)
+
+
+@dataclass
+class ArchivoPublico:
+    nombre: str
+    tipo_mime: str
+    contenido: bytes
 
 
 class DemasiadasSolicitudes(ErrorAplicacion):
@@ -82,7 +91,15 @@ class FormularioService:
             subs = [{"id": x.id, "nombre": x.nombre} for x in c.subcategorias if x.activo and not x.eliminado]
             if subs:
                 categorias.append({"id": c.id, "nombre": c.nombre, "subcategorias": subs})
-        return {"habilitado": True, "empresa": nombre_empresa(self.session), "categorias": categorias, "token": emitir_ficha()}
+        max_archivos, max_mb, permitidas = self.reglas_adjuntos()
+        return {"habilitado": True, "empresa": nombre_empresa(self.session), "categorias": categorias, "token": emitir_ficha(),
+                "adjuntos_max": max_archivos if permitidas else 0, "adjuntos_max_mb": max_mb, "adjuntos_extensiones": sorted(permitidas)}
+
+    def reglas_adjuntos(self) -> tuple[int, int, set[str]]:
+        """Reglas del formulario público: más estrictas que las internas y nunca más amplias."""
+        max_mb, permitidas = self.tickets.reglas_adjuntos()
+        publicas = {e.strip().lower() for e in settings.FORMULARIO_WEB_ADJUNTOS_EXTENSIONES.split(",") if e.strip()}
+        return max(0, settings.FORMULARIO_WEB_ADJUNTOS_MAX), max(1, min(max_mb, settings.FORMULARIO_WEB_ADJUNTOS_MAX_MB)), publicas & permitidas
 
     def cuenta(self) -> m.Usuario:
         correo = settings.FORMULARIO_WEB_CORREO.lower()
@@ -93,7 +110,8 @@ class FormularioService:
             self.session.refresh(u)
         return u
 
-    def registrar(self, dto: s.SolicitudPublica, ip: str | None, equipo: str | None) -> m.Ticket:
+    def registrar(self, dto: s.SolicitudPublica, ip: str | None, equipo: str | None,
+                  archivos: list[ArchivoPublico] | None = None) -> m.Ticket:
         if not settings.FORMULARIO_WEB_ENABLED:
             raise FormularioDeshabilitado("El formulario público no está habilitado")
         if (dto.sitio_web or "").strip() or not ficha_valida(dto.token):
@@ -101,6 +119,14 @@ class FormularioService:
         correo = str(dto.correo).lower()
         if not limitador_ip.permitir(ip or "?") or not limitador_correo.permitir(correo):
             raise DemasiadasSolicitudes("Recibimos varias solicitudes en poco tiempo. Inténtelo de nuevo en una hora o escríbanos por correo.")
+
+        # Todos los archivos se validan antes de crear el ticket: si uno falla, no queda nada a medias.
+        archivos = archivos or []
+        max_archivos, max_mb, permitidas = self.reglas_adjuntos()
+        if len(archivos) > max_archivos:
+            raise ReglaNegocio(f"Puede adjuntar hasta {max_archivos} archivos" if max_archivos else "Este formulario no admite adjuntos")
+        for a in archivos:
+            self.tickets.validar_archivo(a.nombre, a.contenido, max_mb, permitidas)
 
         nombre, asunto, texto = dto.nombre.strip(), dto.asunto.strip(), dto.descripcion.strip()
         if dto.categoria_id and dto.subcategoria_id:
@@ -124,6 +150,8 @@ class FormularioService:
             t.solicitante_cargo = dto.empresa.strip()[:100]
         if aviso:
             self.tickets._agregar_comentario(t, cuenta, aviso, True, "SISTEMA", None, utcnow())
+        for a in archivos:
+            self.tickets.guardar_adjunto(t, cuenta, a.nombre, a.tipo_mime, a.contenido, ctx)
         self.session.flush()
         self.session.refresh(t)
         self.tickets.notif.correo_directo("ACUSE_WEB", correo, nombre, t, url=f"{settings.APP_URL.rstrip('/')}/solicitud")

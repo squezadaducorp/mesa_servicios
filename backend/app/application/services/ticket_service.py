@@ -467,11 +467,30 @@ class TicketService:
         self._exigir(u, t, "adjuntar")
         return self.guardar_adjunto(t, u, nombre, tipo_mime, contenido, ctx)
 
-    def guardar_adjunto(self, t: m.Ticket, u: m.Usuario, nombre: str, tipo_mime: str, contenido: bytes, ctx: Contexto) -> m.TicketAdjunto:
-        """Valida (extensión, tamaño, contenido) y guarda el archivo. También lo usa el buzón de correo."""
+    def reglas_adjuntos(self) -> tuple[int, set[str]]:
+        """Tamaño máximo (MB) y extensiones permitidas según la configuración vigente."""
         config = self.catalogo.configuracion()
         max_mb = int(config.get("adjuntos.max_mb", settings.ADJUNTOS_MAX_MB))
-        permitidas = {e.strip().lower() for e in config.get("adjuntos.extensiones", settings.ADJUNTOS_EXTENSIONES).split(",")}
+        permitidas = {e.strip().lower() for e in config.get("adjuntos.extensiones", settings.ADJUNTOS_EXTENSIONES).split(",") if e.strip()}
+        return max_mb, permitidas
+
+    @staticmethod
+    def validar_archivo(nombre: str, contenido: bytes, max_mb: int, permitidas: set[str]) -> str:
+        """Comprueba extensión, tamaño y firma del contenido. Devuelve la extensión o lanza ReglaNegocio."""
+        extension = Path(nombre).suffix.lower().lstrip(".")
+        if extension not in permitidas:
+            raise ReglaNegocio(f"Tipo de archivo no permitido (.{extension}). Permitidos: {', '.join(sorted(permitidas))}")
+        if len(contenido) == 0:
+            raise ReglaNegocio(f"El archivo {Path(nombre).name[:80]} está vacío")
+        if len(contenido) > max_mb * 1024 * 1024:
+            raise ReglaNegocio(f"El archivo {Path(nombre).name[:80]} supera el máximo de {max_mb} MB")
+        if not contenido_valido(extension, contenido):
+            raise ReglaNegocio(f"El contenido de {Path(nombre).name[:80]} no corresponde a su extensión o no está permitido")
+        return extension
+
+    def guardar_adjunto(self, t: m.Ticket, u: m.Usuario, nombre: str, tipo_mime: str, contenido: bytes, ctx: Contexto) -> m.TicketAdjunto:
+        """Valida (extensión, tamaño, contenido) y guarda el archivo. También lo usan el buzón de correo y el formulario público."""
+        max_mb, permitidas = self.reglas_adjuntos()
         extension = Path(nombre).suffix.lower().lstrip(".")
         if extension not in permitidas:
             raise ReglaNegocio(f"Tipo de archivo no permitido (.{extension}). Permitidos: {', '.join(sorted(permitidas))}")
