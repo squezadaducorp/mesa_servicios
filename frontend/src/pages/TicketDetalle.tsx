@@ -177,6 +177,13 @@ export default function TicketDetalle() {
         </Typography>
       </Stack>
 
+      {t.solo_lectura_participante && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Usted atendió este ticket antes. Hoy está a cargo de {t.responsable?.nombre ?? "otro responsable"} ({t.categoria.nombre}), por eso
+          puede consultarlo pero no modificarlo.
+        </Alert>
+      )}
+
       <Paper sx={{ p: { xs: 2, md: 3 }, mb: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
           <Box sx={{ minWidth: 0 }}>

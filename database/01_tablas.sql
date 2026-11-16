@@ -393,6 +393,10 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_asignaciones_ticket')
     CREATE INDEX ix_asignaciones_ticket ON dbo.ticket_asignaciones(ticket_id);
 GO
+-- Filtro «Tickets en los que participé»: busca por quien recibió la asignación
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_asignaciones_responsable_nuevo')
+    CREATE INDEX ix_asignaciones_responsable_nuevo ON dbo.ticket_asignaciones(responsable_nuevo_id, ticket_id);
+GO
 
 IF OBJECT_ID(N'dbo.ticket_escalamientos', N'U') IS NULL
 CREATE TABLE dbo.ticket_escalamientos (

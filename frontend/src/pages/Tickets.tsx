@@ -26,6 +26,7 @@ function filtroInicial(params: URLSearchParams): FiltroTickets {
   if (params.get("estado")) desdeUrl.estado = params.getAll("estado");
   if (params.get("sla")) desdeUrl.sla = params.get("sla") as FiltroTickets["sla"];
   if (params.get("solo_mios")) desdeUrl.solo_mios = true;
+  if (params.get("participe")) desdeUrl.participe = true;
   if (Object.keys(desdeUrl).length) return { orden: "fecha_desc", ...desdeUrl };
   try {
     const g = sessionStorage.getItem(CLAVE_FILTRO);
@@ -120,6 +121,16 @@ export default function Tickets() {
             Filtros{activos ? ` (${activos})` : ""}
           </Button>
         </Stack>
+        {puede(P.VER_ASIGNADOS) && (
+          <Chip
+            sx={{ mt: 1.5 }}
+            color="primary"
+            variant={filtro.participe ? "filled" : "outlined"}
+            label="Tickets en los que participé"
+            title="Incluye los tickets que usted atendió y hoy están con otro responsable (solo lectura)"
+            onClick={() => set("participe", filtro.participe ? undefined : true)}
+          />
+        )}
         <Collapse in={verFiltros}>
           <Box sx={{ display: "grid", gap: 1.5, mt: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(4, 1fr)" } }}>
             <TextField
