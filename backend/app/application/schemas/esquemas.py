@@ -39,6 +39,7 @@ class LoginEntrada(BaseModel):
 
 class RefreshEntrada(BaseModel):
     refresh_token: str
+    inactivo_seg: int | None = Field(None, ge=0, le=10_000_000, description="Segundos desde la última interacción del usuario")
 
 
 class CambioClaveEntrada(BaseModel):
@@ -67,6 +68,7 @@ class TokenSalida(Modelo):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+    inactividad_min: int = 0
     usuario: UsuarioSesion
 
 

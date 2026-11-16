@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_DAYS: int = 7
     MAX_LOGIN_INTENTOS: int = 5
     BLOQUEO_MINUTOS: int = 15
+    INACTIVIDAD_MINUTOS: int = 30           # cierre de sesión por inactividad (respaldo de seguridad.inactividad_min; 0 = desactivado)
     CLAVE_MIN_LONGITUD: int = 10
     LOGIN_MAX_POR_MINUTO: int = 10          # intentos de login por IP y minuto (por proceso; Nginx aplica otro límite)
 

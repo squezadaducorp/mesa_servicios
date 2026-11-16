@@ -5,6 +5,7 @@ const BASE = (import.meta.env.VITE_API_URL ?? "") + "/api/v1";
 /** URL absoluta de un endpoint (para navegaciones del navegador, como el inicio de sesión con Microsoft). */
 export const urlApi = (path: string) => `${BASE}${path}`;
 const CLAVE_REFRESH = "aducorp.refresh";
+const CLAVE_ACTIVIDAD = "aducorp.actividad"; // compartida entre pestañas
 
 export class ApiError extends Error {
   status: number;
@@ -20,7 +21,8 @@ type Query = Record<string, string | number | boolean | string[] | undefined | n
 
 let accessToken: string | null = null;
 let refreshEnCurso: Promise<TokenSalida | null> | null = null;
-let alExpirarSesion: () => void = () => {};
+let alExpirarSesion: (motivo?: string) => void = () => {};
+let motivoRechazo: string | undefined;
 let alRenovar: (t: TokenSalida) => void = () => {};
 
 export const sesion = {
@@ -36,6 +38,7 @@ export const sesion = {
     accessToken = null;
     try {
       localStorage.removeItem(CLAVE_REFRESH);
+      localStorage.removeItem(CLAVE_ACTIVIDAD);
       sessionStorage.clear(); // filtros de la sesión anterior: no deben pasar al siguiente usuario
     } catch {
       /* almacenamiento no disponible */
@@ -48,11 +51,34 @@ export const sesion = {
       return null;
     }
   },
-  alExpirar(fn: () => void) {
+  /** Motivo con que el servidor rechazó la última renovación (p. ej. cierre por inactividad). */
+  motivoRechazo(): string | undefined {
+    return motivoRechazo;
+  },
+  alExpirar(fn: (motivo?: string) => void) {
     alExpirarSesion = fn;
   },
   alRenovar(fn: (t: TokenSalida) => void) {
     alRenovar = fn;
+  },
+};
+
+/** Última interacción del usuario (clic, teclado, desplazamiento), compartida entre pestañas. */
+export const actividad = {
+  marcar(momento = Date.now()) {
+    try {
+      localStorage.setItem(CLAVE_ACTIVIDAD, String(momento));
+    } catch {
+      /* almacenamiento no disponible */
+    }
+  },
+  ultima(): number | null {
+    try {
+      const v = Number(localStorage.getItem(CLAVE_ACTIVIDAD));
+      return v > 0 ? v : null;
+    } catch {
+      return null;
+    }
   },
 };
 
@@ -68,6 +94,11 @@ export function construirQuery(q?: Query): string {
   return s ? `?${s}` : "";
 }
 
+function segundosInactivo(): number | undefined {
+  const ultima = actividad.ultima();
+  return ultima === null ? undefined : Math.max(0, Math.floor((Date.now() - ultima) / 1000));
+}
+
 /** Renueva el access token con el refresh token rotativo; una sola renovación concurrente. */
 export async function renovar(): Promise<TokenSalida | null> {
   const rt = sesion.refreshToken();
@@ -76,10 +107,14 @@ export async function renovar(): Promise<TokenSalida | null> {
     refreshEnCurso = fetch(`${BASE}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: rt }),
+      body: JSON.stringify({ refresh_token: rt, inactivo_seg: segundosInactivo() }),
     })
       .then(async (r) => {
-        if (!r.ok) return null;
+        if (!r.ok) {
+          motivoRechazo = (await errorDesde(r)).message;
+          return null;
+        }
+        motivoRechazo = undefined;
         const t = (await r.json()) as TokenSalida;
         sesion.guardar(t);
         alRenovar(t);
@@ -122,7 +157,7 @@ async function ejecutar(method: string, path: string, init: { body?: unknown; fo
     const t = await renovar();
     if (t) return ejecutar(method, path, init, false);
     sesion.limpiar();
-    alExpirarSesion();
+    alExpirarSesion(motivoRechazo);
   }
   if (!r.ok) throw await errorDesde(r);
   return r;

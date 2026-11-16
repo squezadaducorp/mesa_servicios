@@ -107,3 +107,61 @@ def test_politica_de_bloqueo_desde_configuracion(client, como):
         assert client.post(f"{API}/auth/login", json={"correo": "gerencia@aducorp.com.ec", "clave": "mala"}).status_code == 401
     r = client.post(f"{API}/auth/login", json={"correo": "gerencia@aducorp.com.ec", "clave": CLAVE})
     assert r.status_code == 401 and "bloqueada" in r.json()["detail"]
+
+
+def _login_completo(client, usuario="maria.andrade"):
+    r = client.post(f"{API}/auth/login", json={"correo": f"{usuario}@aducorp.com.ec", "clave": CLAVE})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_login_informa_minutos_de_inactividad(client, como):
+    assert _login_completo(client)["inactividad_min"] == 30
+    r = client.put(f"{API}/admin/configuracion", headers=como("admin"), json={"valores": {"seguridad.inactividad_min": "10"}})
+    assert r.status_code == 200, r.text
+    assert _login_completo(client)["inactividad_min"] == 10
+
+
+def test_refresh_con_actividad_reciente_renueva(client, db):
+    t = _login_completo(client)
+    r = client.post(f"{API}/auth/refresh", json={"refresh_token": t["refresh_token"], "inactivo_seg": 5 * 60})
+    assert r.status_code == 200, r.text
+    r = client.post(f"{API}/auth/refresh", json={"refresh_token": r.json()["refresh_token"], "inactivo_seg": 29 * 60})
+    assert r.status_code == 200, r.text
+
+
+def test_refresh_tras_inactividad_cierra_la_sesion(client, db):
+    from app.infrastructure.db import models as m
+    from app.infrastructure.db.session import SessionLocal
+
+    t = _login_completo(client)
+    r = client.post(f"{API}/auth/refresh", json={"refresh_token": t["refresh_token"], "inactivo_seg": 31 * 60})
+    assert r.status_code == 401 and "inactividad" in r.json()["detail"]
+    with SessionLocal() as s:
+        assert s.query(m.RefreshToken).filter(m.RefreshToken.revocado == False).count() == 0  # noqa: E712
+        assert s.query(m.Auditoria).filter(m.Auditoria.accion == "SESION_INACTIVA").count() == 1
+
+
+def test_navegador_cerrado_mas_del_limite_exige_login(client, db):
+    """Aunque el cliente no informe inactividad, una sesión sin uso desde hace más del límite no se renueva."""
+    from datetime import timedelta
+
+    from app.core.security import utcnow
+    from app.infrastructure.db import models as m
+    from app.infrastructure.db.session import SessionLocal
+
+    t = _login_completo(client)
+    with SessionLocal() as s:
+        reg = s.query(m.RefreshToken).one()
+        reg.fecha_creacion = utcnow() - timedelta(hours=3)  # última renovación: el navegador estuvo cerrado
+        s.commit()
+    r = client.post(f"{API}/auth/refresh", json={"refresh_token": t["refresh_token"]})
+    assert r.status_code == 401 and "inactividad" in r.json()["detail"]
+
+
+def test_inactividad_cero_desactiva_el_cierre(client, como):
+    client.put(f"{API}/admin/configuracion", headers=como("admin"), json={"valores": {"seguridad.inactividad_min": "0"}})
+    t = _login_completo(client)
+    assert t["inactividad_min"] == 0
+    r = client.post(f"{API}/auth/refresh", json={"refresh_token": t["refresh_token"], "inactivo_seg": 8 * 3600})
+    assert r.status_code == 200, r.text

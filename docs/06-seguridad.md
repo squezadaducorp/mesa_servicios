@@ -42,12 +42,20 @@ de estos controles están en `backend/tests/test_seguridad.py` (10 casos) y `bac
 | Refresh token (opaco, rotativo) | 7 días | `REFRESH_TOKEN_DAYS` |
 | Intentos fallidos antes de bloquear | 5 | *Configuración* › `seguridad.max_intentos` (respaldo: `MAX_LOGIN_INTENTOS`) |
 | Duración del bloqueo | 15 minutos | *Configuración* › `seguridad.bloqueo_min` (respaldo: `BLOQUEO_MINUTOS`) |
+| Cierre de sesión por inactividad | 30 minutos (0 = desactivado) | *Configuración* › `seguridad.inactividad_min` (respaldo: `INACTIVIDAD_MINUTOS`) |
 | Intentos de login por IP y minuto | 10 (API) + 10/min con ráfaga 5 (Nginx) | `LOGIN_MAX_POR_MINUTO` |
 | Longitud mínima de contraseña | 10, con mayúscula, minúscula, número y símbolo | `CLAVE_MIN_LONGITUD` |
 
 * **Rotación con detección de reutilización:** cada uso del refresh token emite uno nuevo y
   revoca el anterior. Si alguien presenta un token ya usado (posible robo), se revoca toda la
   familia de sesiones de ese dispositivo y se registra en la auditoría.
+* **Cierre por inactividad:** si el usuario no hace clic, no escribe ni se desplaza en la Mesa
+  durante el tiempo configurado, un minuto antes aparece el aviso «¿Sigue ahí?» y luego la sesión
+  se cierra. Las consultas automáticas (notificaciones, listas) no cuentan como actividad. El
+  servidor también lo exige: al renovar, el navegador informa cuánto lleva sin actividad y, si
+  supera el límite (o el navegador estuvo cerrado más de ese tiempo), la familia de tokens se
+  revoca y se registra `SESION_INACTIVA` en la auditoría. La actividad se comparte entre
+  pestañas, y cerrar sesión en una pestaña la cierra en las demás.
 * **Desactivación inmediata:** en cada solicitud se verifica que el usuario siga activo y no
   bloqueado, y los permisos se leen de la base de datos; un cambio de rol aplica al instante.
 * **Cambio de contraseña:** revoca todas las demás sesiones del usuario.
