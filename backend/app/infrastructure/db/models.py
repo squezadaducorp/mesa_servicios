@@ -19,6 +19,7 @@ from sqlalchemy import (
     Column,
     Time,
     Unicode,
+    UniqueConstraint,
     UnicodeText,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -124,6 +125,7 @@ class Cliente(Base):
     correo: Mapped[str | None] = mapped_column(Unicode(150))
     telefono: Mapped[str | None] = mapped_column(Unicode(30))
     es_vip: Mapped[bool] = mapped_column(Boolean, default=False)
+    correos_copia: Mapped[str | None] = mapped_column(Unicode(500))   # se copian a cada ticket nuevo del cliente
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -146,6 +148,7 @@ class Categoria(Base):
     palabras_clave: Mapped[str | None] = mapped_column(Unicode(1000))
     supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
     modo_asignacion: Mapped[str] = mapped_column(String(15), default="PRINCIPAL")
+    correos_copia: Mapped[str | None] = mapped_column(Unicode(500))   # se copian a cada ticket nuevo de la categoría
     color: Mapped[str | None] = mapped_column(CHAR(7))
     orden: Mapped[int] = mapped_column(Integer, default=0)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -321,8 +324,21 @@ class TicketComentario(Base):
     es_interno: Mapped[bool] = mapped_column(Boolean, default=False)
     tipo: Mapped[str] = mapped_column(String(20), default="COMENTARIO")
     minutos_invertidos: Mapped[int | None] = mapped_column(Integer)
+    copia_a: Mapped[str | None] = mapped_column(Unicode(500))   # correos que recibieron este comentario en copia
     fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     usuario: Mapped[Usuario] = relationship(lazy="joined")
+
+
+class TicketCopia(Base):
+    """Personas en copia del ticket: reciben por correo las respuestas y el cierre que se envían al solicitante."""
+    __tablename__ = "ticket_copias"
+    __table_args__ = (UniqueConstraint("ticket_id", "correo", name="ux_ticket_copias"),)
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    correo: Mapped[str] = mapped_column(Unicode(150))
+    origen: Mapped[str] = mapped_column(String(12), default="MANUAL")   # MANUAL | CATEGORIA | CLIENTE | CORREO
+    agregado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class TicketAdjunto(Base):

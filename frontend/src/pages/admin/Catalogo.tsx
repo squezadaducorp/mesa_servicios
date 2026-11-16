@@ -13,6 +13,7 @@ import { useCatalogos } from "../../api/hooks";
 import type { Categoria, Cliente, Pagina, Subcategoria, UsuarioAdmin } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { mensajeError, useAviso } from "../../components/Aviso";
+import CampoCorreos from "../../components/CampoCorreos";
 import { Cargando, Encabezado, ErrorCarga } from "../../components/Comunes";
 import { P } from "../../utils/permisos";
 
@@ -30,6 +31,7 @@ type FormCat = {
   supervisor_id: number | "";
   activo: boolean;
   responsables: { usuario_id: number; es_principal: boolean }[];
+  correos_copia: string[];
 };
 
 export default function Catalogo() {
@@ -39,6 +41,7 @@ export default function Catalogo() {
   const cat = useCatalogos();
   const [tab, setTab] = useState(0);
   const categorias = useQuery({ queryKey: ["admin", "categorias"], queryFn: () => get<Categoria[]>("/admin/categorias") });
+  const clientes = useQuery({ queryKey: ["admin", "clientes"], queryFn: () => get<Cliente[]>("/admin/clientes") });
   const usuarios = useQuery({
     queryKey: ["admin", "usuarios", "todos"],
     queryFn: () => get<Pagina<UsuarioAdmin>>("/admin/usuarios", { tamano: 500 }),
@@ -50,6 +53,7 @@ export default function Catalogo() {
 
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: ["admin", "categorias"] });
+    qc.invalidateQueries({ queryKey: ["admin", "clientes"] });
     qc.invalidateQueries({ queryKey: ["catalogos"] });
   };
   const ok = (m: string) => () => {
@@ -83,7 +87,7 @@ export default function Catalogo() {
   });
   const guardarCliente = useMutation({
     mutationFn: (f: Partial<Cliente>) => {
-      const body = { ruc: f.ruc || null, razon_social: f.razon_social, correo: f.correo || null, telefono: f.telefono || null, es_vip: !!f.es_vip, activo: f.activo ?? true };
+      const body = { ruc: f.ruc || null, razon_social: f.razon_social, correo: f.correo || null, telefono: f.telefono || null, es_vip: !!f.es_vip, activo: f.activo ?? true, correos_copia: f.correos_copia ?? [] };
       return f.id ? put(`/admin/clientes/${f.id}`, body) : post("/admin/clientes", body);
     },
     onSuccess: () => {
@@ -115,8 +119,9 @@ export default function Catalogo() {
             supervisor_id: c.supervisor?.id ?? "",
             activo: c.activo,
             responsables: c.responsables.map((r) => ({ usuario_id: r.usuario_id, es_principal: r.es_principal })),
+            correos_copia: c.correos_copia ?? [],
           }
-        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [] },
+        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [], correos_copia: [] },
     );
 
   const alternarResp = (id: number) =>
@@ -224,7 +229,7 @@ export default function Catalogo() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {(cat.data?.clientes ?? []).map((c) => (
+                {(clientes.data ?? cat.data?.clientes ?? []).map((c) => (
                   <TableRow key={c.id} hover>
                     <TableCell sx={{ fontWeight: 600 }}>{c.razon_social}</TableCell>
                     <TableCell>{c.ruc}</TableCell>
@@ -304,6 +309,12 @@ export default function Catalogo() {
                   })}
                 </Box>
               </Box>
+              <CampoCorreos
+                etiqueta="Copia automática (opcional)"
+                valor={fc.correos_copia}
+                onCambio={(correos_copia) => setFc({ ...fc, correos_copia })}
+                ayuda="Estos correos quedan en copia de cada ticket nuevo de la categoría; luego se pueden quitar en el ticket."
+              />
               <FormControlLabel control={<Switch checked={fc.activo} onChange={(e) => setFc({ ...fc, activo: e.target.checked })} />} label="Activa" />
             </Stack>
           </DialogContent>
@@ -358,6 +369,12 @@ export default function Catalogo() {
               />
               <TextField label="Correo" type="email" value={fcl.correo ?? ""} onChange={(e) => setFcl({ ...fcl, correo: e.target.value })} />
               <TextField label="Teléfono" value={fcl.telefono ?? ""} onChange={(e) => setFcl({ ...fcl, telefono: e.target.value })} />
+              <CampoCorreos
+                etiqueta="Copia automática (opcional)"
+                valor={fcl.correos_copia ?? []}
+                onCambio={(correos_copia) => setFcl({ ...fcl, correos_copia })}
+                ayuda="Estos correos quedan en copia de cada ticket nuevo de este cliente; luego se pueden quitar en el ticket."
+              />
               <FormControlLabel control={<Switch checked={!!fcl.es_vip} onChange={(e) => setFcl({ ...fcl, es_vip: e.target.checked })} />} label="Cliente VIP (eleva la prioridad sugerida)" />
               <FormControlLabel control={<Switch checked={fcl.activo ?? true} onChange={(e) => setFcl({ ...fcl, activo: e.target.checked })} />} label="Activo" />
             </Stack>

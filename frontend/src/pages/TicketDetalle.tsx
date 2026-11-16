@@ -6,6 +6,7 @@ import {
   Paper, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import EditIcon from "@mui/icons-material/Edit";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import DownloadIcon from "@mui/icons-material/Download";
@@ -15,9 +16,10 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import SendIcon from "@mui/icons-material/Send";
 import PauseCircleIcon from "@mui/icons-material/PauseCircle";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import { api, del, descargar, get, patch, post } from "../api/client";
+import { api, del, descargar, get, patch, post, put } from "../api/client";
 import type { Riesgo, TextoIa, TicketDetalle as Ticket } from "../api/types";
 import { mensajeError, useAviso } from "../components/Aviso";
+import CampoCorreos from "../components/CampoCorreos";
 import { CumplimientoChip, EstadoChip, PrioridadChip, SlaBarra, colorSla } from "../components/Chips";
 import { Cargando, ErrorCarga, Vacio } from "../components/Comunes";
 import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/formato";
@@ -36,6 +38,14 @@ const ACCION_HISTORIAL: Record<string, string> = {
   REAPERTURA: "Reabrió",
   SLA: "SLA",
   EXCEPCION_SLA: "Excepción de SLA",
+  COPIAS: "Actualizó las personas en copia",
+};
+
+const ORIGEN_COPIA: Record<string, string> = {
+  MANUAL: "Agregado manualmente",
+  CATEGORIA: "Copia automática de la categoría",
+  CLIENTE: "Copia automática del cliente",
+  CORREO: "Venía en copia del correo original",
 };
 
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: React.ReactNode }) {
@@ -66,6 +76,9 @@ export default function TicketDetalle() {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [texto, setTexto] = useState("");
   const [interno, setInterno] = useState(false);
+  // null = usar las personas en copia del ticket; una lista = editada solo para este envío
+  const [copiaA, setCopiaA] = useState<string[] | null>(null);
+  const [editandoCopias, setEditandoCopias] = useState<string[] | null>(null);
   const [resumen, setResumen] = useState<TextoIa | null>(null);
   const clave = ["ticket", id];
   const q = useQuery({ queryKey: clave, queryFn: () => get<Ticket>(`/tickets/${id}`), refetchInterval: 60_000 });
@@ -84,11 +97,28 @@ export default function TicketDetalle() {
   };
 
   const comentar = useMutation({
-    mutationFn: () => post<Ticket>(`/tickets/${id}/comentarios`, { texto, es_interno: interno }),
+    mutationFn: () =>
+      post<Ticket>(`/tickets/${id}/comentarios`, {
+        texto,
+        es_interno: interno,
+        ...(!interno && t?.acciones.includes("copias") ? { copia_a: copiaA ?? t.copias.map((c) => c.correo) } : {}),
+      }),
     onSuccess: (n) => {
       actualizar(n);
       setTexto("");
       setInterno(false);
+      setCopiaA(null);
+    },
+    onError: (e) => avisar(mensajeError(e), "error"),
+  });
+
+  const guardarCopias = useMutation({
+    mutationFn: (correos: string[]) => put<Ticket>(`/tickets/${id}/copias`, { correos }),
+    onSuccess: (n) => {
+      actualizar(n);
+      setEditandoCopias(null);
+      setCopiaA(null);
+      avisar("Personas en copia actualizadas");
     },
     onError: (e) => avisar(mensajeError(e), "error"),
   });
@@ -304,6 +334,11 @@ export default function TicketDetalle() {
                         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                           {c.texto}
                         </Typography>
+                        {c.copia_a?.length > 0 && (
+                          <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5, wordBreak: "break-word" }}>
+                            Copia a: {c.copia_a.join(", ")}
+                          </Typography>
+                        )}
                       </Box>
                     </Stack>
                   ))}
@@ -323,6 +358,21 @@ export default function TicketDetalle() {
                         minRows={3}
                         fullWidth
                       />
+                      {a.has("copias") && !interno && (
+                        <Box sx={{ mt: 1.5 }}>
+                          <CampoCorreos
+                            etiqueta="Enviar copia a (opcional)"
+                            valor={copiaA ?? t.copias.map((c) => c.correo)}
+                            onCambio={setCopiaA}
+                            sugerencias={t.copias.map((c) => c.correo)}
+                            ayuda={
+                              copiaA === null
+                                ? "Viene con las personas en copia del ticket. Puede quitar o agregar correos solo para este envío."
+                                : "Cambios solo para este envío; la lista del ticket no cambia."
+                            }
+                          />
+                        </Box>
+                      )}
                       <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                         {a.has("nota_interna") && (
                           <FormControlLabel control={<Switch checked={interno} onChange={(e) => setInterno(e.target.checked)} />} label="Nota interna" />
@@ -470,6 +520,53 @@ export default function TicketDetalle() {
               {t.sla_minutos_extension > 0 && ` Incluye extensión de ${duracion(t.sla_minutos_extension)}.`}
             </Typography>
           </Paper>
+
+          {(a.has("copias") || t.copias.length > 0) && (
+            <Paper sx={{ p: 2.5 }}>
+              <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                <Typography variant="h6">Personas en copia</Typography>
+                {a.has("copias") && editandoCopias === null && (
+                  <Button size="small" startIcon={<EditIcon />} onClick={() => setEditandoCopias(t.copias.map((c) => c.correo))}>
+                    Editar
+                  </Button>
+                )}
+              </Stack>
+              {editandoCopias === null ? (
+                <>
+                  {t.copias.length === 0 ? (
+                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                      Nadie en copia. Agregue correos para que también reciban las respuestas y el cierre del ticket.
+                    </Typography>
+                  ) : (
+                    <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                      {t.copias.map((c) => (
+                        <Tooltip key={c.correo} title={ORIGEN_COPIA[c.origen] ?? c.origen}>
+                          <Chip size="small" variant="outlined" label={c.correo} />
+                        </Tooltip>
+                      ))}
+                    </Stack>
+                  )}
+                </>
+              ) : (
+                <>
+                  <CampoCorreos
+                    etiqueta="Correos en copia"
+                    valor={editandoCopias}
+                    onCambio={setEditandoCopias}
+                    ayuda="Reciben por correo las respuestas al solicitante y el cierre. No ven las notas internas."
+                  />
+                  <Stack direction="row" spacing={1} sx={{ mt: 1.5, justifyContent: "flex-end" }}>
+                    <Button size="small" onClick={() => setEditandoCopias(null)}>
+                      Cancelar
+                    </Button>
+                    <Button size="small" variant="contained" disabled={guardarCopias.isPending} onClick={() => guardarCopias.mutate(editandoCopias)}>
+                      Guardar
+                    </Button>
+                  </Stack>
+                </>
+              )}
+            </Paper>
+          )}
 
           {puedeIa && (
             <Paper sx={{ p: 2.5 }}>

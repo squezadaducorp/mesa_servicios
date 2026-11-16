@@ -4,7 +4,9 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, field_validator
+
+from app.domain.correos import normalizar_correos, separar
 
 T = TypeVar("T")
 
@@ -141,6 +143,16 @@ class CategoriaEntrada(BaseModel):
     supervisor_id: int | None = None
     activo: bool = True
     responsables: list[ResponsableEntrada] = []
+    correos_copia: list[str] = Field(default=[], description="Se agregan en copia a cada ticket nuevo de la categoría")
+
+    @field_validator("correos_copia")
+    @classmethod
+    def _correos_copia(cls, v):
+        return normalizar_correos(v)
+
+
+class CategoriaAdminSalida(CategoriaSalida):
+    correos_copia: list[str] = []
 
 
 class ResponsableEntrada(BaseModel):
@@ -172,6 +184,21 @@ class ClienteEntrada(BaseModel):
     telefono: str | None = None
     es_vip: bool = False
     activo: bool = True
+    correos_copia: list[str] = Field(default=[], description="Se agregan en copia a cada ticket nuevo del cliente")
+
+    @field_validator("correos_copia")
+    @classmethod
+    def _correos_copia(cls, v):
+        return normalizar_correos(v)
+
+
+class ClienteAdminSalida(ClienteSalida):
+    correos_copia: list[str] = []
+
+    @field_validator("correos_copia", mode="before")
+    @classmethod
+    def _texto(cls, v):
+        return separar(v) if isinstance(v, str) or v is None else v
 
 
 class CatalogosSalida(Modelo):
@@ -288,6 +315,27 @@ class ComentarioEntrada(BaseModel):
     es_interno: bool = False
     tipo: Literal["COMENTARIO", "ACTIVIDAD"] = "COMENTARIO"
     minutos_invertidos: int | None = Field(default=None, ge=0, le=60 * 24)
+    # Personas en copia de esta respuesta. None = las del ticket; [] = ninguna. Se ignora en notas internas.
+    copia_a: list[str] | None = None
+
+    @field_validator("copia_a")
+    @classmethod
+    def _copia_a(cls, v):
+        return None if v is None else normalizar_correos(v)
+
+
+class CopiasEntrada(BaseModel):
+    correos: list[str] = []
+
+    @field_validator("correos")
+    @classmethod
+    def _correos(cls, v):
+        return normalizar_correos(v)
+
+
+class CopiaSalida(BaseModel):
+    correo: str
+    origen: str
 
 
 class ComentarioSalida(Modelo):
@@ -298,6 +346,7 @@ class ComentarioSalida(Modelo):
     tipo: str
     minutos_invertidos: int | None
     fecha: datetime
+    copia_a: list[str] = Field(default=[], description="Correos que recibieron esta respuesta en copia")
 
 
 class AdjuntoSalida(Modelo):
@@ -395,6 +444,7 @@ class TicketDetalle(Modelo):
     adjuntos: list[AdjuntoSalida]
     historial: list[HistorialSalida]
     escalamientos: list[EscalamientoSalida]
+    copias: list[CopiaSalida] = Field(default=[], description="Personas en copia: reciben las respuestas y el cierre por correo")
     acciones: list[str] = Field(description="Acciones que el usuario actual puede ejecutar")
     solo_lectura_participante: bool = Field(default=False, description="El usuario fue responsable antes y hoy solo puede consultarlo")
 

@@ -24,6 +24,7 @@ from app.application.schemas import esquemas as s
 from app.application.services.ticket_service import TicketService
 from app.core.config import settings
 from app.core.security import utcnow
+from app.domain.correos import normalizar_correos
 from app.domain.enums import Estado, Rol
 from app.infrastructure.ai.local import normalizar
 from app.infrastructure.db import models as m
@@ -34,7 +35,7 @@ log = logging.getLogger(__name__)
 
 PATRON_TICKET = re.compile(r"\bADU-\d{4}-\d{6}\b", re.IGNORECASE)
 PREFIJOS_RESPUESTA = re.compile(r"^\s*((re|rv|fw|fwd|reenviar|respuesta)\s*:\s*)+", re.IGNORECASE)
-CAMPOS = "id,internetMessageId,subject,from,receivedDateTime,hasAttachments,uniqueBody,body,internetMessageHeaders"
+CAMPOS = "id,internetMessageId,subject,from,ccRecipients,receivedDateTime,hasAttachments,uniqueBody,body,internetMessageHeaders"
 NOMBRE_BUZON = "Buzón de soporte (remitentes externos)"
 
 
@@ -85,6 +86,18 @@ def clasificar(tickets: TicketService, asunto: str, texto: str) -> tuple[int, in
             return c.id, subs[0].id, "La IA no reconoció la categoría; se usó la primera del catálogo. Revise la clasificación."
     raise ErrorAplicacion("No hay categorías activas para registrar el ticket")
 
+
+
+def copias_de(msg: dict, buzon: str) -> list[str]:
+    """Direcciones válidas en CC de un correo de Graph, sin el propio buzón."""
+    correos = []
+    for r in msg.get("ccRecipients") or []:
+        direccion = ((r or {}).get("emailAddress") or {}).get("address") or ""
+        try:
+            correos += [c for c in normalizar_correos(direccion) if c != buzon]
+        except ValueError:
+            continue
+    return correos
 
 class BuzonService:
     def __init__(self, session: Session, graph: ClienteGraph | None = None):
@@ -186,6 +199,10 @@ class BuzonService:
         ctx = Contexto(usuario=solicitante, ip="buzon", equipo=f"Exchange Online · {self.buzon}")
         t = self.tickets.crear(dto, ctx)
         avisos = [aviso] if aviso else []
+        # Quienes venían en copia (CC) del correo original quedan en copia del ticket
+        copias = self.tickets.agregar_copias(t, copias_de(msg, self.buzon), "CORREO")
+        if copias:
+            self.tickets._hist(t, None, "COPIAS", "copias", None, ", ".join(copias), "En copia del correo original")
         avisos += self._adjuntos(t, solicitante, msg, ctx)
         if avisos:
             self.tickets._agregar_comentario(t, self._usuario_buzon(), "\n".join(avisos), True, "SISTEMA", None, utcnow())
@@ -211,7 +228,9 @@ class BuzonService:
             # Un tercero escribió citando el número: queda como nota interna para que el equipo decida
             sistema = self._usuario_buzon()
             ctx = Contexto(usuario=sistema, ip="buzon", equipo=f"Exchange Online · {self.buzon}")
-            self.tickets._agregar_comentario(t, sistema, f"Correo de {nombre} <{correo}> (no participa en el ticket):\n\n{texto}",
+            en_copia = correo in self.tickets.copias(t)
+            relacion = "en copia del ticket" if en_copia else "no participa en el ticket"
+            self.tickets._agregar_comentario(t, sistema, f"Correo de {nombre} <{correo}> ({relacion}):\n\n{texto}",
                                              True, "COMENTARIO", None, ahora)
             self.tickets.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: correo de un tercero", f"{nombre}: {texto[:200]}", t)
             avisos = self._adjuntos(t, sistema, msg, ctx)

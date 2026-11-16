@@ -69,35 +69,54 @@ class NotificacionService:
         ctx.update({k: str(v) for k, v in extra.items()})
         return ctx
 
-    def correo(self, codigo: str, destinatarios: Iterable[m.Usuario | None], ticket: m.Ticket, **extra) -> None:
+    def correo(self, codigo: str, destinatarios: Iterable[m.Usuario | None], ticket: m.Ticket, *,
+               cc: Iterable[str] | None = None, **extra) -> bool:
+        """Un correo por destinatario. `cc` (personas en copia) se agrega solo al primero que se envía."""
         plantilla = self.catalogo.plantilla(codigo)
         if plantilla is None:
             log.warning("Plantilla de correo %s no encontrada", codigo)
-            return
+            return False
         enviados: set[str] = cuentas_sistema()   # nunca se escribe al buzón de soporte ni a la cuenta del formulario
+        copia = list(cc or [])
+        alguno = False
         for u in destinatarios:
             if u is None or not u.activo or u.correo.lower() in enviados:
                 continue
             enviados.add(u.correo.lower())
-            self._encolar(plantilla, codigo, u.correo, u.nombre, ticket, extra)
+            self._encolar(plantilla, codigo, u.correo, u.nombre, ticket, extra, [c for c in copia if c != u.correo.lower()])
+            copia, alguno = [], True
+        return alguno
 
-    def correo_directo(self, codigo: str, para: str, nombre: str, ticket: m.Ticket, **extra) -> None:
+    def correo_directo(self, codigo: str, para: str, nombre: str, ticket: m.Ticket, *,
+                       cc: Iterable[str] | None = None, **extra) -> bool:
         """Correo a una dirección que puede no ser usuario de la Mesa (remitente externo del buzón)."""
         plantilla = self.catalogo.plantilla(codigo)
         if plantilla is None or not para or para.lower() in cuentas_sistema():
-            return
-        self._encolar(plantilla, codigo, para, nombre, ticket, extra)
+            return False
+        self._encolar(plantilla, codigo, para, nombre, ticket, extra, [c for c in (cc or []) if c != para.lower()])
+        return True
 
-    def _encolar(self, plantilla: m.PlantillaCorreo, codigo: str, para: str, nombre: str, ticket: m.Ticket, extra: dict) -> None:
+    def correo_copias(self, codigo: str, correos: Iterable[str], ticket: m.Ticket, **extra) -> bool:
+        """Un solo correo dirigido a las personas en copia (cuando el solicitante no recibe correo)."""
+        para = [c for c in correos if c.lower() not in cuentas_sistema()]
+        plantilla = self.catalogo.plantilla(codigo)
+        if plantilla is None or not para:
+            return False
+        self._encolar(plantilla, codigo, ", ".join(para), "", ticket, extra, [])
+        return True
+
+    def _encolar(self, plantilla: m.PlantillaCorreo, codigo: str, para: str, nombre: str, ticket: m.Ticket, extra: dict,
+                 cc: list[str] | None = None) -> None:
         ctx = self.contexto_ticket(ticket, destinatario=nombre, **extra)
         asunto, cuerpo = plantilla.asunto, plantilla.cuerpo_html
         for k, v in ctx.items():
             seguro = v if k == "url" else html.escape(v)
             asunto = asunto.replace("{" + k + "}", v)
             cuerpo = cuerpo.replace("{" + k + "}", seguro)
+        copia = [c for c in (cc or []) if c.lower() not in cuentas_sistema()]
         self.session.add(
-            m.ColaCorreo(para=para, asunto=asunto[:250], cuerpo_html=plantilla_base(cuerpo), ticket_id=ticket.id,
-                         plantilla=codigo, estado="PENDIENTE", proximo_intento=utcnow(), fecha_creacion=utcnow())
+            m.ColaCorreo(para=para, cc=", ".join(copia)[:500] or None, asunto=asunto[:250], cuerpo_html=plantilla_base(cuerpo),
+                         ticket_id=ticket.id, plantilla=codigo, estado="PENDIENTE", proximo_intento=utcnow(), fecha_creacion=utcnow())
         )
 
     def teams(self, evento: str, ticket: m.Ticket, detalle: str | None = None) -> None:
