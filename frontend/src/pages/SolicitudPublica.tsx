@@ -1,19 +1,28 @@
 import { useState, type FormEvent } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Box, Button, Link, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, IconButton, Link, List, ListItem, ListItemIcon, ListItemText, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import { get, post } from "../api/client";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
+import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
+import CloseIcon from "@mui/icons-material/Close";
+import { api, get } from "../api/client";
 import { mensajeError } from "../components/Aviso";
 import { Cargando } from "../components/Comunes";
 import { marca } from "../theme";
+import { tamanoArchivo } from "../utils/formato";
 
 type Formulario = {
   habilitado: boolean;
   empresa: string;
   token: string;
   categorias: { id: number; nombre: string; subcategorias: { id: number; nombre: string }[] }[];
+  adjuntos_max: number;
+  adjuntos_max_mb: number;
+  adjuntos_extensiones: string[];
 };
+
+const extension = (nombre: string) => (nombre.includes(".") ? nombre.split(".").pop()!.toLowerCase() : "");
 
 const VACIO = { nombre: "", correo: "", telefono: "", empresa: "", asunto: "", descripcion: "" };
 
@@ -27,6 +36,25 @@ export default function SolicitudPublica() {
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [registrado, setRegistrado] = useState<{ numero: string; mensaje: string } | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [errorArchivo, setErrorArchivo] = useState<string | null>(null);
+
+  /** Valida en el navegador (el servidor vuelve a validar todo) para avisar antes de enviar. */
+  const agregarArchivos = (nuevos: File[]) => {
+    if (!form.data) return;
+    const { adjuntos_max: max, adjuntos_max_mb: mb, adjuntos_extensiones: ext } = form.data;
+    const lista = [...archivos];
+    let problema: string | null = null;
+    for (const f of nuevos) {
+      if (lista.length >= max) problema = `Puede adjuntar hasta ${max} archivos.`;
+      else if (!ext.includes(extension(f.name))) problema = `${f.name}: tipo no permitido. Use ${ext.join(", ").toUpperCase()}.`;
+      else if (f.size === 0) problema = `${f.name} está vacío.`;
+      else if (f.size > mb * 1024 * 1024) problema = `${f.name} supera ${mb} MB.`;
+      else lista.push(f);
+    }
+    setArchivos(lista);
+    setErrorArchivo(problema);
+  };
 
   const campo = (k: keyof typeof VACIO) => ({
     value: datos[k],
@@ -40,15 +68,21 @@ export default function SolicitudPublica() {
     setError(null);
     setEnviando(true);
     try {
-      const r = await post<{ numero: string; mensaje: string }>("/publico/tickets", {
-        ...datos,
-        telefono: datos.telefono || null,
-        empresa: datos.empresa || null,
-        categoria_id: categoriaId || null,
-        subcategoria_id: subId || null,
-        token: form.data.token,
-        sitio_web: trampa,
-      });
+      const cuerpo = new FormData();
+      cuerpo.append(
+        "datos",
+        JSON.stringify({
+          ...datos,
+          telefono: datos.telefono || null,
+          empresa: datos.empresa || null,
+          categoria_id: categoriaId || null,
+          subcategoria_id: subId || null,
+          token: form.data.token,
+          sitio_web: trampa,
+        }),
+      );
+      archivos.forEach((f) => cuerpo.append("archivos", f, f.name));
+      const r = await api<{ numero: string; mensaje: string }>("POST", "/publico/tickets", { form: cuerpo });
       setRegistrado(r);
     } catch (err) {
       setError(mensajeError(err));
@@ -62,6 +96,8 @@ export default function SolicitudPublica() {
     setDatos({ ...VACIO, nombre: datos.nombre, correo: datos.correo, telefono: datos.telefono, empresa: datos.empresa });
     setCategoriaId("");
     setSubId("");
+    setArchivos([]);
+    setErrorArchivo(null);
     form.refetch();
   };
 
@@ -162,6 +198,50 @@ export default function SolicitudPublica() {
                     </TextField>
                   )}
                 </Stack>
+                {form.data.adjuntos_max > 0 && (
+                  <Box>
+                    <Button component="label" startIcon={<AttachFileIcon />} variant="outlined" disabled={enviando || archivos.length >= form.data.adjuntos_max}>
+                      Adjuntar archivos (opcional)
+                      <input
+                        hidden
+                        type="file"
+                        multiple
+                        accept={form.data.adjuntos_extensiones.map((e) => `.${e}`).join(",")}
+                        onChange={(e) => {
+                          agregarArchivos(Array.from(e.target.files ?? []));
+                          e.target.value = "";
+                        }}
+                      />
+                    </Button>
+                    <Typography variant="caption" component="div" sx={{ color: "text.secondary", mt: 0.75 }}>
+                      Hasta {form.data.adjuntos_max} archivos de {form.data.adjuntos_max_mb} MB cada uno: {form.data.adjuntos_extensiones.join(", ").toUpperCase()}.
+                    </Typography>
+                    {errorArchivo && (
+                      <Alert severity="warning" sx={{ mt: 1 }} onClose={() => setErrorArchivo(null)}>
+                        {errorArchivo}
+                      </Alert>
+                    )}
+                    {archivos.length > 0 && (
+                      <List dense>
+                        {archivos.map((f, i) => (
+                          <ListItem
+                            key={`${f.name}-${i}`}
+                            secondaryAction={
+                              <IconButton edge="end" size="small" aria-label={`Quitar ${f.name}`} onClick={() => setArchivos((a) => a.filter((_, j) => j !== i))}>
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            }
+                          >
+                            <ListItemIcon sx={{ minWidth: 32 }}>
+                              <InsertDriveFileIcon fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText primary={f.name} secondary={tamanoArchivo(f.size)} slotProps={{ primary: { noWrap: true } }} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    )}
+                  </Box>
+                )}
                 {error && <Alert severity="error">{error}</Alert>}
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
                   Usaremos sus datos solo para atender esta solicitud.

@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     FORMULARIO_WEB_ENABLED: bool = True
     FORMULARIO_WEB_CORREO: str = "formulario-web@aducorp.com.ec"   # cuenta de sistema que figura como solicitante
     FORMULARIO_WEB_MAX_POR_HORA: int = 5    # solicitudes por IP y por correo en una hora (por proceso)
+    FORMULARIO_WEB_ADJUNTOS_MAX: int = 3    # archivos por solicitud (0 = sin adjuntos)
+    FORMULARIO_WEB_ADJUNTOS_MAX_MB: int = 5  # por archivo; nunca más que ADJUNTOS_MAX_MB
+    FORMULARIO_WEB_ADJUNTOS_EXTENSIONES: str = "pdf,jpg,jpeg,png,doc,docx,xls,xlsx"  # se cruza con ADJUNTOS_EXTENSIONES
 
     # Microsoft Teams: bot de Azure Bot Service (mismo Id. de aplicación)
     TEAMS_ENABLED: bool = False

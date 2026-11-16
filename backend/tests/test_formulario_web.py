@@ -1,4 +1,5 @@
-"""Formulario público /solicitud: personas sin cuenta registran tickets (ficha anti-spam, trampa y límites)."""
+"""Formulario público /solicitud: personas sin cuenta registran tickets (ficha anti-spam, trampa, límites y adjuntos)."""
+import json
 import time
 
 import pytest
@@ -30,6 +31,15 @@ def solicitud(**cambios) -> dict:
     return datos
 
 
+def enviar(client, datos: dict, archivos: list[tuple[str, bytes, str]] | None = None):
+    files = [("archivos", a) for a in (archivos or [])]
+    return client.post(f"{API}/publico/tickets", data={"datos": json.dumps(datos)}, files=files or None)
+
+
+PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\n"
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
 def test_formulario_entrega_categorias_y_ficha(client):
     r = client.get(f"{API}/publico/formulario")
     assert r.status_code == 200, r.text
@@ -39,7 +49,7 @@ def test_formulario_entrega_categorias_y_ficha(client):
 
 
 def test_registra_ticket_sin_cuenta_con_acuse_y_respuestas(client, como):
-    r = client.post(f"{API}/publico/tickets", json=solicitud())
+    r = enviar(client, solicitud())
     assert r.status_code == 201, r.text
     numero = r.json()["numero"]
     with SessionLocal() as s:
@@ -65,7 +75,7 @@ def test_registra_ticket_sin_cuenta_con_acuse_y_respuestas(client, como):
 def test_categoria_elegida_por_el_solicitante(client):
     form = client.get(f"{API}/publico/formulario").json()
     cat = form["categorias"][-1]
-    r = client.post(f"{API}/publico/tickets", json=solicitud(categoria_id=cat["id"], subcategoria_id=cat["subcategorias"][0]["id"]))
+    r = enviar(client, solicitud(categoria_id=cat["id"], subcategoria_id=cat["subcategorias"][0]["id"]))
     assert r.status_code == 201, r.text
     with SessionLocal() as s:
         assert s.scalar(select(m.Ticket).where(m.Ticket.numero == r.json()["numero"])).categoria_id == cat["id"]
@@ -78,7 +88,7 @@ def test_categoria_elegida_por_el_solicitante(client):
     lambda: {"sitio_web": "http://spam.example"},                   # campo trampa lleno
 ])
 def test_rechaza_robots(client, cambios):
-    r = client.post(f"{API}/publico/tickets", json=solicitud(**cambios()))
+    r = enviar(client, solicitud(**cambios()))
     assert r.status_code == 422, r.text
     with SessionLocal() as s:
         assert not s.scalar(select(m.Ticket).where(m.Ticket.canal == "WEB"))
@@ -87,12 +97,53 @@ def test_rechaza_robots(client, cambios):
 def test_limite_por_hora(client, monkeypatch):
     monkeypatch.setattr(fs, "limitador_ip", fs.Limitador(2, 3600))
     for i in range(2):
-        assert client.post(f"{API}/publico/tickets", json=solicitud(correo=f"p{i}@x.com")).status_code == 201
-    r = client.post(f"{API}/publico/tickets", json=solicitud(correo="otro@x.com"))
+        assert enviar(client, solicitud(correo=f"p{i}@x.com")).status_code == 201
+    r = enviar(client, solicitud(correo="otro@x.com"))
     assert r.status_code == 429
 
 
 def test_formulario_deshabilitado(client, monkeypatch):
     monkeypatch.setattr(settings, "FORMULARIO_WEB_ENABLED", False)
     assert client.get(f"{API}/publico/formulario").status_code == 404
-    assert client.post(f"{API}/publico/tickets", json=solicitud()).status_code == 404
+    assert enviar(client, solicitud()).status_code == 404
+
+
+def test_formulario_informa_reglas_de_adjuntos(client):
+    d = client.get(f"{API}/publico/formulario").json()
+    assert d["adjuntos_max"] == settings.FORMULARIO_WEB_ADJUNTOS_MAX
+    assert "pdf" in d["adjuntos_extensiones"] and "zip" not in d["adjuntos_extensiones"]
+
+
+def test_registra_solicitud_con_adjuntos(client):
+    r = enviar(client, solicitud(), [("poliza.pdf", PDF, "application/pdf"), ("captura.png", PNG, "image/png")])
+    assert r.status_code == 201, r.text
+    assert r.json()["adjuntos"] == 2
+    with SessionLocal() as s:
+        t = s.scalar(select(m.Ticket).where(m.Ticket.numero == r.json()["numero"]))
+        adj = list(s.scalars(select(m.TicketAdjunto).where(m.TicketAdjunto.ticket_id == t.id)))
+        assert sorted(a.nombre_original for a in adj) == ["captura.png", "poliza.pdf"]
+        assert all(a.subido_por == t.solicitante_id for a in adj)
+
+
+@pytest.mark.parametrize("archivos", [
+    [("virus.pdf", b"MZ\x90\x00" + b"\x00" * 32, "application/pdf")],          # ejecutable renombrado
+    [("datos.zip", b"PK\x03\x04" + b"\x00" * 32, "application/zip")],           # extensión no admitida en el público
+    [("vacio.pdf", b"", "application/pdf")],
+    [(f"a{i}.pdf", PDF, "application/pdf") for i in range(4)],                    # más archivos que el máximo
+])
+def test_rechaza_adjuntos_no_validos_sin_crear_ticket(client, archivos):
+    r = enviar(client, solicitud(), archivos)
+    assert r.status_code == 422, r.text
+    with SessionLocal() as s:
+        assert not s.scalar(select(m.Ticket).where(m.Ticket.canal == "WEB"))
+
+
+def test_rechaza_adjunto_grande(client, monkeypatch):
+    monkeypatch.setattr(settings, "FORMULARIO_WEB_ADJUNTOS_MAX_MB", 1)
+    r = enviar(client, solicitud(), [("grande.pdf", PDF + b"0" * (1024 * 1024), "application/pdf")])
+    assert r.status_code == 422 and "1 MB" in r.text
+
+
+def test_datos_mal_formados(client):
+    r = client.post(f"{API}/publico/tickets", data={"datos": "{no es json"})
+    assert r.status_code == 422

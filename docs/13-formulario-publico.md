@@ -14,12 +14,13 @@ La pantalla de login muestra además «¿No tiene cuenta? Registre su solicitud 
 * Canal **WEB**. El solicitante es la cuenta técnica `formulario-web@aducorp.com.ec` (sin contraseña, no puede ingresar); el nombre real de la persona queda en el ticket y su correo, empresa y teléfono, en la descripción.
 * Se asigna el responsable de la categoría como cualquier ticket (le llega el aviso «Ticket asignado» si el correo está activo).
 * Correos a la persona externa (requieren `EMAIL_ENABLED=true`): acuse con el número (`ACUSE_WEB`), cada respuesta no interna del equipo (`RESPUESTA_WEB`) y el cierre. Los enlaces de esos correos llevan al formulario, no al ticket, porque la persona no tiene cuenta. Las notas internas nunca se envían.
-* No admite adjuntos; si hacen falta, el responsable los pide por correo.
+* Adjuntos opcionales: hasta 3 archivos de 5 MB cada uno (PDF, imágenes JPG/PNG, Word y Excel). Quedan en el ticket como cualquier adjunto, subidos por la cuenta técnica. Se ajusta con `FORMULARIO_WEB_ADJUNTOS_MAX` (0 los desactiva) y `FORMULARIO_WEB_ADJUNTOS_MAX_MB`; nunca superan las reglas internas de Administración → Configuración (`adjuntos.max_mb`, `adjuntos.extensiones`).
 
 ## Protección contra abuso
 
 * Ficha firmada que entrega `GET /api/v1/publico/formulario`: se rechaza si el formulario se envía en menos de 4 segundos (robots) o después de 2 horas.
 * Campo trampa oculto.
+* Adjuntos: se verifica la firma del contenido (un ejecutable renombrado a .pdf se rechaza) y todos se validan antes de crear el ticket. Nginx limita el envío completo a 16 MB.
 * Máximo `FORMULARIO_WEB_MAX_POR_HORA` solicitudes (5 por defecto) por IP y por correo en una hora, más el límite de Nginx de 10 por minuto por IP.
 * Para apagarlo: `FORMULARIO_WEB_ENABLED=false` en `.env` y `docker compose up -d api`.
 
