@@ -51,6 +51,7 @@ El personal de la mesa ve además los campos **Canal** (portal, correo, teléfon
 * Cada fila muestra el número, el asunto y la categoría, el solicitante y el cliente, la prioridad, el estado, el responsable y la **barra de SLA** con el porcentaje del plazo consumido.
 * La barra es verde por debajo del 75 %, amarilla desde el 75 %, naranja desde el 90 % y roja cuando el plazo venció.
 * **Filtros:** estado, prioridad, categoría, subcategoría, responsable, cliente, fechas, SLA (cumplido, incumplido, en curso o en riesgo, es decir 75 % o más) y *Solo asignados a mí*. Pulse **Filtros** para mostrarlos.
+* **Tickets en los que participé** (analistas y supervisores): botón bajo el buscador que muestra los tickets que usted atendió alguna vez, aunque hoy estén con otro responsable o en otra categoría (por ejemplo, pasaron a LEGAL). Puede abrirlos y ver su historial y comentarios, pero solo el responsable actual puede modificarlos.
 * **Orden:** más recientes, más antiguos o mayor consumo de SLA, para atender primero lo que está por vencer.
 * Quien tiene permiso de exportar puede descargar la lista filtrada en Excel, PDF o CSV.
 

@@ -207,6 +207,7 @@ export interface TicketDetalle {
   historial: Historial[];
   escalamientos: Escalamiento[];
   acciones: AccionTicket[];
+  solo_lectura_participante?: boolean;
 }
 
 export interface FiltroTickets {
@@ -221,6 +222,7 @@ export interface FiltroTickets {
   desde?: string;
   hasta?: string;
   solo_mios?: boolean;
+  participe?: boolean;
   orden?: "fecha_desc" | "fecha_asc" | "sla_desc" | "prioridad";
 }
 

@@ -275,3 +275,36 @@ def test_cambiar_clave(client):
 def test_swagger(client):
     r = client.get(f"{API}/openapi.json")
     assert r.status_code == 200 and len(r.json()["paths"]) > 40
+
+
+def test_tickets_en_los_que_participe_solo_lectura(client, como):
+    """Si el ticket pasa a otro responsable (p. ej. a LEGAL), quien lo atendió antes lo sigue viendo, sin poder operarlo."""
+    t = crear_ticket(client, como("maria.andrade"))   # asignado automáticamente a David Medina
+    url = f"{API}/tickets/{t['id']}"
+    david, juan, denisse = como("david.medina"), como("juan.villamar"), como("denisse.quinga")
+    client.post(f"{url}/comentarios", json={"texto": "Revisé la partida", "es_interno": True}, headers=david)
+    juan_id = next(u for u in catalogo(client, como("admin"))["responsables"] if u["nombre"] == "Juan Manuel Villamar")["id"]
+    r = client.post(f"{url}/asignar", json={"responsable_id": juan_id, "motivo": "Pasa a LEGAL"}, headers=como("supervisor.tecnico"))
+    assert r.status_code == 200
+
+    # La lista normal de David ya no lo incluye; el filtro «participé» sí
+    numeros = lambda h, **q: [x["numero"] for x in client.get(f"{API}/tickets", params=q, headers=h).json()["items"]]  # noqa: E731
+    assert t["numero"] not in numeros(david)
+    assert t["numero"] in numeros(david, participe="true")
+    assert t["numero"] in numeros(juan, participe="true")        # el responsable actual también lo ve con el filtro
+    assert numeros(denisse, participe="true") == []               # nunca participó
+
+    # Detalle en solo lectura, con historial completo y notas internas
+    d = client.get(url, headers=david)
+    assert d.status_code == 200
+    d = d.json()
+    assert d["solo_lectura_participante"] is True
+    assert not {"editar", "asignar", "cambiar_estado", "escalar", "cerrar", "comentar", "nota_interna", "adjuntar", "ia"} & set(d["acciones"])
+    assert "ASIGNACION" in [h["accion"] for h in d["historial"]]
+    assert any(c["es_interno"] for c in d["comentarios"])
+    assert client.get(url, headers=juan).json()["solo_lectura_participante"] is False
+
+    # Y el backend rechaza las acciones aunque se intenten directamente
+    assert client.post(f"{url}/estado", json={"estado": "EN_PROCESO"}, headers=david).status_code == 403
+    assert client.post(f"{url}/comentarios", json={"texto": "hola"}, headers=david).status_code == 403
+    assert client.get(url, headers=denisse).status_code == 404

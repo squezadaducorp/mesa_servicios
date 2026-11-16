@@ -394,6 +394,7 @@ class TicketDetalle(Modelo):
     historial: list[HistorialSalida]
     escalamientos: list[EscalamientoSalida]
     acciones: list[str] = Field(description="Acciones que el usuario actual puede ejecutar")
+    solo_lectura_participante: bool = Field(default=False, description="El usuario fue responsable antes y hoy solo puede consultarlo")
 
 
 class FiltroTickets(BaseModel):
@@ -408,6 +409,7 @@ class FiltroTickets(BaseModel):
     desde: date | None = None
     hasta: date | None = None
     solo_mios: bool = False
+    participe: bool = False
     orden: Literal["fecha_desc", "fecha_asc", "sla_desc", "prioridad"] = "fecha_desc"
 
 

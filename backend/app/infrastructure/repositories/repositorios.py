@@ -126,8 +126,17 @@ class TicketRepository(Repository[m.Ticket]):
     def por_numero(self, numero: str) -> m.Ticket | None:
         return self.session.scalar(select(m.Ticket).where(m.Ticket.numero == numero, m.Ticket.eliminado == False))
 
-    def filtro_visibilidad(self, usuario: m.Usuario):
-        """Alcance de datos según permisos: todos, área (categorías supervisadas), asignados o propios."""
+    @staticmethod
+    def ids_participados(usuario_id: int):
+        """Tickets en los que el usuario fue responsable alguna vez (según el historial de asignaciones)."""
+        return select(m.TicketAsignacion.ticket_id).where(m.TicketAsignacion.responsable_nuevo_id == usuario_id)
+
+    def filtro_visibilidad(self, usuario: m.Usuario, incluir_participados: bool = False):
+        """Alcance de datos según permisos: todos, área (categorías supervisadas), asignados o propios.
+
+        Con ``incluir_participados`` quien atiende tickets también ve, en solo lectura, los que tuvo asignados
+        antes aunque hoy estén con otro responsable o en otra categoría.
+        """
         permisos = usuario.permisos
         if Permiso.TICKET_VER_TODOS in permisos:
             return None
@@ -136,17 +145,23 @@ class TicketRepository(Repository[m.Ticket]):
             condiciones.append(m.Ticket.categoria_id.in_(select(m.Categoria.id).where(m.Categoria.supervisor_id == usuario.id)))
         if Permiso.TICKET_VER_ASIGNADOS in permisos:
             condiciones.append(m.Ticket.responsable_id == usuario.id)
+            if incluir_participados:
+                condiciones.append(m.Ticket.id.in_(self.ids_participados(usuario.id)))
         if Permiso.TICKET_VER_PROPIOS in permisos:
             condiciones.append(m.Ticket.solicitante_id == usuario.id)
         return or_(*condiciones) if condiciones else false()
 
-    def consulta_visible(self, usuario: m.Usuario):
+    def consulta_visible(self, usuario: m.Usuario, incluir_participados: bool = False):
         stmt = select(m.Ticket).where(m.Ticket.eliminado == False)
-        filtro = self.filtro_visibilidad(usuario)
+        filtro = self.filtro_visibilidad(usuario, incluir_participados)
         return stmt if filtro is None else stmt.where(filtro)
 
     def puede_ver(self, usuario: m.Usuario, ticket_id: int) -> bool:
-        stmt = self.consulta_visible(usuario).where(m.Ticket.id == ticket_id).with_only_columns(m.Ticket.id)
+        stmt = self.consulta_visible(usuario, incluir_participados=True).where(m.Ticket.id == ticket_id).with_only_columns(m.Ticket.id)
+        return self.session.scalar(stmt) is not None
+
+    def participo(self, usuario_id: int, ticket_id: int) -> bool:
+        stmt = self.ids_participados(usuario_id).where(m.TicketAsignacion.ticket_id == ticket_id).limit(1)
         return self.session.scalar(stmt) is not None
 
     def siguiente_numero(self, anio: int) -> str:

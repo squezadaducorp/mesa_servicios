@@ -532,7 +532,7 @@ class TicketService:
 
     # =============================================================== consulta
     def consulta(self, u: m.Usuario, f: s.FiltroTickets):
-        stmt = self.repo.consulta_visible(u)
+        stmt = self.repo.consulta_visible(u, incluir_participados=f.participe)
         T = m.Ticket
         if f.texto:
             patron = f"%{f.texto.strip()}%"
@@ -558,6 +558,8 @@ class TicketService:
             stmt = stmt.where(T.fecha_creacion < hasta)
         if f.solo_mios:
             stmt = stmt.where(or_(T.responsable_id == u.id, T.solicitante_id == u.id))
+        if f.participe:
+            stmt = stmt.where(or_(T.responsable_id == u.id, T.id.in_(self.repo.ids_participados(u.id))))
         orden = {
             "fecha_desc": (T.fecha_creacion.desc(), T.id.desc()),
             "fecha_asc": (T.fecha_creacion.asc(), T.id.asc()),
@@ -584,8 +586,11 @@ def a_listado(t: m.Ticket) -> dict:
 
 def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
     gestor = svc.es_gestor(u, t) or u.tiene(Permiso.TICKET_VER_TODOS)
+    # Quien fue responsable antes conserva la lectura completa (historial, notas internas), pero no las acciones.
+    participante = not gestor and svc.repo.participo(u.id, t.id)
+    lectura = gestor or participante
     resumen = lambda x: {"id": x.id, "nombre": x.nombre, "correo": x.correo, "cargo": x.cargo} if x else None  # noqa: E731
-    historial = svc.repo.historial(t.id) if gestor else [h for h in svc.repo.historial(t.id) if h.accion in ("CREACION", "CAMBIO_ESTADO", "CIERRE", "REAPERTURA")]
+    historial = svc.repo.historial(t.id) if lectura else [h for h in svc.repo.historial(t.id) if h.accion in ("CREACION", "CAMBIO_ESTADO", "CIERRE", "REAPERTURA")]
     return {
         **{k: getattr(t, k) for k in (
             "id", "numero", "asunto", "descripcion", "fecha_creacion", "solicitante_nombre", "solicitante_cargo", "correo", "telefono",
@@ -608,7 +613,7 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "comentarios": [
             {"id": c.id, "usuario": resumen(c.usuario), "texto": c.texto, "es_interno": c.es_interno, "tipo": c.tipo,
              "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha}
-            for c in svc.repo.comentarios(t.id, incluir_internos=gestor)
+            for c in svc.repo.comentarios(t.id, incluir_internos=lectura)
         ],
         "adjuntos": [
             {"id": a.id, "nombre_original": a.nombre_original, "tipo_mime": a.tipo_mime, "tamano_bytes": a.tamano_bytes,
@@ -621,9 +626,10 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "escalamientos": [
             {"id": e.id, "nivel": e.nivel, "tipo": e.tipo, "motivo": e.motivo,
              "sla_consumido_pct": float(e.sla_consumido_pct) if e.sla_consumido_pct is not None else None, "fecha": e.fecha}
-            for e in (svc.repo.escalamientos(t.id) if gestor else [])
+            for e in (svc.repo.escalamientos(t.id) if lectura else [])
         ],
         "acciones": svc.acciones(u, t),
+        "solo_lectura_participante": participante,
     }
 
 
