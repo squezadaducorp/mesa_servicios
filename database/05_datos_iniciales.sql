@@ -317,7 +317,8 @@ USING (VALUES
     ('adjuntos.max_mb',             N'20',  N'Tamaño máximo por archivo'),
     ('adjuntos.extensiones',        N'pdf,doc,docx,xls,xlsx,csv,jpg,jpeg,png,txt,xml,zip,msg,eml', N'Extensiones permitidas'),
     ('seguridad.max_intentos',      N'5',   N'Intentos fallidos antes de bloquear'),
-    ('seguridad.bloqueo_min',       N'15',  N'Minutos de bloqueo')
+    ('seguridad.bloqueo_min',       N'15',  N'Minutos de bloqueo'),
+    ('seguridad.inactividad_min',   N'30',  N'Minutos sin actividad antes de cerrar la sesión (0 = desactivado)')
 ) AS s (clave, valor, descripcion)
 ON d.clave = s.clave
 WHEN NOT MATCHED THEN INSERT (clave, valor, descripcion) VALUES (s.clave, s.valor, s.descripcion);

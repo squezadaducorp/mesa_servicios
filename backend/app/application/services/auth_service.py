@@ -24,6 +24,7 @@ from app.infrastructure.db import models as m
 from app.infrastructure.repositories.repositorios import CatalogoRepository, RefreshTokenRepository, UsuarioRepository
 
 MENSAJE_CREDENCIALES = "Usuario o contraseña incorrectos"
+MENSAJE_INACTIVIDAD = "Su sesión se cerró por inactividad. Inicie sesión nuevamente."
 
 
 def usuario_sesion(u: m.Usuario) -> dict:
@@ -96,6 +97,15 @@ class AuthService:
             return settings.MAX_LOGIN_INTENTOS, settings.BLOQUEO_MINUTOS
         return (maximo if maximo > 0 else settings.MAX_LOGIN_INTENTOS), (minutos if minutos > 0 else settings.BLOQUEO_MINUTOS)
 
+    def inactividad_min(self) -> int:
+        """Minutos sin actividad antes de cerrar la sesión (Configuración; 0 = desactivado)."""
+        valor = CatalogoRepository(self.session).configuracion().get("seguridad.inactividad_min")
+        try:
+            minutos = int(valor) if valor is not None else settings.INACTIVIDAD_MINUTOS
+        except ValueError:
+            minutos = settings.INACTIVIDAD_MINUTOS
+        return max(minutos, 0)
+
     def _sincronizar_ad(self, usuario: m.Usuario | None, identidad) -> m.Usuario | None:
         rol_ad = ProveedorLdap.rol_por_grupos(identidad.grupos)
         if usuario is None:
@@ -118,16 +128,18 @@ class AuthService:
     def _emitir(self, usuario: m.Usuario, ctx: Contexto, familia: str) -> dict:
         access, expira = crear_access_token(usuario.id, usuario.rol.codigo, usuario.nombre)
         refresh, refresh_hash = nuevo_refresh_token()
+        ahora = utcnow()
         registro = self.tokens.add(
-            m.RefreshToken(usuario_id=usuario.id, token_hash=refresh_hash, familia=familia, fecha_creacion=utcnow(),
-                           fecha_expiracion=utcnow() + timedelta(days=settings.REFRESH_TOKEN_DAYS), ip=ctx.ip, equipo=(ctx.equipo or "")[:300])
+            m.RefreshToken(usuario_id=usuario.id, token_hash=refresh_hash, familia=familia, fecha_creacion=ahora,
+                           fecha_expiracion=ahora + timedelta(days=settings.REFRESH_TOKEN_DAYS), ip=ctx.ip, equipo=(ctx.equipo or "")[:300])
         )
         self.session.flush()
         self._ultimo_emitido = registro
-        return {"access_token": access, "refresh_token": refresh, "expires_in": expira, "usuario": usuario_sesion(usuario)}
+        return {"access_token": access, "refresh_token": refresh, "expires_in": expira,
+                "inactividad_min": self.inactividad_min(), "usuario": usuario_sesion(usuario)}
 
     # -------------------------------------------------------------- refresh
-    def refrescar(self, refresh_token: str, ctx: Contexto) -> dict:
+    def refrescar(self, refresh_token: str, ctx: Contexto, inactivo_seg: int | None = None) -> dict:
         ahora = utcnow()
         registro = self.tokens.por_hash(hash_token(refresh_token))
         if registro is None:
@@ -143,6 +155,16 @@ class AuthService:
         usuario = self.usuarios.get(registro.usuario_id)
         if usuario is None or not usuario.activo or usuario.eliminado:
             raise NoAutorizado("Usuario inactivo")
+        # Cierre por inactividad: el navegador informa cuántos segundos lleva el usuario sin interactuar.
+        # Las consultas automáticas (notificaciones, listas) renuevan el token, pero no cuentan como actividad.
+        # Si no lo informa (versión anterior de la página), se usa la última renovación de esta sesión.
+        actividad = registro.fecha_creacion if inactivo_seg is None else ahora - timedelta(seconds=inactivo_seg)
+        limite = self.inactividad_min()
+        if limite and ahora - actividad > timedelta(minutes=limite):
+            self.tokens.revocar_familia(registro.familia, ahora)
+            self.auditoria.registrar(ctx, "SESION_INACTIVA", "sesion", usuario=usuario, detalle={"minutos": limite})
+            self.session.commit()
+            raise NoAutorizado(MENSAJE_INACTIVIDAD)
         respuesta = self._emitir(usuario, ctx, registro.familia)
         registro.revocado, registro.fecha_revocacion, registro.reemplazado_por = True, ahora, self._ultimo_emitido.id
         return respuesta

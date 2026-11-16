@@ -10,7 +10,7 @@ import { mensajeError } from "../components/Aviso";
 import { marca } from "../theme";
 
 export default function Login() {
-  const { login, usuario } = useAuth();
+  const { login, usuario, motivoCierre } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [correo, setCorreo] = useState("");
@@ -80,6 +80,11 @@ export default function Login() {
           <Typography variant="body2" sx={{ textAlign: "center", color: "text.secondary", mb: 3 }}>
             {sso ? "Use su cuenta de Microsoft 365 de ADUCORP" : "Use su correo corporativo o usuario de dominio"}
           </Typography>
+          {motivoCierre && !errorSso && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              {motivoCierre}
+            </Alert>
+          )}
           {errorSso && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {errorSso}

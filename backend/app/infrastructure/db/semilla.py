@@ -109,7 +109,8 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
     for k, v in (("empresa.nombre", "ADUCORP Asesores Aduaneros y Logísticos Cía. Ltda."), ("sla.umbral_aviso_1", "75"),
                  ("sla.umbral_aviso_2", "90"), ("ticket.cierre_automatico_h", "72"), ("adjuntos.max_mb", "20"),
                  ("adjuntos.extensiones", "pdf,doc,docx,xls,xlsx,csv,jpg,jpeg,png,txt,xml,zip,msg,eml"),
-                 ("seguridad.max_intentos", "5"), ("seguridad.bloqueo_min", "15")):
+                 ("seguridad.max_intentos", "5"), ("seguridad.bloqueo_min", "15"),
+                 ("seguridad.inactividad_min", "30")):
         session.add(m.Configuracion(clave=k, valor=v))
     session.commit()
 

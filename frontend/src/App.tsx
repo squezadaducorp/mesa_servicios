@@ -2,6 +2,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import Layout from "./components/Layout";
+import CierreInactividad from "./components/CierreInactividad";
 import { Cargando } from "./components/Comunes";
 import Login from "./pages/Login";
 import EntraRetorno from "./pages/EntraRetorno";
@@ -28,7 +29,12 @@ function Protegida({ children }: { children: ReactNode }) {
   if (cargando) return <Cargando alto={400} />;
   if (!usuario) return <Navigate to="/login" replace state={{ desde: location.pathname }} />;
   if (usuario.debe_cambiar_clave && location.pathname !== "/cambiar-clave") return <Navigate to="/cambiar-clave" replace state={{ desde: location.pathname }} />;
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <CierreInactividad />
+    </>
+  );
 }
 
 function Requiere({ permisos, children }: { permisos: string[]; children: ReactNode }) {

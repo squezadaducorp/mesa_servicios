@@ -146,6 +146,7 @@ Los registros **no se pueden modificar ni borrar**, ni siquiera desde la base de
 | `adjuntos.extensiones` | pdf, doc, docx, xls, xlsx, csv, jpg, jpeg, png, txt, xml, zip, msg, eml | Extensiones permitidas |
 | `seguridad.max_intentos` | 5 | Intentos fallidos antes de bloquear la cuenta |
 | `seguridad.bloqueo_min` | 15 | Minutos de bloqueo |
+| `seguridad.inactividad_min` | 30 | Minutos sin actividad antes de cerrar la sesión; un minuto antes se avisa (0 lo desactiva) |
 
 Además de la extensión, el sistema comprueba el contenido real de cada archivo y rechaza los ejecutables aunque se les cambie el nombre.
 

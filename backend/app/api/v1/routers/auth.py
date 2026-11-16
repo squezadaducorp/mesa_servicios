@@ -34,7 +34,7 @@ def login(dto: s.LoginEntrada, ctx: Contexto = Depends(contexto_anonimo), sessio
 
 @router.post("/refresh", response_model=s.TokenSalida, summary="Renovar el access token (rota el refresh token)")
 def refresh(dto: s.RefreshEntrada, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
-    return AuthService(session).refrescar(dto.refresh_token, ctx)
+    return AuthService(session).refrescar(dto.refresh_token, ctx, dto.inactivo_seg)
 
 
 @router.post("/logout", response_model=s.Mensaje, summary="Cerrar sesión y revocar el refresh token")
