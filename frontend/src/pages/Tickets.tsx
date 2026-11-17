@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
-  Box, Button, Card, CardActionArea, Chip, Collapse, FormControlLabel, InputAdornment, MenuItem, Paper, Stack, Switch, Tab, Table,
+  Box, Button, Card, CardActionArea, Checkbox, Chip, Collapse, FormControlLabel, InputAdornment, MenuItem, Paper, Stack, Switch, Tab, Table,
   TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Tabs, TextField, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
@@ -18,6 +18,7 @@ import { CumplimientoChip, EstadoChip, NOMBRE_ESTADO, PrioridadChip, SlaBarra, V
 import { Cargando, Encabezado, ErrorCarga, Vacio } from "../components/Comunes";
 import { fechaHora } from "../utils/formato";
 import { P } from "../utils/permisos";
+import { BarraLote } from "./tercera/Lote";
 
 const CLAVE_FILTRO = "aducorp.filtroTickets";
 
@@ -61,6 +62,14 @@ export default function Tickets() {
   const [tamano, setTamano] = useState(20);
   const [verFiltros, setVerFiltros] = useState(false);
   const gestor = puede(P.VER_TODOS, P.VER_AREA, P.VER_ASIGNADOS);
+  const [seleccion, setSeleccion] = useState<Map<number, TicketListado>>(new Map());
+  const alternar = (t: TicketListado) =>
+    setSeleccion((s) => {
+      const n = new Map(s);
+      if (n.has(t.id)) n.delete(t.id);
+      else if (n.size < 100) n.set(t.id, t);
+      return n;
+    });
   const conteo = (vence: "HOY" | "VENCIDOS") =>
     get<Pagina<TicketListado>>("/tickets", { vence, solo_mios: true, pagina: 1, tamano: 1 }).then((p) => p.total);
   const porVencer = useQuery({ queryKey: ["tickets", "conteo", "HOY"], queryFn: () => conteo("HOY"), enabled: gestor, refetchInterval: 120_000 });
@@ -325,10 +334,38 @@ export default function Tickets() {
         </Stack>
       ) : (
         <Paper>
+          {gestor && (
+            <BarraLote
+              seleccion={[...seleccion.values()]}
+              onLimpiar={() => setSeleccion(new Map())}
+              onListo={(principal) => {
+                setSeleccion(new Map());
+                q.refetch();
+                if (principal) navigate(`/tickets/${principal}`);
+              }}
+            />
+          )}
           <TableContainer>
             <Table size="small">
               <TableHead>
                 <TableRow>
+                  {gestor && (
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        size="small"
+                        indeterminate={q.data.items.some((t) => seleccion.has(t.id)) && !q.data.items.every((t) => seleccion.has(t.id))}
+                        checked={q.data.items.every((t) => seleccion.has(t.id))}
+                        onChange={(e) =>
+                          setSeleccion((s) => {
+                            const n = new Map(s);
+                            q.data!.items.forEach((t) => (e.target.checked ? n.size < 100 && n.set(t.id, t) : n.delete(t.id)));
+                            return n;
+                          })
+                        }
+                        slotProps={{ input: { "aria-label": "Seleccionar todos los de esta página" } }}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>Número</TableCell>
                   <TableCell>Asunto / Categoría</TableCell>
                   <TableCell>Solicitante / Cliente</TableCell>
@@ -340,7 +377,12 @@ export default function Tickets() {
               </TableHead>
               <TableBody>
                 {q.data.items.map((t) => (
-                  <TableRow key={t.id} hover sx={{ cursor: "pointer" }} onClick={() => navigate(`/tickets/${t.id}`)}>
+                  <TableRow key={t.id} hover selected={seleccion.has(t.id)} sx={{ cursor: "pointer" }} onClick={() => navigate(`/tickets/${t.id}`)}>
+                    {gestor && (
+                      <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox size="small" checked={seleccion.has(t.id)} onChange={() => alternar(t)} slotProps={{ input: { "aria-label": `Seleccionar ${t.numero}` } }} />
+                      </TableCell>
+                    )}
                     <TableCell sx={{ whiteSpace: "nowrap" }}>
                       <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }}>
                         {t.numero}

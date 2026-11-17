@@ -1,6 +1,7 @@
 """DTOs de entrada y salida de la API (Pydantic v2)."""
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, time
 from typing import Generic, Literal, TypeVar
 
@@ -171,6 +172,25 @@ class SubcategoriaEntrada(BaseModel):
     activo: bool = True
 
 
+DOMINIOS_PUBLICOS = {"gmail.com", "hotmail.com", "hotmail.es", "outlook.com", "outlook.es", "live.com", "yahoo.com", "yahoo.es",
+                     "icloud.com", "me.com", "msn.com", "aol.com", "protonmail.com", "proton.me", "gmx.com", "mail.com"}
+
+
+def normalizar_dominios(v: list[str]) -> list[str]:
+    salida = []
+    for d in v or []:
+        d = d.strip().lower().split("@")[-1].strip()
+        if not d:
+            continue
+        if not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", d):
+            raise ValueError(f"«{d}» no es un dominio válido (ejemplo: schryver.com)")
+        if d in DOMINIOS_PUBLICOS:
+            raise ValueError(f"«{d}» es un correo público: no identifica a una empresa")
+        if d not in salida:
+            salida.append(d)
+    return salida
+
+
 class ClienteSalida(Modelo):
     id: int
     ruc: str | None
@@ -189,17 +209,25 @@ class ClienteEntrada(BaseModel):
     es_vip: bool = False
     activo: bool = True
     correos_copia: list[str] = Field(default=[], description="Se agregan en copia a cada ticket nuevo del cliente")
+    dominios: list[str] = Field(default=[], max_length=10,
+                                description="Dominios de correo de la empresa (p. ej. schryver.com): quien escribe desde ellos queda con este cliente")
 
     @field_validator("correos_copia")
     @classmethod
     def _correos_copia(cls, v):
         return normalizar_correos(v)
 
+    @field_validator("dominios")
+    @classmethod
+    def _dominios(cls, v):
+        return normalizar_dominios(v)
+
 
 class ClienteAdminSalida(ClienteSalida):
     correos_copia: list[str] = []
+    dominios: list[str] = []
 
-    @field_validator("correos_copia", mode="before")
+    @field_validator("correos_copia", "dominios", mode="before")
     @classmethod
     def _texto(cls, v):
         return separar(v) if isinstance(v, str) or v is None else v
@@ -280,6 +308,7 @@ class TicketCrear(BaseModel):
     responsable_id: int | None = Field(default=None, description="Asignación directa (requiere permiso de asignar)")
     equipo_id: int | None = Field(default=None, description="Equipo afectado (inventario)")
     kb_vistos: list[int] = Field(default_factory=list, max_length=10, description="Artículos de la base de conocimiento que revisó antes de crear")
+    aviso_id: int | None = Field(default=None, description="Aviso general al que pertenece (el usuario confirmó que es parte de esa caída)")
 
 
 class TicketEditar(BaseModel):
@@ -355,6 +384,7 @@ class ComentarioSalida(Modelo):
     minutos_invertidos: int | None
     fecha: datetime
     copia_a: list[str] = Field(default=[], description="Correos que recibieron esta respuesta en copia")
+    adjuntos: list["AdjuntoSalida"] = Field(default=[], description="Capturas y archivos enviados con este comentario")
 
 
 class AdjuntoSalida(Modelo):
@@ -364,6 +394,10 @@ class AdjuntoSalida(Modelo):
     tamano_bytes: int
     usuario: UsuarioResumen
     fecha: datetime
+    comentario_id: int | None = None
+
+
+ComentarioSalida.model_rebuild()
 
 
 class HistorialSalida(Modelo):
@@ -556,6 +590,12 @@ class TicketDetalle(Modelo):
     equipo: EquipoTicket | None = None
     recurrente_id: int | None = None
     kb_vistos: list[Item] = Field(default_factory=list, description="Artículos que el solicitante revisó antes de crear el ticket")
+    aprobaciones: list[dict] = Field(default_factory=list, description="Aprobaciones del jefe pedidas para este ticket")
+    aprobacion_pendiente_id: int | None = Field(default=None, description="Aprobación que espera la respuesta del usuario actual")
+    vinculos: list[dict] = Field(default_factory=list, description="Tickets relacionados, duplicados o que lo bloquean")
+    duplicado_de: dict | None = Field(default=None, description="Ticket principal si este se unió como duplicado")
+    avisos: list[dict] = Field(default_factory=list, description="Avisos generales a los que pertenece")
+    seguimiento_url: str | None = Field(default=None, description="Enlace de seguimiento sin cuenta (solo tickets de externos)")
 
 
 class FiltroTickets(BaseModel):

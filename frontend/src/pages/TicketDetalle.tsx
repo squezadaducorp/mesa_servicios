@@ -21,6 +21,7 @@ import GroupIcon from "@mui/icons-material/SupervisorAccount";
 import MailOutlineIcon from "@mui/icons-material/EmailOutlined";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import EventRepeatIcon from "@mui/icons-material/EventRepeat";
+import AddPhotoIcon from "@mui/icons-material/AddPhotoAlternateOutlined";
 import { api, del, descargar, get, patch, post, put } from "../api/client";
 import type { RespuestaParaTicket, Riesgo, TextoIa, TicketDetalle as Ticket } from "../api/types";
 import MenuRespuestas from "../components/MenuRespuestas";
@@ -31,6 +32,8 @@ import { CumplimientoChip, EstadoChip, NOMBRES_NOTA, PrioridadChip, SlaBarra, co
 import { Cargando, ErrorCarga, Vacio } from "../components/Comunes";
 import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/formato";
 import TicketDialogos, { estadosDestino, type Dialogo } from "./TicketDialogos";
+import { AlertasTercera, PanelTercera } from "./tercera/TicketTercera";
+import { AdjuntosDeComentario, ArchivosPorEnviar, imagenesDe, nombrarCaptura } from "../components/CapturasComentario";
 
 /** Encuesta de satisfacción: el solicitante califica (y así cierra) un ticket resuelto; luego se muestra la nota. */
 function TarjetaEncuesta({ t, onListo }: { t: Ticket; onListo: (nuevo: Ticket) => void }) {
@@ -140,6 +143,10 @@ export default function TicketDetalle() {
   const [menu, setMenu] = useState<HTMLElement | null>(null);
   const [texto, setTexto] = useState("");
   const [interno, setInterno] = useState(false);
+  // Capturas de pantalla (Ctrl+V, arrastrar o elegir) y archivos que van con el comentario
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const sumarArchivos = (nuevos: File[], pegados = false) =>
+    setArchivos((xs) => [...xs, ...(pegados ? nuevos.map((f, i) => nombrarCaptura(f, xs.length + i)) : nuevos)].slice(0, 10));
   // null = usar las personas en copia del ticket; una lista = editada solo para este envío
   const [copiaA, setCopiaA] = useState<string[] | null>(null);
   const [editandoCopias, setEditandoCopias] = useState<string[] | null>(null);
@@ -166,17 +173,24 @@ export default function TicketDetalle() {
   };
 
   const comentar = useMutation({
-    mutationFn: () =>
-      post<Ticket>(`/tickets/${id}/comentarios`, {
+    mutationFn: () => {
+      const datos = {
         texto,
         es_interno: interno,
         respuesta_rapida_id: usada?.id ?? null,
         ...(!interno && t?.acciones.includes("copias") ? { copia_a: copiaA ?? t.copias.map((c) => c.correo) } : {}),
-      }),
+      };
+      if (!archivos.length) return post<Ticket>(`/tickets/${id}/comentarios`, datos);
+      const form = new FormData();
+      form.append("datos", JSON.stringify(datos));
+      archivos.forEach((f) => form.append("archivos", f, f.name));
+      return api<Ticket>("POST", `/tickets/${id}/comentarios/con-archivos`, { form });
+    },
     onSuccess: async (n) => {
       actualizar(n);
       const destino = usada?.estado_destino;
       setTexto("");
+      setArchivos([]);
       setInterno(false);
       setCopiaA(null);
       setUsada(null);
@@ -301,6 +315,8 @@ export default function TicketDetalle() {
           puede consultarlo pero no modificarlo.
         </Alert>
       )}
+
+      <AlertasTercera t={t} onCambio={() => q.refetch()} />
 
       <Paper sx={{ p: { xs: 2, md: 3 }, mb: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
@@ -438,6 +454,7 @@ export default function TicketDetalle() {
                         <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                           {c.texto}
                         </Typography>
+                        <AdjuntosDeComentario ticketId={t.id} adjuntos={c.adjuntos} />
                         {c.copia_a?.length > 0 && (
                           <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 0.5, wordBreak: "break-word" }}>
                             Copia a: {c.copia_a.join(", ")}
@@ -447,7 +464,14 @@ export default function TicketDetalle() {
                     </Stack>
                   ))}
                   {a.has("comentar") && (
-                    <Box>
+                    <Box
+                      onDragOver={(e) => { if (a.has("adjuntar") && e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+                      onDrop={(e) => {
+                        if (!a.has("adjuntar") || !e.dataTransfer.files.length) return;
+                        e.preventDefault();
+                        sumarArchivos(Array.from(e.dataTransfer.files));
+                      }}
+                    >
                       <Divider sx={{ mb: 2 }} />
                       {t.estado === "PENDIENTE_CLIENTE" && !a.has("nota_interna") && (
                         <Alert severity="info" sx={{ mb: 1.5 }}>
@@ -468,10 +492,19 @@ export default function TicketDetalle() {
                             setMenuResp(e.target);
                           }
                         }}
+                        onPaste={(e) => {
+                          const imgs = a.has("adjuntar") ? imagenesDe(e.clipboardData) : [];
+                          if (imgs.length) {
+                            e.preventDefault();
+                            sumarArchivos(imgs, true);
+                          }
+                        }}
+                        helperText={a.has("adjuntar") ? "Para agregar una captura de pantalla, péguela aquí con Ctrl+V o arrástrela." : undefined}
                         multiline
                         minRows={3}
                         fullWidth
                       />
+                      <ArchivosPorEnviar archivos={archivos} onQuitar={(i) => setArchivos((xs) => xs.filter((_, j) => j !== i))} />
                       {a.has("copias") && !interno && (
                         <Box sx={{ mt: 1.5 }}>
                           <CampoCorreos
@@ -506,9 +539,25 @@ export default function TicketDetalle() {
                             Sugerir respuesta
                           </Button>
                         )}
+                        {a.has("adjuntar") && (
+                          <Button component="label" startIcon={<AddPhotoIcon />} disabled={archivos.length >= 10}>
+                            Captura o archivo
+                            <input
+                              hidden
+                              type="file"
+                              multiple
+                              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.xml,.zip,.msg,.eml"
+                              onChange={(e) => {
+                                const f = Array.from(e.target.files ?? []);
+                                e.target.value = "";
+                                if (f.length) sumarArchivos(f);
+                              }}
+                            />
+                          </Button>
+                        )}
                         <Box sx={{ flex: 1 }} />
-                        <Button variant="contained" endIcon={<SendIcon />} disabled={!texto.trim() || comentar.isPending} onClick={() => comentar.mutate()}>
-                          Enviar
+                        <Button variant="contained" endIcon={<SendIcon />} disabled={(!texto.trim() && !archivos.length) || comentar.isPending} onClick={() => comentar.mutate()}>
+                          {comentar.isPending && archivos.length ? "Enviando…" : "Enviar"}
                         </Button>
                       </Stack>
                     </Box>
@@ -644,6 +693,8 @@ export default function TicketDetalle() {
               {t.sla_minutos_extension > 0 && ` Incluye extensión de ${duracion(t.sla_minutos_extension)}.`}
             </Typography>
           </Paper>
+
+          <PanelTercera t={t} onCambio={() => q.refetch()} />
 
           {t.equipo && (
             <Paper sx={{ p: 2.5 }}>

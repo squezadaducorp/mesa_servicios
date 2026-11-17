@@ -20,10 +20,10 @@ PERMISOS_POR_ROL = {
                    "ticket.editar", "ticket.asignar", "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir",
                    "ticket.comentar", "ticket.adjuntar", "reporte.ver", "dashboard.ver", "datos.exportar", "ia.usar",
                    "kb.gestionar", "respuestas.gestionar", "recurrentes.gestionar", "reportes.programar", "inventario.ver",
-                   "inventario.gestionar"],
+                   "inventario.gestionar", "aprobaciones.gestionar", "avisos.gestionar"],
     "SUPERVISOR": ["ticket.ver_area", "ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.asignar",
                    "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar",
-                   "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver"],
+                   "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver", "avisos.gestionar"],
     "ANALISTA": ["ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.escalar", "ticket.cambiar_estado",
                  "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar", "kb.gestionar", "inventario.ver", "ticket.asignar"],
     "CLIENTE": ["ticket.ver_propios", "ticket.crear", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar"],
@@ -47,6 +47,7 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
     if session.query(m.Rol).count():
         return
     h = hash_clave(clave)
+    session.add(m.EstadoTicket(codigo="POR_APROBAR", nombre="Por aprobar", orden=0, pausa_sla=True, es_final=False))
     for i, (c, n, pausa, final) in enumerate([("NUEVO", "Nuevo", 0, 0), ("ASIGNADO", "Asignado", 0, 0), ("EN_PROCESO", "En Proceso", 0, 0),
                                               ("PENDIENTE_CLIENTE", "Pendiente Cliente", 1, 0), ("ESCALADO", "Escalado", 0, 0),
                                               ("RESUELTO", "Resuelto", 1, 0), ("CERRADO", "Cerrado", 1, 1), ("CANCELADO", "Cancelado", 1, 1)], 1):
@@ -94,6 +95,7 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                                        respuesta_plantilla="Estimado/a {solicitante}: recibimos su solicitud {numero}. {responsable} la está revisando."))
     session.add(m.Cliente(ruc="0992345678001", razon_social="Importadora Andina del Pacífico S.A.", es_vip=True))
     session.add(m.Cliente(ruc="1791234567001", razon_social="Comercial Quitumbe Cía. Ltda."))
+    session.add(m.Cliente(razon_social="Aducorp CIA LTDA", nombre_comercial="ADUCORP", dominios=DOMINIO))
 
     horario = m.HorarioLaboral(nombre="Horario ADUCORP", es_predeterminado=True)
     horario.tramos = [m.HorarioTramo(dia_semana=d, hora_inicio=i, hora_fin=f) for d in range(1, 6)
@@ -112,16 +114,24 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                            ("SLA_AVISO_RESPUESTA", "[{numero}] Falta la primera respuesta"),
                            ("ENCUESTA", "[{numero}] ¿Cómo lo atendimos?"), ("ENCUESTA_BAJA", "[{numero}] Calificación baja"),
                            ("AUSENCIA_REASIGNADO", "[{numero}] Cambio de responsable"),
-                           ("TICKET_EN_NOMBRE", "[{numero}] {creado_por} registró un ticket en su nombre")):
+                           ("TICKET_EN_NOMBRE", "[{numero}] {creado_por} registró un ticket en su nombre"),
+                           ("APROBACION_SOLICITADA", "[Aprobación] {numero} · {asunto}"),
+                           ("APROBACION_RECORDATORIO", "[Recordatorio] {numero} espera su aprobación"),
+                           ("APROBACION_RESULTADO", "[{numero}] Su solicitud fue {resultado}"),
+                           ("TICKET_NUEVO_RESPONSABLE", "[{numero}] Ahora lo atiende {responsable}"),
+                           ("TICKETS_UNIDOS", "[{numero}] Su solicitud se atiende junto con otras"),
+                           ("SEGUIMIENTO_ENLACE", "[{numero}] Enlace para ver el estado de su solicitud")):
         session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} {restante} "
-                                      "{ausente} {reemplazo} {creado_por} {motivo} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a></p>"))
+                                      "{ausente} {reemplazo} {creado_por} {motivo} {resultado} {pedido_por} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a> "
+                                      "<a href='{url_aprobar}'>aprobar</a> <a href='{url_seguimiento}'>seguimiento</a></p>"))
     for k, v in (("empresa.nombre", "ADUCORP Asesores Aduaneros y Logísticos Cía. Ltda."), ("sla.umbral_aviso_1", "75"),
                  ("sla.umbral_aviso_2", "90"), ("ticket.cierre_automatico_h", "72"), ("adjuntos.max_mb", "20"),
                  ("adjuntos.extensiones", "pdf,doc,docx,xls,xlsx,csv,jpg,jpeg,png,txt,xml,zip,msg,eml"),
                  ("seguridad.max_intentos", "5"), ("seguridad.bloqueo_min", "15"),
                  ("seguridad.inactividad_min", "30"), ("sla.avisar_por", "tiempo"), ("sla.aviso_previo_1_min", "120"),
                  ("sla.aviso_previo_2_min", "30"), ("sla.aviso_respuesta_min", "60"), ("sla.resumen_diario_hora", "08:30"),
-                 ("encuesta.activa", "si"), ("encuesta.aviso_nota_max", "2")):
+                 ("encuesta.activa", "si"), ("encuesta.aviso_nota_max", "2"), ("seguimiento.activo", "si"),
+                 ("seguimiento.dias_vigencia", "30"), ("seguimiento.permitir_responder", "si")):
         session.add(m.Configuracion(clave=k, valor=v))
     session.commit()
 

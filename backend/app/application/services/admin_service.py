@@ -213,9 +213,16 @@ class AdminService:
         else:
             c = m.Cliente(fecha_creacion=utcnow())
             self.session.add(c)
-        for k, v in dto.model_dump(exclude={"correos_copia"}).items():
+        for d in dto.dominios:
+            otro = next((x for x in self.session.scalars(select(m.Cliente).where(m.Cliente.eliminado == False, m.Cliente.id != (cliente_id or 0),
+                                                                                 m.Cliente.dominios.is_not(None)))
+                         if d in separar(x.dominios)), None)
+            if otro:
+                raise ReglaNegocio(f"El dominio {d} ya está en el cliente {otro.razon_social}")
+        for k, v in dto.model_dump(exclude={"correos_copia", "dominios"}).items():
             setattr(c, k, str(v) if k == "correo" and v else v)
         c.correos_copia = unir(dto.correos_copia)
+        c.dominios = ", ".join(dto.dominios) or None
         self.session.flush()
         self.auditoria.registrar(ctx, "CLIENTE_MODIFICADO", "cliente", c.id, {"razon_social": c.razon_social})
         return c

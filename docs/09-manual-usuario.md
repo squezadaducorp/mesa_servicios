@@ -50,6 +50,12 @@ La sesión se renueva sola mientras trabaja. Al terminar, use **Cerrar sesión**
 
 El personal de la mesa ve además los campos **Canal** (portal, correo, teléfono, presencial), para registrar pedidos que llegaron por otra vía, y **Asignar a**, para elegir el responsable. Si deja *Asignar a* vacío, la asignación es automática.
 
+### Avisos generales y aprobaciones
+
+* Si arriba aparece un **aviso general** en rojo (por ejemplo «ECUAPASS no responde»), el equipo ya lo sabe: no hace falta crear un ticket. Pulse **A mí también me afecta** (puede dejar un comentario, como una DAI que vence hoy) y le llegará un correo con cada novedad. Si escribe un ticket con palabras parecidas, el formulario le ofrece vincularlo al aviso o «Solo marcar me afecta».
+* Algunas solicitudes (por ejemplo accesos o equipo nuevo) necesitan el visto bueno de su jefe directo: quedan **Por aprobar** y la mesa empieza a atenderlas al aprobarse. Si su jefe la rechaza, verá el motivo en el ticket.
+* Si usted es jefe, en el menú aparece **Por aprobar** con las solicitudes de su equipo. También le llega un correo con los botones Aprobar y Rechazar (rechazar pide un comentario).
+
 ## 3. Lista de tickets
 
 ![Lista de tickets](capturas/02-tickets.png)
@@ -132,6 +138,17 @@ En el menú de su nombre (arriba a la derecha) › **Mi disponibilidad**:
 5. **Programar ausencia.** Si la fecha de inicio ya llegó, los tickets pasan de inmediato; si es futura, pasan solos ese día.
 
 Mientras está ausente, los tickets nuevos de sus categorías van al reemplazo, y quien lo cubre ve el aviso «Usted cubre a … hasta …». Al regresar, la Mesa le devuelve los tickets que sigan abiertos. Si vuelve antes, use **Volví antes** en el mismo diálogo. Su supervisor y el administrador también pueden registrarle la ausencia desde *Usuarios*.
+
+### Capturas de pantalla en los comentarios
+
+Debajo del cuadro de comentario puede agregar capturas de pantalla o archivos que viajan con ese comentario:
+
+- **Pegar:** copie la captura (por ejemplo con `Win + Shift + S`) y péguela en el cuadro con **Ctrl+V**.
+- **Arrastrar** la imagen o el archivo sobre el cuadro, o usar el botón **Captura o archivo**.
+
+Antes de enviar ve las miniaturas y puede quitarlas con la ✕. Puede enviar hasta 10 por comentario, y también puede enviar solo la captura sin texto.
+Las capturas se ven dentro del comentario (clic para ampliar y descargar) y además aparecen en la pestaña **Adjuntos**.
+Las que van en una **nota interna** solo las ve el equipo de la mesa.
 
 ## 5. Seguimiento del solicitante (Cliente interno)
 

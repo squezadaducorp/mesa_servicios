@@ -26,6 +26,10 @@ const RespuestasRapidas = lazy(() => import("./pages/admin/RespuestasRapidas"));
 const Recurrentes = lazy(() => import("./pages/admin/Recurrentes"));
 const ReportesProgramados = lazy(() => import("./pages/admin/ReportesProgramados"));
 const Inventario = lazy(() => import("./pages/admin/Inventario"));
+const Aprobaciones = lazy(() => import("./pages/tercera/Aprobaciones"));
+const ReglasAprobacion = lazy(() => import("./pages/tercera/ReglasAprobacion"));
+const AvisosGenerales = lazy(() => import("./pages/tercera/AvisosGenerales"));
+const SeguimientoPublico = lazy(() => import("./pages/tercera/SeguimientoPublico"));
 const SolicitudPublica = lazy(() => import("./pages/SolicitudPublica"));
 const EncuestaPublica = lazy(() => import("./pages/EncuestaPublica"));
 
@@ -61,6 +65,8 @@ export default function App() {
         <Route path="/auth/entra" element={<EntraRetorno />} />
         <Route path="/solicitud" element={<SolicitudPublica />} />
         <Route path="/encuesta" element={<EncuestaPublica />} />
+        <Route path="/seguimiento" element={<SeguimientoPublico />} />
+        <Route path="/seguimiento/:id/:llave" element={<SeguimientoPublico />} />
         <Route
           element={
             <Protegida>
@@ -80,6 +86,9 @@ export default function App() {
           <Route path="recurrentes" element={<Requiere permisos={[P.RECURRENTES]}><Recurrentes /></Requiere>} />
           <Route path="reportes-correo" element={<Requiere permisos={[P.REPORTES_PROGRAMAR]}><ReportesProgramados /></Requiere>} />
           <Route path="inventario" element={<Requiere permisos={[P.INVENTARIO_VER, P.INVENTARIO]}><Inventario /></Requiere>} />
+          <Route path="aprobaciones" element={<Aprobaciones />} />
+          <Route path="avisos" element={<Requiere permisos={[P.AVISOS]}><AvisosGenerales /></Requiere>} />
+          <Route path="admin/aprobaciones" element={<Requiere permisos={[P.APROBACIONES]}><ReglasAprobacion /></Requiere>} />
           <Route path="cambiar-clave" element={<CambiarClave />} />
           <Route path="admin/usuarios" element={<Requiere permisos={[P.USUARIOS]}><Usuarios /></Requiere>} />
           <Route path="admin/roles" element={<Requiere permisos={[P.ROLES]}><Roles /></Requiere>} />

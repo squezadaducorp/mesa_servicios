@@ -175,6 +175,12 @@ export const put = <T>(path: string, body?: unknown) => api<T>("PUT", path, { bo
 export const patch = <T>(path: string, body?: unknown) => api<T>("PATCH", path, { body });
 export const del = <T>(path: string) => api<T>("DELETE", path);
 
+/** Trae un archivo autenticado como blob (vista previa de capturas). */
+export async function obtenerBlob(path: string, query?: Query): Promise<Blob> {
+  const r = await ejecutar("GET", path, { query });
+  return r.blob();
+}
+
 /** Descarga un archivo autenticado (exportaciones, adjuntos) respetando el nombre que envía el servidor. */
 export async function descargar(path: string, query?: Query, nombrePorDefecto = "archivo"): Promise<void> {
   const r = await ejecutar("GET", path, { query });

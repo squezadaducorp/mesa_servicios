@@ -1,3 +1,5 @@
+import type { ExtrasTercera } from "./tercera";
+
 // Tipos de la API v1 (espejo de backend/app/application/schemas/esquemas.py)
 
 export interface Pagina<T> {
@@ -89,6 +91,7 @@ export interface Cliente {
   es_vip: boolean;
   activo: boolean;
   correos_copia?: string[];
+  dominios?: string[];
 }
 
 export interface Catalogos {
@@ -199,6 +202,8 @@ export interface Comentario {
   minutos_invertidos: number | null;
   fecha: string;
   copia_a: string[];
+  /** Capturas y archivos enviados con este comentario */
+  adjuntos?: Adjunto[];
 }
 
 export interface Adjunto {
@@ -208,6 +213,7 @@ export interface Adjunto {
   tamano_bytes: number;
   usuario: UsuarioResumen;
   fecha: string;
+  comentario_id?: number | null;
 }
 
 export interface Historial {
@@ -232,14 +238,14 @@ export interface Escalamiento {
 
 export type AccionTicket =
   | "editar" | "asignar" | "cambiar_estado" | "escalar" | "cerrar" | "reabrir" | "comentar"
-  | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia" | "calificar";
+  | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia" | "calificar" | "vincular";
 
 export interface CopiaTicket {
   correo: string;
   origen: "MANUAL" | "CATEGORIA" | "CLIENTE" | "CORREO";
 }
 
-export interface TicketDetalle {
+export interface TicketDetalle extends ExtrasTercera {
   id: number;
   numero: string;
   asunto: string;

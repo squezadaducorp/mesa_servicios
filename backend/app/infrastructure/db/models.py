@@ -127,6 +127,7 @@ class Cliente(Base):
     telefono: Mapped[str | None] = mapped_column(Unicode(30))
     es_vip: Mapped[bool] = mapped_column(Boolean, default=False)
     correos_copia: Mapped[str | None] = mapped_column(Unicode(500))   # se copian a cada ticket nuevo del cliente
+    dominios: Mapped[str | None] = mapped_column(Unicode(300))        # quien escribe desde estos dominios queda con este cliente
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -783,3 +784,114 @@ class UsuarioDelegacion(Base):
     @property
     def area_ids(self) -> list[int]:
         return [int(x) for x in (self.areas or "").split(",") if x.strip().isdigit()]
+
+
+# ======================================================= tercera ronda (20-24)
+class ReglaAprobacion(Base):
+    """Qué tickets necesitan el visto bueno de un jefe antes de atenderse (21)."""
+    __tablename__ = "aprobacion_reglas"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    categoria_id: Mapped[int] = mapped_column(ForeignKey("categorias.id"))
+    subcategoria_id: Mapped[int | None] = mapped_column(ForeignKey("subcategorias.id"))   # NULL = todas las subcategorías
+    nivel1_tipo: Mapped[str] = mapped_column(String(20))   # JEFE_DIRECTO | SUPERVISOR_CATEGORIA | PERSONA
+    nivel1_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    nivel2_tipo: Mapped[str | None] = mapped_column(String(20))
+    nivel2_usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    recordar_horas: Mapped[int] = mapped_column(Integer, default=4)
+    escalar_horas: Mapped[int | None] = mapped_column(Integer)          # sin respuesta en estas horas pasa a escalar_a
+    escalar_a_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    usar_reemplazo: Mapped[bool] = mapped_column(Boolean, default=True)  # aprobador en modo ausente → su reemplazo
+    auto_si_aprobador: Mapped[bool] = mapped_column(Boolean, default=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime)
+
+    categoria: Mapped[Categoria] = relationship(lazy="joined")
+    subcategoria: Mapped[Subcategoria | None] = relationship(lazy="joined")
+    nivel1_usuario: Mapped[Usuario | None] = relationship(foreign_keys=[nivel1_usuario_id], lazy="joined")
+    nivel2_usuario: Mapped[Usuario | None] = relationship(foreign_keys=[nivel2_usuario_id], lazy="joined")
+    escalar_a: Mapped[Usuario | None] = relationship(foreign_keys=[escalar_a_id], lazy="joined")
+
+
+class TicketAprobacion(Base):
+    __tablename__ = "ticket_aprobaciones"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    regla_id: Mapped[int | None] = mapped_column(ForeignKey("aprobacion_reglas.id"))
+    nivel: Mapped[int] = mapped_column(SmallInteger, default=1)
+    aprobador_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    en_lugar_de_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))   # aprobador original (ausente, escalado o traspasado)
+    estado: Mapped[str] = mapped_column(String(12), default="PENDIENTE")   # PENDIENTE | APROBADO | RECHAZADO | REASIGNADO | ANULADO
+    comentario: Mapped[str | None] = mapped_column(Unicode(1000))
+    fecha_solicitud: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_respuesta: Mapped[datetime | None] = mapped_column(DateTime)
+    recordado: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    ticket: Mapped[Ticket] = relationship(lazy="joined")
+    aprobador: Mapped[Usuario] = relationship(foreign_keys=[aprobador_id], lazy="joined")
+    en_lugar_de: Mapped[Usuario | None] = relationship(foreign_keys=[en_lugar_de_id], lazy="joined")
+
+
+class TicketVinculo(Base):
+    """Relación entre dos tickets (22). Se guarda en un sentido: ticket_id «tipo» relacionado_id."""
+    __tablename__ = "ticket_vinculos"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    relacionado_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    tipo: Mapped[str] = mapped_column(String(15))   # RELACIONADO | DUPLICADO | BLOQUEADO_POR | NO_DUPLICADO
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    ticket: Mapped[Ticket] = relationship(foreign_keys=[ticket_id], lazy="joined")
+    relacionado: Mapped[Ticket] = relationship(foreign_keys=[relacionado_id], lazy="joined")
+
+
+class AvisoGeneral(Base):
+    """Caída o falla que afecta a muchos a la vez (ECUAPASS, internet, correo…) (24)."""
+    __tablename__ = "avisos_generales"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    titulo: Mapped[str] = mapped_column(Unicode(200))
+    mensaje: Mapped[str] = mapped_column(Unicode(1000))
+    sistema: Mapped[str] = mapped_column(Unicode(100))
+    palabras_clave: Mapped[str | None] = mapped_column(Unicode(500))
+    areas: Mapped[str | None] = mapped_column(String(300))   # ids separados por coma; NULL = todos
+    mostrar_publico: Mapped[bool] = mapped_column(Boolean, default=False)   # también en /solicitud
+    estado: Mapped[str] = mapped_column(String(15), default="INVESTIGANDO")  # INVESTIGANDO | IDENTIFICADO | MONITOREANDO | RESUELTO
+    ticket_maestro_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
+    inicio: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fin: Mapped[datetime | None] = mapped_column(DateTime)
+    proxima_novedad: Mapped[str | None] = mapped_column(Unicode(100))
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime)
+
+    ticket_maestro: Mapped[Ticket | None] = relationship(lazy="joined")
+
+    @property
+    def codigo(self) -> str:
+        return f"AVISO-{self.id:04d}"
+
+    @property
+    def area_ids(self) -> list[int]:
+        return [int(x) for x in (self.areas or "").split(",") if x.strip().isdigit()]
+
+
+class AvisoActualizacion(Base):
+    __tablename__ = "aviso_actualizaciones"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    aviso_id: Mapped[int] = mapped_column(ForeignKey("avisos_generales.id"))
+    estado: Mapped[str] = mapped_column(String(15))
+    texto: Mapped[str] = mapped_column(Unicode(1000))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    usuario: Mapped[Usuario | None] = relationship(lazy="joined")
+
+
+class AvisoAfectado(Base):
+    __tablename__ = "aviso_afectados"
+    aviso_id: Mapped[int] = mapped_column(ForeignKey("avisos_generales.id"), primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), primary_key=True)
+    comentario: Mapped[str | None] = mapped_column(Unicode(500))
+    ticket_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    usuario: Mapped[Usuario] = relationship(lazy="joined")

@@ -10,7 +10,8 @@ import { api, get } from "../api/client";
 import { mensajeError } from "../components/Aviso";
 import { Cargando } from "../components/Comunes";
 import { marca } from "../theme";
-import { tamanoArchivo } from "../utils/formato";
+import { fechaHora, tamanoArchivo } from "../utils/formato";
+import type { AvisoPublico } from "../api/tercera";
 
 type Formulario = {
   habilitado: boolean;
@@ -28,6 +29,7 @@ const VACIO = { nombre: "", correo: "", telefono: "", empresa: "", asunto: "", d
 
 /** Formulario público: clientes y personas externas registran una solicitud sin tener cuenta en la Mesa. */
 export default function SolicitudPublica() {
+  const avisos = useQuery({ queryKey: ["publico", "avisos"], queryFn: () => get<AvisoPublico[]>("/publico/avisos"), staleTime: 60_000, retry: false });
   const form = useQuery({ queryKey: ["publico", "formulario"], queryFn: () => get<Formulario>("/publico/formulario"), staleTime: 30 * 60_000, retry: 1 });
   const [datos, setDatos] = useState(VACIO);
   const [categoriaId, setCategoriaId] = useState<number | "">("");
@@ -116,6 +118,14 @@ export default function SolicitudPublica() {
       <Box sx={{ maxWidth: 760, mx: "auto", px: 2, mt: -7, pb: 6 }}>
         <Paper sx={{ p: { xs: 2.5, sm: 4 } }}>
           <Box component="img" src="/logo-aducorp.png" alt="ADUCORP" sx={{ height: 48, mb: 3, display: "block" }} />
+          {(avisos.data ?? []).map((a) => (
+            <Alert key={a.id} severity="error" sx={{ mb: 2 }}>
+              <b>{a.titulo}</b> · {a.mensaje}
+              <Typography variant="caption" sx={{ display: "block", mt: 0.5 }}>
+                {a.estado_nombre} · última actualización {fechaHora(a.ultima_actualizacion)}. Si su solicitud es por esto, no hace falta registrarla: le avisaremos aquí cuando se resuelva.
+              </Typography>
+            </Alert>
+          ))}
           {form.isLoading && <Cargando alto={240} />}
           {form.isError && (
             <Alert severity="warning">
@@ -130,6 +140,9 @@ export default function SolicitudPublica() {
                 {registrado.numero}
               </Typography>
               <Typography sx={{ color: "text.secondary", maxWidth: 480 }}>{registrado.mensaje} Guarde este número para cualquier consulta.</Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", maxWidth: 480 }}>
+                En el correo de confirmación encontrará el botón «Ver el estado de mi solicitud» para seguirla sin crear una cuenta.
+              </Typography>
               <Button variant="outlined" onClick={nueva}>
                 Registrar otra solicitud
               </Button>

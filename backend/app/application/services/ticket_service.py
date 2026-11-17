@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.application.errores import Conflicto, Contexto, NoEncontrado, Prohibido, ReglaNegocio
 from app.application.schemas import esquemas as s
+from app.application.services.aprobacion_service import AprobacionService
 from app.application.services.auditoria_service import AuditoriaService
 from app.application.services.encuesta_service import EncuestaService
 from app.application.services.encuesta_service import a_salida as encuesta_salida
@@ -26,6 +27,8 @@ from app.domain.reglas import TransicionInvalida, cuenta_como_primera_respuesta,
 from app.infrastructure.db import models as m
 from app.infrastructure.repositories.repositorios import CatalogoRepository, TicketRepository, UsuarioRepository, coordinadores
 from app.infrastructure.storage.local import AlmacenamientoLocal
+
+MAX_ARCHIVOS_COMENTARIO = 10
 
 ROLES_ATIENDEN = {Rol.ANALISTA, Rol.SUPERVISOR, Rol.ADMIN_MESA, Rol.SUPER_ADMIN}
 
@@ -103,7 +106,27 @@ class TicketService:
             a.append("eliminar")
         if u.tiene(Permiso.IA_USAR) and gestor:
             a.append("ia")
+        if estado == Estado.POR_APROBAR:   # hasta que el jefe responda no se asigna, escala ni resuelve (sí se puede cancelar)
+            a = [x for x in a if x not in ("asignar", "escalar", "cerrar")]
+        if gestor and u.tiene(Permiso.TICKET_EDITAR):
+            a.append("vincular")
         return a
+
+    def cliente_por_correo(self, *correos: str | None) -> int | None:
+        """Cliente cuya empresa usa el dominio del correo (p. ej. @aducorp.com.ec → Aducorp CIA LTDA). Ignora las cuentas técnicas."""
+        from app.application.services.notificacion_service import cuentas_sistema
+        from app.domain.correos import separar
+
+        dominios = [c.strip().lower().rsplit("@", 1)[-1] for c in correos if c and "@" in c and c.strip().lower() not in cuentas_sistema()]
+        if not dominios:
+            return None
+        clientes = list(self.session.scalars(select(m.Cliente).where(m.Cliente.activo == True, m.Cliente.eliminado == False,
+                                                                        m.Cliente.dominios.is_not(None))))
+        for d in dominios:
+            for c in clientes:
+                if d in separar(c.dominios):
+                    return c.id
+        return None
 
     def _exigir(self, u: m.Usuario, t: m.Ticket, accion: str) -> None:
         if accion not in self.acciones(u, t):
@@ -154,7 +177,7 @@ class TicketService:
                 raise ReglaNegocio("Solicitante no válido")
             motivo = (dto.en_nombre_motivo or "").strip() or None
             if not self.es_mesa_registro(u):
-                self.validar_en_nombre(u, solicitante, categoria, motivo)
+                self.validar_en_nombre(u, solicitante, categoria, motivo, sub.id)
             creado_por = u
 
         if dto.prioridad_id:
@@ -175,13 +198,14 @@ class TicketService:
             responsable = self.ia.sugerir_responsable(categoria)
         equipo = self._validar_equipo(dto.equipo_id, u, solicitante) if dto.equipo_id else None
 
+        cliente_id = dto.cliente_id or self.cliente_por_correo(str(dto.correo or ""), solicitante.correo)
         ahora = utcnow()
         resp_min, res_min = self.sla.minutos_sla(categoria.id, prioridad)
         t = m.Ticket(
             numero=self.repo.siguiente_numero(datetime.now(ZoneInfo(settings.ZONA_HORARIA)).year),
             asunto=dto.asunto.strip(), descripcion=dto.descripcion.strip(),
             solicitante_id=solicitante.id, solicitante_nombre=solicitante.nombre, solicitante_cargo=solicitante.cargo,
-            area_id=solicitante.area_id, cliente_id=dto.cliente_id, correo=str(dto.correo or solicitante.correo),
+            area_id=solicitante.area_id, cliente_id=cliente_id, correo=str(dto.correo or solicitante.correo),
             telefono=dto.telefono or solicitante.telefono, categoria_id=categoria.id, subcategoria_id=sub.id,
             prioridad_id=prioridad.id, estado=Estado.NUEVO, canal=canal or dto.canal, fecha_creacion=ahora, fecha_actualizacion=ahora,
             sla_respuesta_min=resp_min, sla_resolucion_min=res_min, equipo_id=equipo.id if equipo else None,
@@ -210,7 +234,13 @@ class TicketService:
             self.notif.correo("TICKET_EN_NOMBRE", [solicitante], t, creado_por=u.nombre, motivo=motivo or "(sin motivo)")
         elif t.canal not in ("CORREO", "WEB", "PROGRAMADO"):   # correo y formulario público envían su propio acuse
             self.notif.correo("TICKET_CREADO", [solicitante], t)
-        if responsable:
+        if dto.aviso_id:
+            from app.application.services.aviso_service import AvisoService
+
+            AvisoService(self.session).vincular_ticket(dto.aviso_id, t, solicitante)
+        if not sistema and AprobacionService(self.session).iniciar(self, t, ctx, ahora):
+            pass   # queda «Por aprobar»: se asigna cuando el jefe lo apruebe
+        elif responsable:
             self._asignar(t, responsable, u if dto.responsable_id else None, "MANUAL" if dto.responsable_id else "AUTOMATICA",
                           "Asignación directa al registrar" if dto.responsable_id else f"Asignación automática ({categoria.modo_asignacion.lower()})", ctx, ahora,
                           teams=False)
@@ -234,13 +264,15 @@ class TicketService:
         hoy = datetime.now(ZoneInfo(settings.ZONA_HORARIA)).date()
         return None if d.hasta and d.hasta < hoy else d
 
-    def validar_en_nombre(self, u: m.Usuario, solicitante: m.Usuario, categoria: m.Categoria, motivo: str | None) -> None:
+    def validar_en_nombre(self, u: m.Usuario, solicitante: m.Usuario, categoria: m.Categoria, motivo: str | None,
+                          subcategoria_id: int | None = None) -> None:
         d = self.delegacion_vigente(u)
         if d is None:
             raise Prohibido("No tiene autorización para crear tickets en nombre de otra persona")
         if d.area_ids and solicitante.area_id not in d.area_ids:
             raise Prohibido(f"No está autorizado a crear tickets en nombre de personas de {solicitante.area.nombre if solicitante.area else 'esa área'}")
-        if categoria.restringida_en_nombre:
+        if categoria.restringida_en_nombre and AprobacionService(self.session).regla_para(categoria.id, subcategoria_id) is None:
+            # Con una regla de aprobación activa sí se puede: el jefe del beneficiario da el visto bueno antes de atenderlo.
             raise ReglaNegocio(f"«{categoria.nombre}» no se puede pedir en nombre de otra persona: debe solicitarlo {solicitante.nombre} "
                                "o la Mesa de Servicios")
         if not motivo or len(motivo) < 5:
@@ -383,6 +415,10 @@ class TicketService:
             raise ReglaNegocio("Asigne un responsable antes de iniciar la atención")
         if destino in (Estado.PENDIENTE_CLIENTE, Estado.CANCELADO) and not (comentario or "").strip():
             raise ReglaNegocio("Indique un comentario para el solicitante")
+        if destino in (Estado.RESUELTO, Estado.CERRADO):
+            self.exigir_sin_bloqueos(t)
+        if actual == Estado.POR_APROBAR:
+            AprobacionService(self.session).anular(t, f"Ticket cancelado por {u.nombre}")
         ahora = utcnow()
         self._aplicar_estado(t, actual, destino, u, ctx, ahora)
         if comentario and comentario.strip():
@@ -519,6 +555,14 @@ class TicketService:
             self.notif.notificar([t.responsable, self._supervisor(t)], "TICKET_REABIERTO", f"{t.numero} reabierto",
                                  f"«{t.asunto}» fue reabierto ({t.reaperturas} reapertura(s)).", t, "AVISO")
 
+    def exigir_sin_bloqueos(self, t: m.Ticket) -> None:
+        """Un ticket «Bloqueado por» otro no se resuelve hasta que el otro esté resuelto, cerrado o cancelado."""
+        from app.application.services.vinculo_service import VinculoService
+
+        abiertos = VinculoService(self.session).bloqueos_abiertos(t)
+        if abiertos:
+            raise ReglaNegocio("No se puede resolver: está bloqueado por " + ", ".join(x.numero for x in abiertos) + " que sigue abierto")
+
     # ================================================================= escalar
     def escalar(self, ticket_id: int, dto: s.EscalarEntrada, ctx: Contexto) -> m.Ticket:
         u = ctx.usuario
@@ -557,6 +601,7 @@ class TicketService:
         if t.estado not in (Estado.RESUELTO, Estado.CERRADO):
             if t.responsable_id is None:
                 raise ReglaNegocio("Asigne un responsable antes de cerrar el ticket")
+            self.exigir_sin_bloqueos(t)
             self._aplicar_estado(t, Estado(t.estado), Estado.RESUELTO, u, ctx, ahora)
         if t.estado == Estado.CERRADO:
             raise ReglaNegocio("El ticket ya está cerrado")
@@ -573,28 +618,47 @@ class TicketService:
         return t
 
     # ============================================================ comentarios
-    def comentar(self, ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto) -> m.TicketComentario:
+    def comentar(self, ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto,
+                 archivos: list[tuple[str, str, bytes]] | None = None) -> m.TicketComentario:
+        """Agrega un comentario. `archivos` (nombre, tipo, contenido) son capturas o archivos que van con el comentario:
+        se validan todos antes de guardar nada y quedan enlazados al comentario (y en la pestaña Adjuntos)."""
         u = ctx.usuario
         t = self.obtener(ticket_id, u)
         self._exigir(u, t, "comentar")
         if dto.es_interno and "nota_interna" not in self.acciones(u, t):
             raise Prohibido("Solo el equipo de la mesa puede registrar notas internas")
+        archivos = archivos or []
+        if archivos:
+            self._exigir(u, t, "adjuntar")
+            if len(archivos) > MAX_ARCHIVOS_COMENTARIO:
+                raise ReglaNegocio(f"Puede adjuntar hasta {MAX_ARCHIVOS_COMENTARIO} archivos por comentario")
+            max_mb, permitidas = self.reglas_adjuntos()
+            for nombre, _, contenido in archivos:
+                self.validar_archivo(nombre, contenido, max_mb, permitidas)
+        texto = dto.texto.strip() or (f"Adjuntó {len(archivos)} archivo{'s' if len(archivos) != 1 else ''}" if archivos else "")
+        if not texto:
+            raise ReglaNegocio("Escriba un comentario")
         ahora = utcnow()
-        c = self._agregar_comentario(t, u, dto.texto.strip(), dto.es_interno, dto.tipo, dto.minutos_invertidos, ahora)
+        c = self._agregar_comentario(t, u, texto, dto.es_interno, dto.tipo, dto.minutos_invertidos, ahora)
+        for nombre, tipo_mime, contenido in archivos:
+            a = self.guardar_adjunto(t, u, nombre, tipo_mime, contenido, ctx)
+            a.comentario_id = c.id
+        if archivos:
+            self.session.flush()
         es_solicitante = t.solicitante_id == u.id and not self.es_gestor(u, t)
         if es_solicitante:
             # Respuesta del cliente: el SLA se reanuda automáticamente
             if t.estado == Estado.PENDIENTE_CLIENTE:
                 self._aplicar_estado(t, Estado.PENDIENTE_CLIENTE, Estado.EN_PROCESO, None, ctx, ahora)
                 self._hist(t, u, "REANUDACION", None, None, None, "El solicitante respondió; SLA reanudado", ahora)
-            self.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: nuevo comentario", f"{u.nombre}: {dto.texto[:200]}", t)
+            self.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: nuevo comentario", f"{u.nombre}: {texto[:200]}", t)
         else:
             if not dto.es_interno:
                 self.sla.registrar_primera_respuesta(t, ahora)
-                self.notif.notificar([t.solicitante], "COMENTARIO", f"{t.numero}: respuesta del equipo", f"{u.nombre}: {dto.texto[:200]}", t)
+                self.notif.notificar([t.solicitante], "COMENTARIO", f"{t.numero}: respuesta del equipo", f"{u.nombre}: {texto[:200]}", t)
                 # Sin lista explícita se usan las personas en copia del ticket; una lista vacía no copia a nadie
                 copias = self.copias(t) if dto.copia_a is None else dto.copia_a
-                c.copia_a = unir(self.responder_por_correo(t, u, dto.texto.strip(), copias))
+                c.copia_a = unir(self.responder_por_correo(t, u, texto, copias))
         t.fecha_actualizacion = ahora
         return c
 
@@ -659,11 +723,22 @@ class TicketService:
         self.auditoria.registrar(ctx, AccionAuditoria.ADJUNTO_SUBIDO, "ticket", t.id, {"archivo": a.nombre_original, "sha256": sha})
         return a
 
-    def adjunto(self, ticket_id: int, adjunto_id: int, ctx: Contexto) -> tuple[m.TicketAdjunto, Path]:
+    def ve_internos(self, u: m.Usuario, t: m.Ticket) -> bool:
+        """Gestores y quienes fueron responsables ven notas internas (y sus archivos)."""
+        return self.es_gestor(u, t) or u.tiene(Permiso.TICKET_VER_TODOS) or self.repo.participo(u.id, t.id)
+
+    def adjunto(self, ticket_id: int, adjunto_id: int, ctx: Contexto, vista: bool = False) -> tuple[m.TicketAdjunto, Path]:
         t = self.obtener(ticket_id, ctx.usuario)
         a = self.session.get(m.TicketAdjunto, adjunto_id)
         if a is None or a.ticket_id != t.id or a.eliminado:
             raise NoEncontrado("Adjunto no encontrado")
+        if a.comentario_id and not self.ve_internos(ctx.usuario, t):
+            c = self.session.get(m.TicketComentario, a.comentario_id)
+            if c is not None and c.es_interno:
+                raise NoEncontrado("Adjunto no encontrado")
+        if vista:
+            # Vista previa de una captura dentro del comentario: no se registra como descarga
+            return a, self.almacenamiento.ruta(a.ruta_almacenamiento)
         self.auditoria.registrar(ctx, AccionAuditoria.ADJUNTO_DESCARGADO, "ticket", t.id, {"archivo": a.nombre_original})
         return a, self.almacenamiento.ruta(a.ruta_almacenamiento)
 
@@ -796,6 +871,11 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
     participante = not gestor and svc.repo.participo(u.id, t.id)
     lectura = gestor or participante
     resumen = lambda x: {"id": x.id, "nombre": x.nombre, "correo": x.correo, "cargo": x.cargo} if x else None  # noqa: E731
+    comentarios = svc.repo.comentarios(t.id, incluir_internos=lectura)
+    visibles = {c.id for c in comentarios}
+    adjuntos = svc.repo.adjuntos(t.id)
+    archivo = lambda a: {"id": a.id, "nombre_original": a.nombre_original, "tipo_mime": a.tipo_mime,  # noqa: E731
+                         "tamano_bytes": a.tamano_bytes, "usuario": resumen(a.usuario), "fecha": a.fecha, "comentario_id": a.comentario_id}
     historial = svc.repo.historial(t.id) if lectura else [h for h in svc.repo.historial(t.id) if h.accion in ("CREACION", "CAMBIO_ESTADO", "CIERRE", "REAPERTURA")]
     return {
         **{k: getattr(t, k) for k in (
@@ -818,13 +898,11 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "riesgo_ia": float(t.riesgo_ia) if t.riesgo_ia is not None and gestor else None,
         "comentarios": [
             {"id": c.id, "usuario": resumen(c.usuario), "texto": c.texto, "es_interno": c.es_interno, "tipo": c.tipo,
-             "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha, "copia_a": separar(c.copia_a) if lectura else []}
-            for c in svc.repo.comentarios(t.id, incluir_internos=lectura)
+             "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha, "copia_a": separar(c.copia_a) if lectura else [],
+             "adjuntos": [archivo(a) for a in adjuntos if a.comentario_id == c.id]}
+            for c in comentarios
         ],
-        "adjuntos": [
-            {"id": a.id, "nombre_original": a.nombre_original, "tipo_mime": a.tipo_mime, "tamano_bytes": a.tamano_bytes,
-             "usuario": resumen(a.usuario), "fecha": a.fecha} for a in svc.repo.adjuntos(t.id)
-        ],
+        "adjuntos": [archivo(a) for a in adjuntos if not a.comentario_id or a.comentario_id in visibles],
         "historial": [
             {"id": h.id, "accion": h.accion, "campo": h.campo, "valor_anterior": h.valor_anterior, "valor_nuevo": h.valor_nuevo,
              "detalle": h.detalle, "usuario": resumen(h.usuario), "fecha": h.fecha} for h in historial
@@ -844,6 +922,28 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "equipo": InventarioService(svc.session).para_ticket(t),
         "recurrente_id": t.recurrente_id,
         "kb_vistos": ConocimientoService(svc.session).vistos(t.id) if lectura else [],
+        **_extras_tercera_ronda(svc, t, u, lectura),
+    }
+
+
+def _extras_tercera_ronda(svc: TicketService, t: m.Ticket, u: m.Usuario, lectura: bool) -> dict:
+    """Aprobaciones (21), tickets vinculados (22), avisos generales (24) y enlace de seguimiento (20)."""
+    from app.application.services.aviso_service import AvisoService
+    from app.application.services.seguimiento_service import SeguimientoService
+    from app.application.services.vinculo_service import VinculoService
+
+    aprob = AprobacionService(svc.session)
+    filas = aprob.de_ticket(t.id)
+    propio = t.solicitante_id == u.id or t.creado_por_id == u.id
+    pendiente = next((f for f in filas if f.estado == "PENDIENTE" and f.aprobador_id == u.id), None)
+    vinculos = VinculoService(svc.session)
+    return {
+        "aprobaciones": [{k: v for k, v in aprob.salida(f).items() if k != "ticket"} for f in filas] if (lectura or propio or pendiente) else [],
+        "aprobacion_pendiente_id": pendiente.id if pendiente else None,
+        "vinculos": vinculos.de_ticket(t, u) if lectura else [],
+        "duplicado_de": vinculos.duplicado_de(t),
+        "avisos": AvisoService(svc.session).de_ticket(t.id),
+        "seguimiento_url": SeguimientoService(svc.session).url(t) if lectura else None,
     }
 
 

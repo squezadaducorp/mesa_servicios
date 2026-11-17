@@ -80,3 +80,54 @@ def responder_encuesta(dto: s.EncuestaPublicaEntrada, ctx: Contexto = Depends(co
         svc.agregar_comentario(t, dto.comentario)
     session.flush()
     return _estado_encuesta(session, t)
+
+
+# ------------------------------------------------------------ seguimiento sin cuenta (mejora 20)
+from app.application.schemas.tercera import ReenviarSeguimiento  # noqa: E402
+from app.application.services.formulario_service import DemasiadasSolicitudes  # noqa: E402
+from app.application.services.seguimiento_service import SeguimientoService  # noqa: E402
+from app.core.limite import Limitador  # noqa: E402
+
+limitador_seguimiento = Limitador(5, 3600)
+limitador_respuestas = Limitador(20, 3600)
+
+
+@router.get("/seguimiento/{ticket_id}", summary="Estado de una solicitud desde el enlace del correo (sin cuenta)")
+def seguimiento(ticket_id: int, t: str, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
+    svc = SeguimientoService(session)
+    datos = svc.vista(svc.verificar(ticket_id, t), ctx)
+    session.flush()
+    return datos
+
+
+@router.post("/seguimiento/{ticket_id}/responder", summary="Responder o adjuntar un documento desde el enlace de seguimiento")
+async def responder_seguimiento(ticket_id: int, request: Request, t: str = Form(...), texto: str = Form(default=""),
+                                archivos: list[UploadFile] = File(default=[]),
+                                ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
+    if not limitador_respuestas.permitir(f"{ip_cliente(request)}:{ticket_id}"):
+        raise DemasiadasSolicitudes("Recibimos varios mensajes en poco tiempo. Inténtelo de nuevo en una hora.")
+    svc = SeguimientoService(session)
+    ticket = svc.verificar(ticket_id, t)
+    limite = min(settings.FORMULARIO_WEB_ADJUNTOS_MAX_MB, settings.ADJUNTOS_MAX_MB) * 1024 * 1024 + 1
+    leidos = []
+    for a in [a for a in archivos if a.filename][: max(0, settings.FORMULARIO_WEB_ADJUNTOS_MAX) + 1]:
+        leidos.append(ArchivoPublico(a.filename or "archivo", a.content_type or "", await a.read(limite)))
+    svc.responder(ticket, texto, leidos, ctx)
+    session.flush()
+    return svc.vista(ticket, ctx)
+
+
+@router.post("/seguimiento/reenviar", summary="Pedir un enlace nuevo con el número de ticket y el correo (respuesta siempre igual)")
+def reenviar_seguimiento(dto: ReenviarSeguimiento, request: Request, session: Session = DbSession):
+    if limitador_seguimiento.permitir(ip_cliente(request)):
+        SeguimientoService(session).reenviar(dto.numero, dto.correo)
+        session.flush()
+    return {"mensaje": "Si el número y el correo coinciden con una solicitud, le enviamos un enlace nuevo en unos minutos."}
+
+
+@router.get("/avisos", summary="Avisos generales marcados como públicos (para el formulario /solicitud)")
+def avisos_publicos(session: Session = DbSession):
+    from app.application.services.aviso_service import AvisoService
+
+    svc = AvisoService(session)
+    return [svc.salida_publica(a) for a in svc.activos(None, publico=True)]
