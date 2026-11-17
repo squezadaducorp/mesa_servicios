@@ -110,7 +110,7 @@ class NotificacionService:
         ctx = self.contexto_ticket(ticket, destinatario=nombre, **extra)
         asunto, cuerpo = plantilla.asunto, plantilla.cuerpo_html
         for k, v in ctx.items():
-            seguro = v if k == "url" else html.escape(v)
+            seguro = v if k.startswith("url") else html.escape(v)
             asunto = asunto.replace("{" + k + "}", v)
             cuerpo = cuerpo.replace("{" + k + "}", seguro)
         copia = [c for c in (cc or []) if c.lower() not in cuentas_sistema()]

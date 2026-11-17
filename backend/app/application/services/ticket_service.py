@@ -5,12 +5,14 @@ from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import case, or_, select
 from sqlalchemy.orm import Session
 
 from app.application.errores import Conflicto, Contexto, NoEncontrado, Prohibido, ReglaNegocio
 from app.application.schemas import esquemas as s
 from app.application.services.auditoria_service import AuditoriaService
+from app.application.services.encuesta_service import EncuestaService
+from app.application.services.encuesta_service import a_salida as encuesta_salida
 from app.application.services.ia_service import IaService
 from app.application.services.notificacion_service import NotificacionService, cuentas_sistema
 from app.application.services.sla_service import SlaService
@@ -82,6 +84,8 @@ class TicketService:
             a.append("cerrar")
         if u.tiene(Permiso.TICKET_REABRIR) and estado in (Estado.RESUELTO, Estado.CERRADO) and (gestor or propio):
             a.append("reabrir")
+        if propio and estado in (Estado.RESUELTO, Estado.CERRADO) and EncuestaService(self.session).puede_calificar(u, t):
+            a.append("calificar")
         if u.tiene(Permiso.TICKET_COMENTAR) and (gestor or propio):
             a.append("comentar")
             if gestor:
@@ -433,7 +437,8 @@ class TicketService:
             self.notif.teams("TICKET_CERRADO", t)
         elif destino == Estado.RESUELTO:
             self.notif.notificar([solicitante], "TICKET_RESUELTO", f"{t.numero} resuelto",
-                                 f"«{t.asunto}» fue resuelto. Puede confirmarlo o reabrirlo si persiste.", t)
+                                 f"«{t.asunto}» fue resuelto. Califique la atención o reábralo si persiste.", t)
+            EncuestaService(self.session).invitar(self, t)
         elif destino == Estado.PENDIENTE_CLIENTE:
             self.notif.notificar([solicitante], "PENDIENTE_CLIENTE", f"{t.numero} requiere su respuesta",
                                  f"El equipo necesita información para continuar con «{t.asunto}».", t, "AVISO")
@@ -643,6 +648,17 @@ class TicketService:
             stmt = stmt.where(T.fecha_creacion >= desde)
         if hasta:
             stmt = stmt.where(T.fecha_creacion < hasta)
+        if f.vence:
+            ahora = utcnow()
+            activos = [Estado.NUEVO, Estado.ASIGNADO, Estado.EN_PROCESO, Estado.ESCALADO]
+            if f.vence == "HOY":
+                _, fin_hoy = limites_dia_utc(None, datetime.now(ZoneInfo(settings.ZONA_HORARIA)).date())
+                stmt = stmt.where(T.estado.in_(activos), T.sla_pausa_desde.is_(None), T.sla_excluido == False, or_(
+                    (T.sla_resolucion_vence >= ahora) & (T.sla_resolucion_vence < fin_hoy),
+                    T.fecha_primera_respuesta.is_(None) & (T.sla_respuesta_vence >= ahora) & (T.sla_respuesta_vence < fin_hoy)))
+            else:
+                stmt = stmt.where(T.estado.in_(activos), T.sla_excluido == False,
+                                  or_(T.sla_incumplido == True, (T.sla_pausa_desde.is_(None)) & (T.sla_resolucion_vence < ahora)))
         if f.solo_mios:
             stmt = stmt.where(or_(T.responsable_id == u.id, T.solicitante_id == u.id))
         if f.participe:
@@ -652,16 +668,44 @@ class TicketService:
             "fecha_asc": (T.fecha_creacion.asc(), T.id.asc()),
             "sla_desc": (T.sla_consumido_pct.desc(), T.id.desc()),
             "prioridad": (T.prioridad_id.asc(), T.fecha_creacion.asc()),
+            "vence": (case((T.fecha_primera_respuesta.is_(None) & (T.sla_respuesta_vence < T.sla_resolucion_vence), T.sla_respuesta_vence),
+                           else_=T.sla_resolucion_vence).asc(), T.id.asc()),
         }[f.orden]
         return stmt.order_by(*orden)
 
     def listar(self, u: m.Usuario, f: s.FiltroTickets, pagina: int, tamano: int):
         return self.repo.paginar(self.consulta(u, f), pagina, tamano)
 
+    def calificar(self, ticket_id: int, calificacion: int, comentario: str | None, ctx: Contexto) -> m.TicketEncuesta:
+        t = self.obtener(ticket_id, ctx.usuario)
+        return EncuestaService(self.session).registrar(self, t, calificacion, comentario, ctx.usuario, "PORTAL", ctx)
+
+    def alertas_sla(self, u: m.Usuario) -> list[dict]:
+        """Tickets propios (como responsable) a los que les quedan menos de sla.aviso_previo_2_min laborables."""
+        from app.domain.sla import avisos_configurados
+
+        limite = avisos_configurados(self.catalogo.configuracion()).previo_2_min
+        ahora = utcnow()
+        T = m.Ticket
+        tickets = self.session.scalars(
+            select(T).where(T.responsable_id == u.id, T.eliminado == False, T.sla_pausa_desde.is_(None),
+                            T.estado.in_([Estado.NUEVO, Estado.ASIGNADO, Estado.EN_PROCESO, Estado.ESCALADO]),
+                            T.sla_resolucion_vence > ahora - timedelta(days=1))
+        ).unique()
+        alertas = []
+        for t in tickets:
+            v = self.sla.proximo_vencimiento(t, ahora)
+            if v and 0 < v[2] <= limite:
+                alertas.append({"id": t.id, "numero": t.numero, "asunto": t.asunto, "prioridad": t.prioridad.nombre,
+                                "prioridad_codigo": t.prioridad.codigo, "vence_tipo": v[0], "vence": v[1], "vence_en_min": v[2]})
+        return sorted(alertas, key=lambda a: a["vence_en_min"])
+
 
 # ================================================================ mapeos
-def a_listado(t: m.Ticket) -> dict:
+def a_listado(t: m.Ticket, sla: SlaService | None = None, ahora: datetime | None = None) -> dict:
+    v = sla.proximo_vencimiento(t, ahora or utcnow()) if sla else None
     return {
+        "vence_tipo": v[0] if v else None, "vence_en_min": v[2] if v else None,
         "id": t.id, "numero": t.numero, "asunto": t.asunto, "fecha_creacion": t.fecha_creacion,
         "solicitante_nombre": t.solicitante_nombre, "cliente": t.cliente.razon_social if t.cliente else None,
         "categoria": t.categoria.nombre, "subcategoria": t.subcategoria.nombre, "prioridad": t.prioridad.nombre,
@@ -718,6 +762,7 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "copias": [{"correo": c.correo, "origen": c.origen} for c in svc.repo.copias(t.id)] if lectura else [],
         "acciones": svc.acciones(u, t),
         "solo_lectura_participante": participante,
+        "encuesta": encuesta_salida(EncuestaService(svc.session).de_ticket(t.id)),
     }
 
 

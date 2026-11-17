@@ -22,6 +22,7 @@ const Sla = lazy(() => import("./pages/admin/Sla"));
 const Auditoria = lazy(() => import("./pages/admin/Auditoria"));
 const Configuracion = lazy(() => import("./pages/admin/Configuracion"));
 const SolicitudPublica = lazy(() => import("./pages/SolicitudPublica"));
+const EncuestaPublica = lazy(() => import("./pages/EncuestaPublica"));
 
 function Protegida({ children }: { children: ReactNode }) {
   const { usuario, cargando } = useAuth();
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/auth/entra" element={<EntraRetorno />} />
         <Route path="/solicitud" element={<SolicitudPublica />} />
+        <Route path="/encuesta" element={<EncuestaPublica />} />
         <Route
           element={
             <Protegida>

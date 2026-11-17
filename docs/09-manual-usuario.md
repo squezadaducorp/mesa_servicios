@@ -52,7 +52,9 @@ El personal de la mesa ve además los campos **Canal** (portal, correo, teléfon
 * La barra es verde por debajo del 75 %, amarilla desde el 75 %, naranja desde el 90 % y roja cuando el plazo venció.
 * **Filtros:** estado, prioridad, categoría, subcategoría, responsable, cliente, fechas, SLA (cumplido, incumplido, en curso o en riesgo, es decir 75 % o más) y *Solo asignados a mí*. Pulse **Filtros** para mostrarlos.
 * **Tickets en los que participé** (analistas y supervisores): botón bajo el buscador que muestra los tickets que usted atendió alguna vez, aunque hoy estén con otro responsable o en otra categoría (por ejemplo, pasaron a LEGAL). Puede abrirlos y ver su historial y comentarios, pero solo el responsable actual puede modificarlos.
-* **Orden:** más recientes, más antiguos o mayor consumo de SLA, para atender primero lo que está por vencer.
+* **Pestañas (analistas y supervisores):** *Mis tickets*, *Por vencer hoy* y *Vencidos* (cada una con su número) y *Todos*. *Por vencer hoy* muestra sus tickets que vencen antes de terminar la jornada, el más urgente primero. El correo del resumen diario abre esta pestaña.
+* **Vence en:** bajo la barra de SLA, el tiempo laborable que falta para el próximo plazo («Faltan 1 h 35 min», «Vencido hace 20 min»). Si dice *1.ª resp.*, el plazo es el de la primera respuesta. Verde con más de 2 h, ámbar hasta 2 h, naranja en los últimos 30 min y rojo vencido.
+* **Orden:** más recientes, más antiguos, mayor consumo de SLA o próximo a vencer.
 * Quien tiene permiso de exportar puede descargar la lista filtrada en Excel, PDF o CSV.
 
 En el celular la lista se muestra como tarjetas:
@@ -101,12 +103,37 @@ Al escribir una respuesta, el campo **Enviar copia a (opcional)** viene con esas
 
 **Avisos de SLA.** Al 75 % del plazo recibe una notificación y un correo. Al 90 % se avisa a su supervisor y al coordinador. Al 100 % el ticket queda *Incumplido* y se escala solo.
 
+### Avisos antes de vencer
+
+La Mesa avisa al responsable **antes** de que venza el plazo, por la campana y por correo:
+
+* **1.ª respuesta:** si nadie ha respondido y falta 1 hora para el plazo de la primera respuesta.
+* **1.er aviso:** cuando faltan 2 horas laborables para resolver.
+* **2.º aviso (urgente):** cuando faltan 30 minutos; también avisa al supervisor y al coordinador.
+* **Barra roja arriba de la pantalla:** mientras la Mesa está abierta, si uno de sus tickets está en los últimos 30 minutos. Se puede cerrar con la ✕.
+* **Resumen diario (08:30):** un correo con sus tickets que vencen hoy. Si no tiene ninguno, no llega.
+
+Los tiempos los define el administrador en *SLA y calendario › Alertas antes de vencer*.
+
+### Mi disponibilidad (vacaciones y permisos)
+
+En el menú de su nombre (arriba a la derecha) › **Mi disponibilidad**:
+
+1. Elija el motivo, desde cuándo y cuándo regresa.
+2. Elija el **reemplazo**: la Mesa sugiere a quien atiende sus mismas categorías y tiene menos tickets abiertos.
+3. Decida si pasan sus tickets abiertos al reemplazo o solo los nuevos. Con *Ver qué tickets pasan* revisa la lista.
+4. Deje marcado *Devolverme los tickets cuando regrese* y *Avisar a los solicitantes*.
+5. **Programar ausencia.** Si la fecha de inicio ya llegó, los tickets pasan de inmediato; si es futura, pasan solos ese día.
+
+Mientras está ausente, los tickets nuevos de sus categorías van al reemplazo, y quien lo cubre ve el aviso «Usted cubre a … hasta …». Al regresar, la Mesa le devuelve los tickets que sigan abiertos. Si vuelve antes, use **Volví antes** en el mismo diálogo. Su supervisor y el administrador también pueden registrarle la ausencia desde *Usuarios*.
+
 ## 5. Seguimiento del solicitante (Cliente interno)
 
 * En **Tickets** ve todos los que creó, con su estado y su avance.
 * Cuando un ticket está en **Pendiente cliente**, la mesa espera su respuesta: escríbala en el comentario y adjunte lo que le pidieron. El plazo se reanuda.
 * Si la solución no resolvió el problema, use **Reabrir** en un ticket *Resuelto* o *Cerrado* e indique el motivo.
 * No ve las notas internas del equipo.
+* **Califique la atención:** cuando su ticket queda *Resuelto*, en el detalle aparece «¿Cómo fue la atención?» con 1 a 5 estrellas y un comentario opcional. También le llega un correo con las 5 estrellas: un clic basta, sin iniciar sesión. Al calificar, el ticket se cierra; si el problema sigue, use **Reabrir** en lugar de calificar. Cada ticket se califica una sola vez.
 
 ## 6. Dashboard y reportes
 

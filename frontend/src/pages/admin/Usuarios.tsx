@@ -8,14 +8,18 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import KeyIcon from "@mui/icons-material/Key";
 import SearchIcon from "@mui/icons-material/Search";
+import BeachAccessIcon from "@mui/icons-material/BeachAccessOutlined";
 import { get, patch, post } from "../../api/client";
 import { useCatalogos } from "../../api/hooks";
-import type { Pagina, Rol, UsuarioAdmin } from "../../api/types";
+import type { Ausencia, Pagina, Rol, UsuarioAdmin } from "../../api/types";
 import { mensajeError, useAviso } from "../../components/Aviso";
 import { Cargando, Encabezado, ErrorCarga } from "../../components/Comunes";
+import { DialogoAusencia } from "../../components/Disponibilidad";
 import { fechaHora } from "../../utils/formato";
 
 type Form = Partial<UsuarioAdmin> & { clave?: string };
+
+const ROLES_ATIENDEN = ["ANALISTA", "SUPERVISOR", "ADMIN_MESA", "SUPER_ADMIN"];
 
 export default function Usuarios() {
   const qc = useQueryClient();
@@ -26,6 +30,9 @@ export default function Usuarios() {
   const [pagina, setPagina] = useState(0);
   const [form, setForm] = useState<Form | null>(null);
   const [temporal, setTemporal] = useState<{ correo: string; clave: string } | null>(null);
+  const [ausenciaDe, setAusenciaDe] = useState<UsuarioAdmin | null>(null);
+  const ausencias = useQuery({ queryKey: ["ausencias", "equipo"], queryFn: () => get<Ausencia[]>("/ausencias") });
+  const ausenciaDeUsuario = (id: number) => (ausencias.data ?? []).find((a) => a.usuario.id === id);
   const roles = useQuery({ queryKey: ["admin", "roles"], queryFn: () => get<Rol[]>("/admin/roles") });
   const q = useQuery({
     queryKey: ["admin", "usuarios", texto, rolId, pagina],
@@ -140,6 +147,22 @@ export default function Usuarios() {
                     </TableCell>
                     <TableCell>
                       {!u.activo ? <Chip size="small" label="Inactivo" /> : u.bloqueado ? <Chip size="small" color="error" label="Bloqueado" /> : <Chip size="small" color="success" label="Activo" />}
+                      {(() => {
+                        const a = ausenciaDeUsuario(u.id);
+                        if (!a) return null;
+                        return (
+                          <Tooltip title={`Del ${fechaHora(a.desde)} al ${fechaHora(a.hasta)} · cubre ${a.reemplazo.nombre}`}>
+                            <Chip
+                              size="small"
+                              icon={<BeachAccessIcon />}
+                              color={a.estado === "ACTIVA" ? "warning" : "default"}
+                              variant={a.estado === "ACTIVA" ? "filled" : "outlined"}
+                              label={a.estado === "ACTIVA" ? `Ausente · cubre ${a.reemplazo.nombre.split(" ")[0]}` : "Ausencia programada"}
+                              sx={{ ml: 0.5 }}
+                            />
+                          </Tooltip>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>{fechaHora(u.ultimo_login)}</TableCell>
                     <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
@@ -148,6 +171,13 @@ export default function Usuarios() {
                           <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
+                      {u.activo && ROLES_ATIENDEN.includes(u.rol) && (
+                        <Tooltip title="Registrar ausencia / vacaciones">
+                          <IconButton size="small" onClick={() => setAusenciaDe(u)}>
+                            <BeachAccessIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       {u.origen_autenticacion === "LOCAL" && (
                         <Tooltip title="Generar contraseña temporal">
                           <IconButton size="small" onClick={() => restablecer.mutate(u)}>
@@ -164,6 +194,8 @@ export default function Usuarios() {
           <TablePagination component="div" count={q.data?.total ?? 0} page={pagina} onPageChange={(_, p) => setPagina(p)} rowsPerPage={25} rowsPerPageOptions={[25]} />
         </Paper>
       )}
+
+      <DialogoAusencia abierto={!!ausenciaDe} onCerrar={() => setAusenciaDe(null)} usuario={ausenciaDe ?? undefined} />
 
       <Dialog open={!!form} onClose={() => setForm(null)} fullWidth maxWidth="sm">
         <DialogTitle>{form?.id ? "Editar usuario" : "Nuevo usuario"}</DialogTitle>

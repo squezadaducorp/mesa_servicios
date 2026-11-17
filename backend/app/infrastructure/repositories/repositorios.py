@@ -254,3 +254,19 @@ class AuditoriaRepository(Repository[m.Auditoria]):
 
 def coordinadores(session: Session) -> list[m.Usuario]:
     return UsuarioRepository(session).por_rol(RolEnum.ADMIN_MESA)
+
+
+def ausencias_activas(session: Session) -> dict[int, m.UsuarioAusencia]:
+    """Ausencias en curso por usuario ausente."""
+    return {a.usuario_id: a for a in session.scalars(select(m.UsuarioAusencia).where(m.UsuarioAusencia.estado == "ACTIVA")).unique()}
+
+
+def reemplazo_vigente(session: Session, usuario_id: int | None) -> m.Usuario | None:
+    """Reemplazo de un usuario que está ausente hoy (None si está disponible o el reemplazo no puede atender)."""
+    if usuario_id is None:
+        return None
+    a = session.scalars(select(m.UsuarioAusencia).where(m.UsuarioAusencia.usuario_id == usuario_id,
+                                                        m.UsuarioAusencia.estado == "ACTIVA")).first()
+    if a is None or not a.reemplazo.activo or a.reemplazo.eliminado:
+        return None
+    return a.reemplazo

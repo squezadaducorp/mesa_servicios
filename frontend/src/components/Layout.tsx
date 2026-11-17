@@ -22,6 +22,8 @@ import KeyIcon from "@mui/icons-material/Key";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ErrorIcon from "@mui/icons-material/Error";
 import InfoIcon from "@mui/icons-material/Info";
+import BeachAccessIcon from "@mui/icons-material/BeachAccessOutlined";
+import { AvisosSuperiores, DialogoAusencia } from "./Disponibilidad";
 import { useAuth } from "../auth/AuthContext";
 import { useConteoNotificaciones } from "../api/hooks";
 import { get, post } from "../api/client";
@@ -155,6 +157,8 @@ export default function Layout() {
   const escritorio = useMediaQuery(theme.breakpoints.up("md"));
   const [abierto, setAbierto] = useState(false);
   const [menuUsuario, setMenuUsuario] = useState<HTMLElement | null>(null);
+  const [disponibilidad, setDisponibilidad] = useState(false);
+  const gestor = puede(P.VER_TODOS, P.VER_AREA, P.VER_ASIGNADOS);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -248,6 +252,19 @@ export default function Layout() {
             </Box>
           </Button>
           <Menu anchorEl={menuUsuario} open={!!menuUsuario} onClose={() => setMenuUsuario(null)}>
+            {gestor && (
+              <MenuItem
+                onClick={() => {
+                  setMenuUsuario(null);
+                  setDisponibilidad(true);
+                }}
+              >
+                <ListItemIcon>
+                  <BeachAccessIcon fontSize="small" />
+                </ListItemIcon>
+                Mi disponibilidad
+              </MenuItem>
+            )}
             <MenuItem
               onClick={() => {
                 setMenuUsuario(null);
@@ -286,8 +303,10 @@ export default function Layout() {
         )}
       </Box>
       <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 3 }, mt: 8 }}>
+        <AvisosSuperiores gestor={gestor} />
         <Outlet />
       </Box>
+      {gestor && <DialogoAusencia abierto={disponibilidad} onCerrar={() => setDisponibilidad(false)} />}
     </Box>
   );
 }

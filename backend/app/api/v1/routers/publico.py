@@ -1,12 +1,15 @@
 """Endpoints sin autenticación del formulario público de solicitudes (/solicitud)."""
 import json
 
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.api.deps import DbSession, equipo_cliente, ip_cliente
-from app.application.errores import ReglaNegocio
+
+from app.api.deps import DbSession, contexto_anonimo, equipo_cliente, ip_cliente
+from app.application.errores import Contexto, NoEncontrado, ReglaNegocio
+from app.application.services.encuesta_service import EncuestaService, ticket_de_token
+from app.infrastructure.db import models as m
 from app.application.schemas import esquemas as s
 from app.application.services.formulario_service import ArchivoPublico, FormularioService
 from app.core.config import settings
@@ -41,3 +44,39 @@ async def registrar(request: Request,
     extra = f" Recibimos {n} archivo{'s' if n != 1 else ''} adjunto{'s' if n != 1 else ''}." if n else ""
     return {"numero": t.numero, "adjuntos": n,
             "mensaje": f"Registramos su solicitud con el número {t.numero}. Le escribiremos a {t.correo} con las novedades.{extra}"}
+
+
+# ------------------------------------------------------------ encuesta
+def _ticket_encuesta(session: Session, token: str) -> m.Ticket:
+    t = session.get(m.Ticket, ticket_de_token(token))
+    if t is None or t.eliminado:
+        raise NoEncontrado("Ticket no encontrado")
+    return t
+
+
+def _estado_encuesta(session: Session, t: m.Ticket) -> dict:
+    e = EncuestaService(session).de_ticket(t.id)
+    return {"numero": t.numero, "asunto": t.asunto, "responsable": t.responsable.nombre if t.responsable else None,
+            "calificacion": e.calificacion if e else None, "comentario": e.comentario if e else None,
+            "puede_comentar": bool(e and not e.comentario)}
+
+
+@router.get("/encuesta", response_model=s.EncuestaPublicaSalida, summary="Datos del ticket del enlace de la encuesta (sin cuenta)")
+def encuesta(t: str, session: Session = DbSession):
+    return _estado_encuesta(session, _ticket_encuesta(session, t))
+
+
+@router.post("/encuesta", response_model=s.EncuestaPublicaSalida,
+             summary="Registrar la nota desde el enlace del correo; luego, en otra llamada, el comentario opcional")
+def responder_encuesta(dto: s.EncuestaPublicaEntrada, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
+    from app.application.services.ticket_service import TicketService
+
+    t = _ticket_encuesta(session, dto.token)
+    svc = EncuestaService(session)
+    existente = svc.de_ticket(t.id)
+    if dto.calificacion is not None and (existente is None or existente.calificacion != dto.calificacion):
+        svc.registrar(TicketService(session), t, dto.calificacion, dto.comentario, None, "CORREO", ctx)
+    elif dto.comentario:
+        svc.agregar_comentario(t, dto.comentario)
+    session.flush()
+    return _estado_encuesta(session, t)

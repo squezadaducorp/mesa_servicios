@@ -20,6 +20,7 @@ import { get } from "../api/client";
 import type { Dashboard as Datos, FiltroReporte, PuntoTendencia } from "../api/types";
 import { COLOR_ESTADO, COLOR_PRIORIDAD, NOMBRE_ESTADO, SlaBarra } from "../components/Chips";
 import { Cargando, Encabezado, ErrorCarga, Vacio } from "../components/Comunes";
+import SeccionSatisfaccion from "../components/Satisfaccion";
 import FiltroReporteBar, { filtroPorDefecto } from "../components/FiltroReporteBar";
 import { fecha, fechaHora, horas, numero, pct } from "../utils/formato";
 import { marca } from "../theme";
@@ -305,6 +306,8 @@ export default function Dashboard() {
               )}
             </Panel>
           </Box>
+
+          {d.satisfaccion && <SeccionSatisfaccion s={d.satisfaccion} />}
         </Stack>
       )}
     </>

@@ -281,6 +281,7 @@ class Ticket(Base):
     sla_incumplido: Mapped[bool] = mapped_column(Boolean, default=False)
     sla_excluido: Mapped[bool] = mapped_column(Boolean, default=False)
     sla_nivel_alerta: Mapped[int] = mapped_column(SmallInteger, default=0)
+    sla_aviso_respuesta: Mapped[bool] = mapped_column(Boolean, default=False)   # aviso previo de 1.ª respuesta ya enviado
     minutos_respuesta: Mapped[int | None] = mapped_column(Integer)
     minutos_resolucion: Mapped[int | None] = mapped_column(Integer)
     reaperturas: Mapped[int] = mapped_column(Integer, default=0)
@@ -429,6 +430,51 @@ class SlaIncumplimiento(Base):
     fecha_vencimiento: Mapped[datetime] = mapped_column(DateTime)
     fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     justificacion: Mapped[str | None] = mapped_column(Unicode(1000))
+
+
+class TicketEncuesta(Base):
+    """Encuesta de satisfacción del solicitante (una por ticket)."""
+    __tablename__ = "ticket_encuestas"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), unique=True)
+    calificacion: Mapped[int] = mapped_column(SmallInteger)   # 1 a 5
+    comentario: Mapped[str | None] = mapped_column(Unicode(1000))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))   # NULL si respondió desde el correo sin sesión
+    responsable_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    categoria_id: Mapped[int] = mapped_column(ForeignKey("categorias.id"))
+    origen: Mapped[str] = mapped_column(String(10), default="PORTAL")   # PORTAL | CORREO
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_comentario: Mapped[datetime | None] = mapped_column(DateTime)
+    responsable: Mapped[Usuario | None] = relationship(foreign_keys=[responsable_id], lazy="joined")
+
+
+class UsuarioAusencia(Base):
+    """Vacaciones, permisos y otras ausencias: los tickets pasan al reemplazo mientras dure."""
+    __tablename__ = "usuario_ausencias"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    reemplazo_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    motivo: Mapped[str] = mapped_column(String(15), default="VACACIONES")   # VACACIONES | PERMISO | ENFERMEDAD | CAPACITACION | OTRO
+    desde: Mapped[datetime] = mapped_column(DateTime)
+    hasta: Mapped[datetime] = mapped_column(DateTime)
+    pasar_abiertos: Mapped[bool] = mapped_column(Boolean, default=True)
+    devolver: Mapped[bool] = mapped_column(Boolean, default=True)
+    avisar_solicitantes: Mapped[bool] = mapped_column(Boolean, default=True)
+    estado: Mapped[str] = mapped_column(String(12), default="PROGRAMADA")   # PROGRAMADA | ACTIVA | FINALIZADA | CANCELADA
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_inicio_real: Mapped[datetime | None] = mapped_column(DateTime)
+    fecha_fin_real: Mapped[datetime | None] = mapped_column(DateTime)
+    usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id], lazy="joined")
+    reemplazo: Mapped[Usuario] = relationship(foreign_keys=[reemplazo_id], lazy="joined")
+
+
+class AusenciaTicket(Base):
+    """Tickets que se pasaron al reemplazo (para devolverlos al terminar la ausencia)."""
+    __tablename__ = "ausencia_tickets"
+    ausencia_id: Mapped[int] = mapped_column(ForeignKey("usuario_ausencias.id", ondelete="CASCADE"), primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), primary_key=True)
+    devuelto: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 # ---------------------------------------------------------- notificaciones

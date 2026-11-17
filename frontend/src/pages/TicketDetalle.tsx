@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert, Avatar, Box, Button, Chip, Divider, FormControlLabel, IconButton, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem,
-  Paper, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography,
+  Paper, Rating, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
@@ -20,10 +20,66 @@ import { api, del, descargar, get, patch, post, put } from "../api/client";
 import type { Riesgo, TextoIa, TicketDetalle as Ticket } from "../api/types";
 import { mensajeError, useAviso } from "../components/Aviso";
 import CampoCorreos from "../components/CampoCorreos";
-import { CumplimientoChip, EstadoChip, PrioridadChip, SlaBarra, colorSla } from "../components/Chips";
+import { CumplimientoChip, EstadoChip, NOMBRES_NOTA, PrioridadChip, SlaBarra, colorSla } from "../components/Chips";
 import { Cargando, ErrorCarga, Vacio } from "../components/Comunes";
 import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/formato";
 import TicketDialogos, { estadosDestino, type Dialogo } from "./TicketDialogos";
+
+/** Encuesta de satisfacción: el solicitante califica (y así cierra) un ticket resuelto; luego se muestra la nota. */
+function TarjetaEncuesta({ t, onListo }: { t: Ticket; onListo: (nuevo: Ticket) => void }) {
+  const avisar = useAviso();
+  const [nota, setNota] = useState<number | null>(null);
+  const [comentario, setComentario] = useState("");
+  const enviar = useMutation({
+    mutationFn: () => post<Ticket>(`/tickets/${t.id}/encuesta`, { calificacion: nota, comentario: comentario.trim() || null }),
+    onSuccess: (nuevo) => {
+      avisar("¡Gracias por calificar la atención!", "success");
+      onListo(nuevo);
+    },
+    onError: (e) => avisar(mensajeError(e), "error"),
+  });
+  if (t.encuesta) {
+    return (
+      <Paper sx={{ p: 2, mb: 2, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+        <Typography variant="subtitle2">Calificación del solicitante</Typography>
+        <Rating value={t.encuesta.calificacion} readOnly />
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {NOMBRES_NOTA[t.encuesta.calificacion]}
+        </Typography>
+        {t.encuesta.comentario && (
+          <Typography variant="body2" sx={{ color: "text.secondary", fontStyle: "italic", flexBasis: "100%" }}>
+            «{t.encuesta.comentario}»
+          </Typography>
+        )}
+      </Paper>
+    );
+  }
+  if (!t.acciones.includes("calificar")) return null;
+  return (
+    <Paper sx={{ p: { xs: 2, md: 3 }, mb: 2, border: "1px solid #F9A82555", bgcolor: "#FFFBF0" }}>
+      <Typography variant="h6">¿Cómo fue la atención?</Typography>
+      <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>
+        Califique de 1 a 5 estrellas. Al calificar, el ticket se cierra; si el problema sigue, use «Reabrir».
+      </Typography>
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 1.5 }}>
+        <Rating value={nota} onChange={(_, v) => setNota(v)} size="large" sx={{ fontSize: 40 }} />
+        {nota && <Typography sx={{ fontWeight: 600 }}>{NOMBRES_NOTA[nota]}</Typography>}
+      </Stack>
+      <TextField
+        label="Comentario (opcional)"
+        multiline
+        minRows={2}
+        fullWidth
+        value={comentario}
+        onChange={(e) => setComentario(e.target.value)}
+        slotProps={{ htmlInput: { maxLength: 1000 } }}
+      />
+      <Button variant="contained" sx={{ mt: 1.5 }} disabled={!nota || enviar.isPending} onClick={() => enviar.mutate()}>
+        Enviar calificación
+      </Button>
+    </Paper>
+  );
+}
 
 const ACCION_HISTORIAL: Record<string, string> = {
   CREACION: "Creó el ticket",
@@ -38,6 +94,7 @@ const ACCION_HISTORIAL: Record<string, string> = {
   REAPERTURA: "Reabrió",
   SLA: "SLA",
   EXCEPCION_SLA: "Excepción de SLA",
+  ENCUESTA: "Encuesta de satisfacción",
   COPIAS: "Actualizó las personas en copia",
 };
 
@@ -281,6 +338,8 @@ export default function TicketDetalle() {
           </Stack>
         </Stack>
       </Paper>
+
+      <TarjetaEncuesta t={t} onListo={actualizar} />
 
       <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 2fr) minmax(320px, 1fr)" }, alignItems: "start" }}>
         <Stack spacing={2} sx={{ minWidth: 0 }}>

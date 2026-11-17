@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, Paper, Stack, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
+  FormControlLabel, InputAdornment, Radio, RadioGroup, TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -349,6 +349,104 @@ function Calendario() {
   );
 }
 
+const CLAVES_ALERTAS = {
+  modo: "sla.avisar_por",
+  previo1: "sla.aviso_previo_1_min",
+  previo2: "sla.aviso_previo_2_min",
+  respuesta: "sla.aviso_respuesta_min",
+  resumen: "sla.resumen_diario_hora",
+  umbral1: "sla.umbral_aviso_1",
+  umbral2: "sla.umbral_aviso_2",
+} as const;
+
+/** Avisos antes de vencer (por tiempo laborable restante o por porcentaje) y resumen diario por correo. */
+function AlertasSla() {
+  const qc = useQueryClient();
+  const avisar = useAviso();
+  const q = useQuery({ queryKey: ["admin", "alertas-sla"], queryFn: () => get<Record<string, string>>("/admin/sla/alertas") });
+  const [v, setV] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (q.data) setV(q.data);
+  }, [q.data]);
+  const set = (k: string, x: string) => setV((a) => ({ ...a, [k]: x }));
+  const guardar = useMutation({
+    mutationFn: () => put("/admin/sla/alertas", { valores: v }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin", "alertas-sla"] });
+      avisar("Alertas guardadas");
+    },
+    onError: (e) => avisar(mensajeError(e), "error"),
+  });
+  if (q.isLoading) return <Cargando alto={120} />;
+  const porTiempo = (v[CLAVES_ALERTAS.modo] || "tiempo") === "tiempo";
+  const resumenActivo = !!v[CLAVES_ALERTAS.resumen];
+  const min = (k: string, etiqueta: string, ayuda: string) => (
+    <TextField
+      type="number"
+      label={etiqueta}
+      value={v[k] ?? ""}
+      onChange={(e) => set(k, e.target.value)}
+      helperText={ayuda}
+      slotProps={{ input: { endAdornment: <InputAdornment position="end">min</InputAdornment> }, htmlInput: { min: 1 } }}
+    />
+  );
+  return (
+    <Paper sx={{ p: 2.5 }}>
+      <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+        <Box>
+          <Typography variant="h6">Alertas antes de vencer</Typography>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            Avisos al responsable (y en el 2.º, también al supervisor) por la campana y por correo
+          </Typography>
+        </Box>
+        <Button variant="contained" size="small" disabled={guardar.isPending} onClick={() => guardar.mutate()}>
+          Guardar
+        </Button>
+      </Stack>
+      <RadioGroup row value={porTiempo ? "tiempo" : "porcentaje"} onChange={(e) => set(CLAVES_ALERTAS.modo, e.target.value)} sx={{ mb: 1 }}>
+        <FormControlLabel value="tiempo" control={<Radio size="small" />} label="Por tiempo que falta (recomendado)" />
+        <FormControlLabel value="porcentaje" control={<Radio size="small" />} label="Por porcentaje consumido" />
+      </RadioGroup>
+      <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" } }}>
+        {porTiempo ? (
+          <>
+            {min(CLAVES_ALERTAS.previo1, "1.er aviso", "Al responsable, cuando falte este tiempo laborable")}
+            {min(CLAVES_ALERTAS.previo2, "2.º aviso (urgente)", "Responsable, supervisor y coordinadores")}
+          </>
+        ) : (
+          <>
+            <TextField type="number" label="1.er aviso al" value={v[CLAVES_ALERTAS.umbral1] ?? ""} onChange={(e) => set(CLAVES_ALERTAS.umbral1, e.target.value)} slotProps={{ input: { endAdornment: <InputAdornment position="end">%</InputAdornment> } }} />
+            <TextField type="number" label="2.º aviso al" value={v[CLAVES_ALERTAS.umbral2] ?? ""} onChange={(e) => set(CLAVES_ALERTAS.umbral2, e.target.value)} slotProps={{ input: { endAdornment: <InputAdornment position="end">%</InputAdornment> } }} />
+          </>
+        )}
+        {min(CLAVES_ALERTAS.respuesta, "Aviso de 1.ª respuesta", "Si nadie ha respondido y falta este tiempo")}
+        <TextField
+          type="time"
+          label="Resumen diario por correo"
+          value={v[CLAVES_ALERTAS.resumen] ?? ""}
+          onChange={(e) => set(CLAVES_ALERTAS.resumen, e.target.value)}
+          helperText={resumenActivo ? "Cada día laborable: a cada responsable, lo que le vence hoy" : "Desactivado"}
+          slotProps={{ inputLabel: { shrink: true } }}
+        />
+      </Box>
+      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+        {resumenActivo ? (
+          <Button size="small" onClick={() => set(CLAVES_ALERTAS.resumen, "")}>
+            Desactivar resumen diario
+          </Button>
+        ) : (
+          <Button size="small" onClick={() => set(CLAVES_ALERTAS.resumen, "08:30")}>
+            Activar resumen diario (08:30)
+          </Button>
+        )}
+      </Stack>
+      <Alert severity="info" sx={{ mt: 1.5 }}>
+        El tiempo se cuenta en horario laboral: un aviso de «2 h antes» el viernes a las 16:30 se envía el viernes, aunque el ticket venza el lunes.
+      </Alert>
+    </Paper>
+  );
+}
+
 export default function Sla() {
   return (
     <>
@@ -359,6 +457,7 @@ export default function Sla() {
           <Politicas />
         </Stack>
         <Stack spacing={2}>
+          <AlertasSla />
           <HorarioLaboral />
           <Calendario />
         </Stack>

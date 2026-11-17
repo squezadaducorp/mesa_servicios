@@ -396,6 +396,92 @@ class TicketListado(Modelo):
     sla_resolucion_vence: datetime
     sla_incumplido: bool
     cumplimiento_sla: str
+    vence_tipo: str | None = Field(default=None, description="RESPUESTA o RESOLUCION: el próximo plazo del ticket abierto")
+    vence_en_min: int | None = Field(default=None, description="Minutos laborables que faltan (negativo si ya venció)")
+
+
+class EncuestaSalida(Modelo):
+    calificacion: int
+    comentario: str | None
+    origen: str
+    fecha: datetime
+
+
+class EncuestaEntrada(BaseModel):
+    calificacion: int = Field(ge=1, le=5)
+    comentario: str | None = Field(default=None, max_length=1000)
+
+
+class EncuestaPublicaEntrada(BaseModel):
+    token: str = Field(min_length=10, max_length=600)
+    calificacion: int | None = Field(default=None, ge=1, le=5)
+    comentario: str | None = Field(default=None, max_length=1000)
+
+
+class EncuestaPublicaSalida(BaseModel):
+    numero: str
+    asunto: str
+    responsable: str | None
+    calificacion: int | None = None
+    comentario: str | None = None
+    puede_comentar: bool = False
+
+
+class AusenciaEntrada(BaseModel):
+    usuario_id: int | None = Field(default=None, description="Vacío = el usuario actual")
+    reemplazo_id: int
+    motivo: Literal["VACACIONES", "PERMISO", "ENFERMEDAD", "CAPACITACION", "OTRO"] = "VACACIONES"
+    desde: datetime = Field(description="Hora de Ecuador")
+    hasta: datetime = Field(description="Hora de Ecuador (regreso)")
+    pasar_abiertos: bool = True
+    devolver: bool = True
+    avisar_solicitantes: bool = True
+
+
+class PersonaCorta(BaseModel):
+    id: int
+    nombre: str
+    correo: str
+
+
+class AusenciaSalida(Modelo):
+    id: int
+    usuario: PersonaCorta
+    reemplazo: PersonaCorta
+    motivo: str
+    desde: datetime
+    hasta: datetime
+    estado: str
+    pasar_abiertos: bool
+    devolver: bool
+    avisar_solicitantes: bool
+    tickets_abiertos: int | None = None
+
+
+class ReemplazoSugerido(BaseModel):
+    id: int
+    nombre: str
+    correo: str
+    tickets_abiertos: int
+    categorias_comunes: list[str]
+    sugerido: bool = False
+
+
+class TicketCorto(BaseModel):
+    id: int
+    numero: str
+    asunto: str
+
+
+class AlertaSla(Modelo):
+    id: int
+    numero: str
+    asunto: str
+    prioridad: str
+    prioridad_codigo: str
+    vence_tipo: str
+    vence_en_min: int
+    vence: datetime
 
 
 class TicketDetalle(Modelo):
@@ -447,6 +533,7 @@ class TicketDetalle(Modelo):
     copias: list[CopiaSalida] = Field(default=[], description="Personas en copia: reciben las respuestas y el cierre por correo")
     acciones: list[str] = Field(description="Acciones que el usuario actual puede ejecutar")
     solo_lectura_participante: bool = Field(default=False, description="El usuario fue responsable antes y hoy solo puede consultarlo")
+    encuesta: EncuestaSalida | None = Field(default=None, description="Calificación del solicitante, si ya respondió")
 
 
 class FiltroTickets(BaseModel):
@@ -462,7 +549,8 @@ class FiltroTickets(BaseModel):
     hasta: date | None = None
     solo_mios: bool = False
     participe: bool = False
-    orden: Literal["fecha_desc", "fecha_asc", "sla_desc", "prioridad"] = "fecha_desc"
+    vence: Literal["HOY", "VENCIDOS"] | None = None
+    orden: Literal["fecha_desc", "fecha_asc", "sla_desc", "prioridad", "vence"] = "fecha_desc"
 
 
 # --------------------------------------------------------- notificaciones

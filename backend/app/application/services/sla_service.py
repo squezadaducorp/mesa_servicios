@@ -10,11 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.core.security import utcnow
 from app.domain.enums import Estado
-from app.domain.sla import CalendarioLaboral, DatosSla, calcular_sla, nuevos_umbrales, umbrales_configurados
+from app.domain.sla import (CalendarioLaboral, DatosSla, avisos_configurados, calcular_sla, nuevos_umbrales, texto_minutos,
+                            umbrales_configurados, umbrales_por_tiempo)
 from app.infrastructure.db import models as m
 from app.infrastructure.repositories.repositorios import CatalogoRepository, TicketRepository, UsuarioRepository, coordinadores
 
 log = logging.getLogger(__name__)
+
+# Estados en los que corre el reloj y tiene sentido avisar «vence en …»
+ESTADOS_ACTIVOS_SLA = {Estado.NUEVO, Estado.ASIGNADO, Estado.EN_PROCESO, Estado.ESCALADO}
 
 _CACHE: dict[str, tuple[float, CalendarioLaboral]] = {}
 _TTL_SEG = 60
@@ -145,6 +149,24 @@ class SlaService:
                                 prioridad_id=t.prioridad_id, fecha_vencimiento=vencimiento, fecha_registro=ahora)
         )
 
+    # ------------------------------------------------------ tiempo restante
+    def minutos_restantes(self, vence: datetime | None, ahora: datetime) -> int:
+        """Minutos laborables que faltan para `vence` (negativo si ya venció)."""
+        if vence is None:
+            return 0
+        if vence > ahora:
+            return self.cal.minutos_laborables(ahora, vence)
+        return -max(self.cal.minutos_laborables(vence, ahora), 1)
+
+    def proximo_vencimiento(self, t: m.Ticket, ahora: datetime) -> tuple[str, datetime, int] | None:
+        """(tipo, fecha, minutos que faltan) del próximo plazo del ticket abierto; None si está en pausa o terminado."""
+        if t.estado not in ESTADOS_ACTIVOS_SLA or t.sla_pausa_desde is not None or t.sla_excluido:
+            return None
+        if t.fecha_primera_respuesta is None and t.sla_respuesta_vence and t.sla_respuesta_vence > ahora \
+                and t.sla_respuesta_vence < t.sla_resolucion_vence:
+            return "RESPUESTA", t.sla_respuesta_vence, self.minutos_restantes(t.sla_respuesta_vence, ahora)
+        return "RESOLUCION", t.sla_resolucion_vence, self.minutos_restantes(t.sla_resolucion_vence, ahora)
+
     # ------------------------------------------------------- motor periódico
     def evaluar_tickets_abiertos(self, ahora: datetime | None = None) -> dict[str, int]:
         """Recalcula el SLA de los tickets abiertos y dispara los escalamientos (75/90/100 % por defecto). Lo invoca el worker."""
@@ -154,8 +176,10 @@ class SlaService:
         notif = NotificacionService(self.session)
         usuarios = UsuarioRepository(self.session)
         coord = coordinadores(self.session)
-        umbrales = umbrales_configurados(CatalogoRepository(self.session).configuracion())
-        stats = {"evaluados": 0, "aviso_75": 0, "aviso_90": 0, "vencidos": 0, "respuesta_vencida": 0}
+        config = CatalogoRepository(self.session).configuracion()
+        umbrales = umbrales_configurados(config)
+        avisos = avisos_configurados(config)
+        stats = {"evaluados": 0, "aviso_75": 0, "aviso_90": 0, "vencidos": 0, "respuesta_vencida": 0, "aviso_respuesta": 0}
 
         for t in self.tickets.abiertos_para_sla():
             stats["evaluados"] += 1
@@ -172,22 +196,55 @@ class SlaService:
             if t.sla_pausa_desde is not None:
                 continue
             supervisor = t.categoria.supervisor or (usuarios.get(t.responsable.supervisor_id) if t.responsable and t.responsable.supervisor_id else None)
-            for umbral in nuevos_umbrales(float(t.sla_consumido_pct), t.sla_nivel_alerta or 0, umbrales):
+
+            # Aviso previo de primera respuesta (una vez por ticket)
+            if (avisos.respuesta_min and t.fecha_primera_respuesta is None and not t.sla_aviso_respuesta
+                    and t.sla_respuesta_vence and t.sla_respuesta_vence > ahora):
+                falta = self.minutos_restantes(t.sla_respuesta_vence, ahora)
+                if falta <= avisos.respuesta_min:
+                    t.sla_aviso_respuesta = True
+                    stats["aviso_respuesta"] += 1
+                    destino = t.responsable or supervisor
+                    notif.notificar([destino], "SLA_AVISO_RESPUESTA", f"{t.numero}: falta la 1.ª respuesta",
+                                    f"Le quedan {texto_minutos(falta)} para responder al solicitante · «{t.asunto}».", t, "AVISO")
+                    notif.correo("SLA_AVISO_RESPUESTA", [destino], t, restante=texto_minutos(falta))
+
+            pct = float(t.sla_consumido_pct)
+            if avisos.por_tiempo:
+                restante = self.minutos_restantes(t.sla_resolucion_vence, ahora)
+                alcanzados = umbrales_por_tiempo(pct, restante, t.sla_nivel_alerta or 0, umbrales, avisos)
+            else:
+                restante = None
+                alcanzados = nuevos_umbrales(pct, t.sla_nivel_alerta or 0, umbrales)
+            for umbral in alcanzados:
                 t.sla_nivel_alerta = umbral
-                pct = float(t.sla_consumido_pct)
+                falta = texto_minutos(restante) if restante is not None and restante > 0 else None
                 if umbral == umbrales[0]:
                     stats["aviso_75"] += 1
                     destino = t.responsable or supervisor
-                    notif.notificar([destino], "SLA_75", f"{t.numero}: SLA al {umbral} %",
-                                    f"«{t.asunto}» consumió el {pct:.0f} % de su SLA.", t, "AVISO")
-                    notif.correo("SLA_75", [destino], t)
+                    if falta:
+                        notif.notificar([destino], "SLA_75", f"{t.numero} vence en {falta}",
+                                        f"{t.prioridad.nombre} · «{t.asunto}».", t, "AVISO")
+                        notif.correo("SLA_AVISO_1", [destino], t, restante=falta)
+                    else:
+                        notif.notificar([destino], "SLA_75", f"{t.numero}: SLA al {umbral} %",
+                                        f"«{t.asunto}» consumió el {pct:.0f} % de su SLA.", t, "AVISO")
+                        notif.correo("SLA_75", [destino], t)
                     notif.teams("SLA_75", t)
                     escalado_a = destino
                 elif umbral == umbrales[1]:
                     stats["aviso_90"] += 1
-                    notif.notificar([supervisor, *coord], "SLA_90", f"{t.numero}: SLA al {umbral} %",
-                                    f"«{t.asunto}» ({t.responsable.nombre if t.responsable else 'sin responsable'}) está por vencer.", t, "AVISO")
-                    notif.correo("SLA_90", [supervisor], t)
+                    quien = t.responsable.nombre if t.responsable else "sin responsable"
+                    if falta:
+                        notif.notificar([t.responsable], "SLA_90", f"{t.numero} vence en {falta}",
+                                        f"{t.prioridad.nombre} · haga la gestión o pida más tiempo al supervisor · «{t.asunto}».", t, "CRITICO")
+                        notif.notificar([supervisor, *coord], "SLA_90", f"{t.numero} vence en {falta}",
+                                        f"«{t.asunto}» ({quien}) está por vencer.", t, "AVISO")
+                        notif.correo("SLA_AVISO_2", [t.responsable, supervisor], t, restante=falta)
+                    else:
+                        notif.notificar([supervisor, *coord], "SLA_90", f"{t.numero}: SLA al {umbral} %",
+                                        f"«{t.asunto}» ({quien}) está por vencer.", t, "AVISO")
+                        notif.correo("SLA_90", [supervisor], t)
                     notif.teams("SLA_90", t)
                     escalado_a = supervisor
                 else:
@@ -205,9 +262,10 @@ class SlaService:
                     notif.correo("SLA_VENCIDO", [supervisor, *coord], t)
                     notif.teams("SLA_VENCIDO", t)
                     escalado_a = supervisor
+                motivo = f"SLA consumido al {umbral} %" if umbral == umbrales[2] or not falta else f"Faltan {falta} para vencer"
                 self.session.add(
                     m.TicketEscalamiento(ticket_id=t.id, nivel=umbral, tipo="AUTOMATICO", escalado_a=escalado_a.id if escalado_a else None,
-                                         motivo=f"SLA consumido al {umbral} %", sla_consumido_pct=t.sla_consumido_pct, fecha=ahora)
+                                         motivo=motivo, sla_consumido_pct=t.sla_consumido_pct, fecha=ahora)
                 )
         self.session.flush()
         return stats
