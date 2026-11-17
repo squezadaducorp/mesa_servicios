@@ -28,6 +28,8 @@ from app.infrastructure.db import models as m
 from app.infrastructure.repositories.repositorios import CatalogoRepository, TicketRepository, UsuarioRepository, coordinadores
 from app.infrastructure.storage.local import AlmacenamientoLocal
 
+MAX_ARCHIVOS_COMENTARIO = 10
+
 ROLES_ATIENDEN = {Rol.ANALISTA, Rol.SUPERVISOR, Rol.ADMIN_MESA, Rol.SUPER_ADMIN}
 
 
@@ -616,28 +618,47 @@ class TicketService:
         return t
 
     # ============================================================ comentarios
-    def comentar(self, ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto) -> m.TicketComentario:
+    def comentar(self, ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto,
+                 archivos: list[tuple[str, str, bytes]] | None = None) -> m.TicketComentario:
+        """Agrega un comentario. `archivos` (nombre, tipo, contenido) son capturas o archivos que van con el comentario:
+        se validan todos antes de guardar nada y quedan enlazados al comentario (y en la pestaña Adjuntos)."""
         u = ctx.usuario
         t = self.obtener(ticket_id, u)
         self._exigir(u, t, "comentar")
         if dto.es_interno and "nota_interna" not in self.acciones(u, t):
             raise Prohibido("Solo el equipo de la mesa puede registrar notas internas")
+        archivos = archivos or []
+        if archivos:
+            self._exigir(u, t, "adjuntar")
+            if len(archivos) > MAX_ARCHIVOS_COMENTARIO:
+                raise ReglaNegocio(f"Puede adjuntar hasta {MAX_ARCHIVOS_COMENTARIO} archivos por comentario")
+            max_mb, permitidas = self.reglas_adjuntos()
+            for nombre, _, contenido in archivos:
+                self.validar_archivo(nombre, contenido, max_mb, permitidas)
+        texto = dto.texto.strip() or (f"Adjuntó {len(archivos)} archivo{'s' if len(archivos) != 1 else ''}" if archivos else "")
+        if not texto:
+            raise ReglaNegocio("Escriba un comentario")
         ahora = utcnow()
-        c = self._agregar_comentario(t, u, dto.texto.strip(), dto.es_interno, dto.tipo, dto.minutos_invertidos, ahora)
+        c = self._agregar_comentario(t, u, texto, dto.es_interno, dto.tipo, dto.minutos_invertidos, ahora)
+        for nombre, tipo_mime, contenido in archivos:
+            a = self.guardar_adjunto(t, u, nombre, tipo_mime, contenido, ctx)
+            a.comentario_id = c.id
+        if archivos:
+            self.session.flush()
         es_solicitante = t.solicitante_id == u.id and not self.es_gestor(u, t)
         if es_solicitante:
             # Respuesta del cliente: el SLA se reanuda automáticamente
             if t.estado == Estado.PENDIENTE_CLIENTE:
                 self._aplicar_estado(t, Estado.PENDIENTE_CLIENTE, Estado.EN_PROCESO, None, ctx, ahora)
                 self._hist(t, u, "REANUDACION", None, None, None, "El solicitante respondió; SLA reanudado", ahora)
-            self.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: nuevo comentario", f"{u.nombre}: {dto.texto[:200]}", t)
+            self.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: nuevo comentario", f"{u.nombre}: {texto[:200]}", t)
         else:
             if not dto.es_interno:
                 self.sla.registrar_primera_respuesta(t, ahora)
-                self.notif.notificar([t.solicitante], "COMENTARIO", f"{t.numero}: respuesta del equipo", f"{u.nombre}: {dto.texto[:200]}", t)
+                self.notif.notificar([t.solicitante], "COMENTARIO", f"{t.numero}: respuesta del equipo", f"{u.nombre}: {texto[:200]}", t)
                 # Sin lista explícita se usan las personas en copia del ticket; una lista vacía no copia a nadie
                 copias = self.copias(t) if dto.copia_a is None else dto.copia_a
-                c.copia_a = unir(self.responder_por_correo(t, u, dto.texto.strip(), copias))
+                c.copia_a = unir(self.responder_por_correo(t, u, texto, copias))
         t.fecha_actualizacion = ahora
         return c
 
@@ -702,11 +723,22 @@ class TicketService:
         self.auditoria.registrar(ctx, AccionAuditoria.ADJUNTO_SUBIDO, "ticket", t.id, {"archivo": a.nombre_original, "sha256": sha})
         return a
 
-    def adjunto(self, ticket_id: int, adjunto_id: int, ctx: Contexto) -> tuple[m.TicketAdjunto, Path]:
+    def ve_internos(self, u: m.Usuario, t: m.Ticket) -> bool:
+        """Gestores y quienes fueron responsables ven notas internas (y sus archivos)."""
+        return self.es_gestor(u, t) or u.tiene(Permiso.TICKET_VER_TODOS) or self.repo.participo(u.id, t.id)
+
+    def adjunto(self, ticket_id: int, adjunto_id: int, ctx: Contexto, vista: bool = False) -> tuple[m.TicketAdjunto, Path]:
         t = self.obtener(ticket_id, ctx.usuario)
         a = self.session.get(m.TicketAdjunto, adjunto_id)
         if a is None or a.ticket_id != t.id or a.eliminado:
             raise NoEncontrado("Adjunto no encontrado")
+        if a.comentario_id and not self.ve_internos(ctx.usuario, t):
+            c = self.session.get(m.TicketComentario, a.comentario_id)
+            if c is not None and c.es_interno:
+                raise NoEncontrado("Adjunto no encontrado")
+        if vista:
+            # Vista previa de una captura dentro del comentario: no se registra como descarga
+            return a, self.almacenamiento.ruta(a.ruta_almacenamiento)
         self.auditoria.registrar(ctx, AccionAuditoria.ADJUNTO_DESCARGADO, "ticket", t.id, {"archivo": a.nombre_original})
         return a, self.almacenamiento.ruta(a.ruta_almacenamiento)
 
@@ -839,6 +871,11 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
     participante = not gestor and svc.repo.participo(u.id, t.id)
     lectura = gestor or participante
     resumen = lambda x: {"id": x.id, "nombre": x.nombre, "correo": x.correo, "cargo": x.cargo} if x else None  # noqa: E731
+    comentarios = svc.repo.comentarios(t.id, incluir_internos=lectura)
+    visibles = {c.id for c in comentarios}
+    adjuntos = svc.repo.adjuntos(t.id)
+    archivo = lambda a: {"id": a.id, "nombre_original": a.nombre_original, "tipo_mime": a.tipo_mime,  # noqa: E731
+                         "tamano_bytes": a.tamano_bytes, "usuario": resumen(a.usuario), "fecha": a.fecha, "comentario_id": a.comentario_id}
     historial = svc.repo.historial(t.id) if lectura else [h for h in svc.repo.historial(t.id) if h.accion in ("CREACION", "CAMBIO_ESTADO", "CIERRE", "REAPERTURA")]
     return {
         **{k: getattr(t, k) for k in (
@@ -861,13 +898,11 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "riesgo_ia": float(t.riesgo_ia) if t.riesgo_ia is not None and gestor else None,
         "comentarios": [
             {"id": c.id, "usuario": resumen(c.usuario), "texto": c.texto, "es_interno": c.es_interno, "tipo": c.tipo,
-             "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha, "copia_a": separar(c.copia_a) if lectura else []}
-            for c in svc.repo.comentarios(t.id, incluir_internos=lectura)
+             "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha, "copia_a": separar(c.copia_a) if lectura else [],
+             "adjuntos": [archivo(a) for a in adjuntos if a.comentario_id == c.id]}
+            for c in comentarios
         ],
-        "adjuntos": [
-            {"id": a.id, "nombre_original": a.nombre_original, "tipo_mime": a.tipo_mime, "tamano_bytes": a.tamano_bytes,
-             "usuario": resumen(a.usuario), "fecha": a.fecha} for a in svc.repo.adjuntos(t.id)
-        ],
+        "adjuntos": [archivo(a) for a in adjuntos if not a.comentario_id or a.comentario_id in visibles],
         "historial": [
             {"id": h.id, "accion": h.accion, "campo": h.campo, "valor_anterior": h.valor_anterior, "valor_nuevo": h.valor_nuevo,
              "detalle": h.detalle, "usuario": resumen(h.usuario), "fecha": h.fecha} for h in historial

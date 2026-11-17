@@ -1,12 +1,13 @@
+import json
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, contexto, requiere
-from app.application.errores import Contexto
+from app.application.errores import Contexto, ReglaNegocio
 from app.application.schemas import esquemas as s
 from app.application.services import export_service as ex
 from app.domain.archivos import mime_descarga
@@ -161,6 +162,25 @@ def comentar(ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto = Depends(c
     return _detalle(svc, ticket_id, ctx)
 
 
+@router.post("/{ticket_id}/comentarios/con-archivos", response_model=s.TicketDetalle, status_code=201,
+             summary="Comentario con capturas de pantalla o archivos (multipart: `datos` = JSON del comentario, `archivos`)")
+async def comentar_con_archivos(ticket_id: int, datos: str = Form(...), archivos: list[UploadFile] = File(default=[]),
+                                ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    try:
+        bruto = json.loads(datos)
+    except ValueError:
+        raise ReglaNegocio("Datos del comentario inválidos") from None
+    # Con archivos el texto puede ir vacío: el servicio pone «Adjuntó N archivos»
+    dto = s.ComentarioEntrada.model_validate({**bruto, "texto": (bruto.get("texto") or "").strip() or " "})
+    limite = settings.ADJUNTOS_MAX_MB * 1024 * 1024 + 1
+    leidos = [(a.filename or "captura.png", a.content_type or "", await a.read(limite)) for a in archivos]
+    svc = TicketService(session)
+    svc.comentar(ticket_id, dto, ctx, leidos)
+    if dto.respuesta_rapida_id:
+        RespuestasService(session).registrar_uso(dto.respuesta_rapida_id, ctx.usuario)
+    return _detalle(svc, ticket_id, ctx)
+
+
 @router.post("/{ticket_id}/encuesta", response_model=s.TicketDetalle, status_code=201,
              summary="Calificar la atención (solicitante, ticket resuelto): 1 a 5 estrellas y comentario; cierra el ticket")
 def calificar(ticket_id: int, dto: s.EncuestaEntrada, ctx: Contexto = Depends(contexto), session: Session = DbSession):
@@ -185,8 +205,9 @@ async def adjuntar(ticket_id: int, archivo: UploadFile = File(...), ctx: Context
 
 
 @router.get("/{ticket_id}/adjuntos/{adjunto_id}", summary="Descargar adjunto")
-def descargar(ticket_id: int, adjunto_id: int, ctx: Contexto = Depends(contexto), session: Session = DbSession):
-    a, ruta = TicketService(session).adjunto(ticket_id, adjunto_id, ctx)
+def descargar(ticket_id: int, adjunto_id: int, vista: bool = Query(False, description="Vista previa de una imagen (no cuenta como descarga)"),
+              ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    a, ruta = TicketService(session).adjunto(ticket_id, adjunto_id, ctx, vista=vista)
     return FileResponse(ruta, media_type=mime_descarga(a.tipo_mime), filename=a.nombre_original, content_disposition_type="attachment")
 
 

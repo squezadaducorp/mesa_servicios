@@ -384,6 +384,7 @@ class ComentarioSalida(Modelo):
     minutos_invertidos: int | None
     fecha: datetime
     copia_a: list[str] = Field(default=[], description="Correos que recibieron esta respuesta en copia")
+    adjuntos: list["AdjuntoSalida"] = Field(default=[], description="Capturas y archivos enviados con este comentario")
 
 
 class AdjuntoSalida(Modelo):
@@ -393,6 +394,10 @@ class AdjuntoSalida(Modelo):
     tamano_bytes: int
     usuario: UsuarioResumen
     fecha: datetime
+    comentario_id: int | None = None
+
+
+ComentarioSalida.model_rebuild()
 
 
 class HistorialSalida(Modelo):

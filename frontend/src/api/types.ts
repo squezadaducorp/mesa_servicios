@@ -202,6 +202,8 @@ export interface Comentario {
   minutos_invertidos: number | null;
   fecha: string;
   copia_a: string[];
+  /** Capturas y archivos enviados con este comentario */
+  adjuntos?: Adjunto[];
 }
 
 export interface Adjunto {
@@ -211,6 +213,7 @@ export interface Adjunto {
   tamano_bytes: number;
   usuario: UsuarioResumen;
   fecha: string;
+  comentario_id?: number | null;
 }
 
 export interface Historial {

@@ -167,6 +167,41 @@ def test_adjuntos(client, como):
     assert r.status_code == 422
 
 
+
+def test_comentario_con_capturas(client, como):
+    """Capturas de pantalla dentro del comentario; las de notas internas no las ve el solicitante."""
+    import json
+
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+    sol, analista = como("maria.andrade"), como("david.medina")
+    t = crear_ticket(client, sol)
+    url = f"{API}/tickets/{t['id']}/comentarios/con-archivos"
+    r = client.post(url, data={"datos": json.dumps({"texto": ""})}, files=[("archivos", ("captura.png", png, "image/png"))], headers=sol)
+    assert r.status_code == 201, r.text
+    c = r.json()["comentarios"][-1]
+    assert c["texto"] == "Adjuntó 1 archivo" and [a["nombre_original"] for a in c["adjuntos"]] == ["captura.png"]
+    assert r.json()["adjuntos"][0]["comentario_id"] == c["id"]
+    img = c["adjuntos"][0]["id"]
+    r = client.get(f"{API}/tickets/{t['id']}/adjuntos/{img}?vista=true", headers=analista)
+    assert r.status_code == 200 and r.content == png
+
+    r = client.post(url, data={"datos": json.dumps({"texto": "Error en la consola", "es_interno": True})},
+                    files=[("archivos", ("consola.png", png, "image/png")), ("archivos", ("log.txt", b"traza", "text/plain"))], headers=analista)
+    assert r.status_code == 201, r.text
+    nota = r.json()["comentarios"][-1]
+    assert nota["es_interno"] and len(nota["adjuntos"]) == 2
+    d = client.get(f"{API}/tickets/{t['id']}", headers=sol).json()
+    assert [a["nombre_original"] for a in d["adjuntos"]] == ["captura.png"]
+    assert client.get(f"{API}/tickets/{t['id']}/adjuntos/{nota['adjuntos'][0]['id']}", headers=sol).status_code == 404
+
+    # Un archivo no permitido rechaza todo el comentario, sin guardar nada
+    antes = len(d["comentarios"])
+    r = client.post(url, data={"datos": json.dumps({"texto": "va"})},
+                    files=[("archivos", ("ok.png", png, "image/png")), ("archivos", ("virus.exe", b"MZ", "application/octet-stream"))], headers=sol)
+    assert r.status_code == 422
+    assert len(client.get(f"{API}/tickets/{t['id']}", headers=sol).json()["comentarios"]) == antes
+
+
 # --------------------------------------------------------------------- SLA
 def test_worker_escalamiento_automatico(client, como):
     t = crear_ticket(client, como("maria.andrade"))

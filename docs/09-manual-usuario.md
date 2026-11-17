@@ -139,6 +139,17 @@ En el menú de su nombre (arriba a la derecha) › **Mi disponibilidad**:
 
 Mientras está ausente, los tickets nuevos de sus categorías van al reemplazo, y quien lo cubre ve el aviso «Usted cubre a … hasta …». Al regresar, la Mesa le devuelve los tickets que sigan abiertos. Si vuelve antes, use **Volví antes** en el mismo diálogo. Su supervisor y el administrador también pueden registrarle la ausencia desde *Usuarios*.
 
+### Capturas de pantalla en los comentarios
+
+Debajo del cuadro de comentario puede agregar capturas de pantalla o archivos que viajan con ese comentario:
+
+- **Pegar:** copie la captura (por ejemplo con `Win + Shift + S`) y péguela en el cuadro con **Ctrl+V**.
+- **Arrastrar** la imagen o el archivo sobre el cuadro, o usar el botón **Captura o archivo**.
+
+Antes de enviar ve las miniaturas y puede quitarlas con la ✕. Puede enviar hasta 10 por comentario, y también puede enviar solo la captura sin texto.
+Las capturas se ven dentro del comentario (clic para ampliar y descargar) y además aparecen en la pestaña **Adjuntos**.
+Las que van en una **nota interna** solo las ve el equipo de la mesa.
+
 ## 5. Seguimiento del solicitante (Cliente interno)
 
 * En **Tickets** ve todos los que creó, con su estado y su avance.
