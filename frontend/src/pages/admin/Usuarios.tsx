@@ -9,6 +9,8 @@ import EditIcon from "@mui/icons-material/Edit";
 import KeyIcon from "@mui/icons-material/Key";
 import SearchIcon from "@mui/icons-material/Search";
 import BeachAccessIcon from "@mui/icons-material/BeachAccessOutlined";
+import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
+import DialogoTraspaso from "../tercera/Traspaso";
 import { get, patch, post } from "../../api/client";
 import { useCatalogos } from "../../api/hooks";
 import type { Ausencia, Pagina, Rol, UsuarioAdmin } from "../../api/types";
@@ -32,6 +34,7 @@ export default function Usuarios() {
   const [form, setForm] = useState<Form | null>(null);
   const [temporal, setTemporal] = useState<{ correo: string; clave: string } | null>(null);
   const [ausenciaDe, setAusenciaDe] = useState<UsuarioAdmin | null>(null);
+  const [traspasoDe, setTraspasoDe] = useState<UsuarioAdmin | null>(null);
   const ausencias = useQuery({ queryKey: ["ausencias", "equipo"], queryFn: () => get<Ausencia[]>("/ausencias") });
   const ausenciaDeUsuario = (id: number) => (ausencias.data ?? []).find((a) => a.usuario.id === id);
   const roles = useQuery({ queryKey: ["admin", "roles"], queryFn: () => get<Rol[]>("/admin/roles") });
@@ -179,6 +182,11 @@ export default function Usuarios() {
                           </IconButton>
                         </Tooltip>
                       )}
+                      <Tooltip title="Traspasar sus tickets (se va o cambia de área)">
+                        <IconButton size="small" onClick={() => setTraspasoDe(u)}>
+                          <SwapHorizIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       {u.origen_autenticacion === "LOCAL" && (
                         <Tooltip title="Generar contraseña temporal">
                           <IconButton size="small" onClick={() => restablecer.mutate(u)}>
@@ -194,6 +202,17 @@ export default function Usuarios() {
           </TableContainer>
           <TablePagination component="div" count={q.data?.total ?? 0} page={pagina} onPageChange={(_, p) => setPagina(p)} rowsPerPage={25} rowsPerPageOptions={[25]} />
         </Paper>
+      )}
+
+      {traspasoDe && (
+        <DialogoTraspaso
+          usuario={traspasoDe}
+          todos={supervisores.data?.items ?? []}
+          onCerrar={(hecho) => {
+            setTraspasoDe(null);
+            if (hecho) qc.invalidateQueries({ queryKey: ["admin", "usuarios"] });
+          }}
+        />
       )}
 
       <DialogoAusencia abierto={!!ausenciaDe} onCerrar={() => setAusenciaDe(null)} usuario={ausenciaDe ?? undefined} />
@@ -225,10 +244,11 @@ export default function Usuarios() {
               <TextField fullWidth label="Cargo" value={form?.cargo ?? ""} onChange={(e) => set("cargo", e.target.value)} />
               <TextField fullWidth label="Teléfono" value={form?.telefono ?? ""} onChange={(e) => set("telefono", e.target.value)} />
             </Stack>
-            <TextField select label="Supervisor directo" value={form?.supervisor_id ?? ""} onChange={(e) => set("supervisor_id", e.target.value ? Number(e.target.value) : null)}>
+            <TextField select label="Jefe directo (aprueba sus solicitudes)" value={form?.supervisor_id ?? ""} onChange={(e) => set("supervisor_id", e.target.value ? Number(e.target.value) : null)}
+              helperText="Lo usan las reglas de aprobación «Jefe directo». Puede ser cualquier persona activa (gerente, jefe de área, supervisor).">
               <MenuItem value="">Ninguno</MenuItem>
               {supervisores.data?.items
-                .filter((u) => ["SUPERVISOR", "ADMIN_MESA", "SUPER_ADMIN"].includes(u.rol) && u.id !== form?.id)
+                .filter((u) => (u.activo || u.id === form?.supervisor_id) && u.id !== form?.id)
                 .map((u) => (
                   <MenuItem key={u.id} value={u.id}>
                     {u.nombre}

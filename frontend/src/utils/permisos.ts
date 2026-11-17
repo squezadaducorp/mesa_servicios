@@ -20,4 +20,6 @@ export const P = {
   REPORTES_PROGRAMAR: "reportes.programar",
   INVENTARIO_VER: "inventario.ver",
   INVENTARIO: "inventario.gestionar",
+  APROBACIONES: "aprobaciones.gestionar",
+  AVISOS: "avisos.gestionar",
 } as const;

@@ -50,6 +50,12 @@ La sesión se renueva sola mientras trabaja. Al terminar, use **Cerrar sesión**
 
 El personal de la mesa ve además los campos **Canal** (portal, correo, teléfono, presencial), para registrar pedidos que llegaron por otra vía, y **Asignar a**, para elegir el responsable. Si deja *Asignar a* vacío, la asignación es automática.
 
+### Avisos generales y aprobaciones
+
+* Si arriba aparece un **aviso general** en rojo (por ejemplo «ECUAPASS no responde»), el equipo ya lo sabe: no hace falta crear un ticket. Pulse **A mí también me afecta** (puede dejar un comentario, como una DAI que vence hoy) y le llegará un correo con cada novedad. Si escribe un ticket con palabras parecidas, el formulario le ofrece vincularlo al aviso o «Solo marcar me afecta».
+* Algunas solicitudes (por ejemplo accesos o equipo nuevo) necesitan el visto bueno de su jefe directo: quedan **Por aprobar** y la mesa empieza a atenderlas al aprobarse. Si su jefe la rechaza, verá el motivo en el ticket.
+* Si usted es jefe, en el menú aparece **Por aprobar** con las solicitudes de su equipo. También le llega un correo con los botones Aprobar y Rechazar (rechazar pide un comentario).
+
 ## 3. Lista de tickets
 
 ![Lista de tickets](capturas/02-tickets.png)

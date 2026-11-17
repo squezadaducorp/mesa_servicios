@@ -174,6 +174,18 @@ def ciclo_reportes() -> dict:
         return r
 
 
+def ciclo_aprobaciones() -> dict:
+    """Recuerda y escala las aprobaciones pendientes (mejora 21)."""
+    from app.application.services.aprobacion_service import AprobacionService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "aprobaciones", settings.WORKER_INTERVALO_SEG * 3):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        r = AprobacionService(session).procesar(utcnow())
+        session.commit()
+        return r
+
+
 def ciclo_buzon() -> dict:
     """Lee el buzón compartido de Exchange Online: crea tickets y agrega respuestas."""
     if not settings.BUZON_ENABLED:
@@ -219,6 +231,7 @@ def ciclo_entra() -> dict:
 def ejecutar_ciclo() -> None:
     for nombre, fn in (("ausencias", ciclo_ausencias), ("sla", ciclo_sla), ("resumen", ciclo_resumen_diario),
                        ("cierre", ciclo_cierre_automatico), ("recurrentes", ciclo_recurrentes), ("reportes", ciclo_reportes),
+                       ("aprobaciones", ciclo_aprobaciones),
                        ("buzon", ciclo_buzon), ("correo", ciclo_correos),
                        ("teams", ciclo_teams), ("entra", ciclo_entra)):
         try:

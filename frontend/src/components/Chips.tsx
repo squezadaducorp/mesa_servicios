@@ -3,6 +3,7 @@ import PauseCircleOutlinedIcon from "@mui/icons-material/PauseCircleOutlined";
 import type { CumplimientoSla } from "../api/types";
 
 export const COLOR_ESTADO: Record<string, string> = {
+  POR_APROBAR: "#B57400",
   NUEVO: "#1367AC",
   ASIGNADO: "#5E35B1",
   EN_PROCESO: "#0288D1",
@@ -14,6 +15,7 @@ export const COLOR_ESTADO: Record<string, string> = {
 };
 
 export const NOMBRE_ESTADO: Record<string, string> = {
+  POR_APROBAR: "Por aprobar",
   NUEVO: "Nuevo",
   ASIGNADO: "Asignado",
   EN_PROCESO: "En Proceso",

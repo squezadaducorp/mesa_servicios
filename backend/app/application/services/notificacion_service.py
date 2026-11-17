@@ -16,6 +16,14 @@ from app.infrastructure.repositories.repositorios import CatalogoRepository
 log = logging.getLogger(__name__)
 
 TZ_LABEL = "hora Ecuador"
+# Plantillas que no llevan el botón de seguimiento (ya tienen su propio enlace o no son del solicitante)
+SIN_SEGUIMIENTO = {"SEGUIMIENTO_ENLACE", "RESPUESTA_COPIA", "TICKETS_UNIDOS"}
+BOTON_SEGUIMIENTO = (
+    '<div style="text-align:center;margin:22px 0 8px"><a href="{url_seguimiento}" style="background:#1367AC;color:#fff;'
+    'padding:11px 22px;border-radius:6px;text-decoration:none;font-weight:600">Ver el estado de mi solicitud</a>'
+    '<div style="color:#5A6577;font-size:12px;margin-top:8px">No necesita usuario ni contraseña. Este enlace es solo para usted: '
+    'no lo reenvíe.</div></div>'
+)
 
 
 def fecha_local(d) -> str:
@@ -93,6 +101,12 @@ class NotificacionService:
         plantilla = self.catalogo.plantilla(codigo)
         if plantilla is None or not para or para.lower() in cuentas_sistema():
             return False
+        if "url_seguimiento" not in extra and codigo not in SIN_SEGUIMIENTO:
+            from app.application.services.seguimiento_service import SeguimientoService
+
+            enlace = SeguimientoService(self.session).url(ticket)
+            if enlace:   # remitente externo: el correo lleva el botón «Ver el estado de mi solicitud»
+                extra["url_seguimiento"] = enlace
         self._encolar(plantilla, codigo, para, nombre, ticket, extra, [c for c in (cc or []) if c != para.lower()])
         return True
 
@@ -113,6 +127,8 @@ class NotificacionService:
             seguro = v if k.startswith("url") else html.escape(v)
             asunto = asunto.replace("{" + k + "}", v)
             cuerpo = cuerpo.replace("{" + k + "}", seguro)
+        if ctx.get("url_seguimiento") and "{url_seguimiento}" not in plantilla.cuerpo_html:
+            cuerpo += BOTON_SEGUIMIENTO.replace("{url_seguimiento}", ctx["url_seguimiento"])
         copia = [c for c in (cc or []) if c.lower() not in cuentas_sistema()]
         self.session.add(
             m.ColaCorreo(para=para, cc=", ".join(copia)[:500] or None, asunto=asunto[:250], cuerpo_html=plantilla_base(cuerpo),

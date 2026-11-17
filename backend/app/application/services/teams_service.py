@@ -77,7 +77,7 @@ def tarjeta(t: m.Ticket, evento: str, detalle: str | None = None, aviso: tuple[s
         ]},
         {"type": "FactSet", "facts": [
             {"title": "Prioridad", "value": t.prioridad.nombre if t.prioridad else "—"},
-            {"title": "Cliente", "value": t.cliente.nombre if t.cliente else "—"},
+            {"title": "Cliente", "value": t.cliente.razon_social if t.cliente else "—"},
             {"title": "Responsable", "value": t.responsable.nombre if t.responsable else "Sin asignar"},
             {"title": "Estado", "value": t.estado_rel.nombre if t.estado_rel else t.estado},
             {"title": "SLA restante", "value": sla_restante(t)},

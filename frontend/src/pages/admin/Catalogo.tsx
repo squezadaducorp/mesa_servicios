@@ -51,7 +51,12 @@ export default function Catalogo() {
   });
   const [fc, setFc] = useState<FormCat | null>(null);
   const [fs, setFs] = useState<(Partial<Subcategoria> & { categoria_id: number }) | null>(null);
-  const [fcl, setFcl] = useState<Partial<Cliente> | null>(null);
+  const [fcl, setFclBase] = useState<Partial<Cliente> | null>(null);
+  const [dominiosTexto, setDominiosTexto] = useState<string | null>(null);
+  const setFcl = (v: Partial<Cliente> | null) => {
+    if (!v || v.id !== fcl?.id || !fcl) setDominiosTexto(null);
+    setFclBase(v);
+  };
 
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: ["admin", "categorias"] });
@@ -89,7 +94,7 @@ export default function Catalogo() {
   });
   const guardarCliente = useMutation({
     mutationFn: (f: Partial<Cliente>) => {
-      const body = { ruc: f.ruc || null, razon_social: f.razon_social, correo: f.correo || null, telefono: f.telefono || null, es_vip: !!f.es_vip, activo: f.activo ?? true, correos_copia: f.correos_copia ?? [] };
+      const body = { ruc: f.ruc || null, razon_social: f.razon_social, correo: f.correo || null, telefono: f.telefono || null, es_vip: !!f.es_vip, activo: f.activo ?? true, correos_copia: f.correos_copia ?? [], dominios: f.dominios ?? [] };
       return f.id ? put(`/admin/clientes/${f.id}`, body) : post("/admin/clientes", body);
     },
     onSuccess: () => {
@@ -226,6 +231,7 @@ export default function Catalogo() {
                 <TableRow>
                   <TableCell>Razón social</TableCell>
                   <TableCell>RUC</TableCell>
+                  <TableCell>Dominios de su gente</TableCell>
                   <TableCell>Correo</TableCell>
                   <TableCell>Teléfono</TableCell>
                   <TableCell>VIP</TableCell>
@@ -237,6 +243,7 @@ export default function Catalogo() {
                   <TableRow key={c.id} hover>
                     <TableCell sx={{ fontWeight: 600 }}>{c.razon_social}</TableCell>
                     <TableCell>{c.ruc}</TableCell>
+                    <TableCell>{(c.dominios ?? []).map((d) => <Chip key={d} size="small" variant="outlined" label={`@${d}`} sx={{ mr: 0.5 }} />)}</TableCell>
                     <TableCell>{c.correo}</TableCell>
                     <TableCell>{c.telefono}</TableCell>
                     <TableCell>{c.es_vip && <Chip size="small" color="secondary" label="VIP" />}</TableCell>
@@ -376,6 +383,16 @@ export default function Catalogo() {
                 error={!!fcl.ruc && fcl.ruc.length !== 13}
               />
               <TextField label="Correo" type="email" value={fcl.correo ?? ""} onChange={(e) => setFcl({ ...fcl, correo: e.target.value })} />
+              <TextField
+                label="Dominios de correo de la empresa"
+                placeholder="schryver.com, schryver.com.ec"
+                value={dominiosTexto ?? (fcl.dominios ?? []).join(", ")}
+                onChange={(e) => {
+                  setDominiosTexto(e.target.value);
+                  setFcl({ ...fcl, dominios: e.target.value.split(/[,;\s]+/).map((d) => d.trim().replace(/^.*@/, "").toLowerCase()).filter(Boolean) });
+                }}
+                helperText="Las personas que crean tickets con un correo de estos dominios (usuarios o externos) quedan con este cliente automáticamente. No use gmail.com, hotmail.com, etc."
+              />
               <TextField label="Teléfono" value={fcl.telefono ?? ""} onChange={(e) => setFcl({ ...fcl, telefono: e.target.value })} />
               <CampoCorreos
                 etiqueta="Copia automática (opcional)"

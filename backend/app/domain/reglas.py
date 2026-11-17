@@ -2,6 +2,8 @@
 from app.domain.enums import Estado
 
 TRANSICIONES: dict[Estado, set[Estado]] = {
+    # Solo la respuesta del aprobador (o cancelar) saca el ticket de «Por aprobar»
+    Estado.POR_APROBAR: {Estado.CANCELADO},
     Estado.NUEVO: {Estado.ASIGNADO, Estado.EN_PROCESO, Estado.ESCALADO, Estado.CANCELADO},
     Estado.ASIGNADO: {Estado.EN_PROCESO, Estado.PENDIENTE_CLIENTE, Estado.ESCALADO, Estado.RESUELTO, Estado.CANCELADO},
     Estado.EN_PROCESO: {Estado.PENDIENTE_CLIENTE, Estado.ESCALADO, Estado.RESUELTO, Estado.CANCELADO},

@@ -31,6 +31,7 @@ import { CumplimientoChip, EstadoChip, NOMBRES_NOTA, PrioridadChip, SlaBarra, co
 import { Cargando, ErrorCarga, Vacio } from "../components/Comunes";
 import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/formato";
 import TicketDialogos, { estadosDestino, type Dialogo } from "./TicketDialogos";
+import { AlertasTercera, PanelTercera } from "./tercera/TicketTercera";
 
 /** Encuesta de satisfacción: el solicitante califica (y así cierra) un ticket resuelto; luego se muestra la nota. */
 function TarjetaEncuesta({ t, onListo }: { t: Ticket; onListo: (nuevo: Ticket) => void }) {
@@ -301,6 +302,8 @@ export default function TicketDetalle() {
           puede consultarlo pero no modificarlo.
         </Alert>
       )}
+
+      <AlertasTercera t={t} onCambio={() => q.refetch()} />
 
       <Paper sx={{ p: { xs: 2, md: 3 }, mb: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
@@ -644,6 +647,8 @@ export default function TicketDetalle() {
               {t.sla_minutos_extension > 0 && ` Incluye extensión de ${duracion(t.sla_minutos_extension)}.`}
             </Typography>
           </Paper>
+
+          <PanelTercera t={t} onCambio={() => q.refetch()} />
 
           {t.equipo && (
             <Paper sx={{ p: 2.5 }}>

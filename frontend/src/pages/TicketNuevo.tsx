@@ -17,6 +17,8 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import CloseIcon from "@mui/icons-material/Close";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
+import type { AvisoGeneral } from "../api/tercera";
 import { api, get, post } from "../api/client";
 import { useCatalogos } from "../api/hooks";
 import type { EquipoOpcion, KbArticulo, KbResumen, PersonaEnNombre, SugerenciaTicket, TicketDetalle } from "../api/types";
@@ -65,6 +67,34 @@ export default function TicketNuevo() {
     queryFn: () => get<EquipoOpcion[]>("/inventario/opciones", { solicitante_id: solicitanteId }),
     enabled: !!solicitanteId,
   });
+
+  // Aviso general activo que parece ser lo mismo (p. ej. ECUAPASS caído): se vincula en vez de duplicar
+  const [aviso, setAviso] = useState<AvisoGeneral | null>(null);
+  const [vincularAviso, setVincularAviso] = useState(true);
+  useEffect(() => {
+    const texto = `${asunto} ${descripcion}`.trim();
+    if (texto.length < 4) {
+      setAviso(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      get<AvisoGeneral[]>("/avisos/coincidencias", { texto: texto.slice(0, 500) })
+        .then((r) => setAviso(r[0] ?? null))
+        .catch(() => setAviso(null));
+    }, 500);
+    return () => clearTimeout(t);
+  }, [asunto, descripcion]);
+  const soloMeAfecta = async () => {
+    if (!aviso) return;
+    try {
+      await post(`/avisos/${aviso.id}/afecta`, { comentario: descripcion.trim().slice(0, 500) || null });
+      qc.invalidateQueries({ queryKey: ["avisos"] });
+      avisar("Listo: quedó registrado y le avisaremos por correo cuando se resuelva");
+      navigate("/tickets", { replace: true });
+    } catch (e) {
+      avisar(mensajeError(e), "error");
+    }
+  };
 
   // Artículos de la base de conocimiento que podrían resolverlo sin crear el ticket
   useEffect(() => {
@@ -151,6 +181,7 @@ export default function TicketNuevo() {
         en_nombre_motivo: paraOtro && persona ? motivo.trim() || null : null,
         equipo_id: mostrarEquipo ? equipoId : null,
         kb_vistos: kbVistos,
+        aviso_id: aviso && vincularAviso ? aviso.id : null,
       });
       for (const f of archivos) {
         const form = new FormData();
@@ -221,6 +252,21 @@ export default function TicketNuevo() {
               </Box>
             )}
             <TextField label="Asunto" value={asunto} onChange={(e) => setAsunto(e.target.value)} required slotProps={{ htmlInput: { maxLength: 200, minLength: 5 } }} />
+            {aviso && (
+              <Alert severity={vincularAviso ? "warning" : "info"} icon={<AccountTreeIcon />}
+                action={
+                  <Stack spacing={0.5} sx={{ alignItems: "flex-end" }}>
+                    {!aviso.me_afecta && <Button size="small" color="inherit" variant="outlined" onClick={soloMeAfecta} sx={{ whiteSpace: "nowrap" }}>Solo marcar «me afecta»</Button>}
+                    <Button size="small" color="inherit" onClick={() => setVincularAviso(!vincularAviso)} sx={{ whiteSpace: "nowrap" }}>
+                      {vincularAviso ? "Es otro problema" : "Sí es parte del aviso"}
+                    </Button>
+                  </Stack>
+                }>
+                {vincularAviso
+                  ? <>Parece ser parte del aviso general <b>«{aviso.titulo}»</b> ({aviso.estado_nombre}). Si lo crea, el ticket se vincula al aviso y le avisamos cuando se resuelva. No hace falta crear uno nuevo: puede solo marcar que le afecta.</>
+                  : <>Este ticket se creará aparte, sin vincularlo al aviso «{aviso.titulo}».</>}
+              </Alert>
+            )}
             <TextField
               label="Descripción"
               value={descripcion}

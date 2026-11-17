@@ -28,6 +28,10 @@ import BoltIcon from "@mui/icons-material/Bolt";
 import EventRepeatIcon from "@mui/icons-material/EventRepeat";
 import ScheduleSendIcon from "@mui/icons-material/ScheduleSend";
 import ComputerIcon from "@mui/icons-material/Computer";
+import HowToRegIcon from "@mui/icons-material/HowToReg";
+import RuleIcon from "@mui/icons-material/Rule";
+import CampaignIcon from "@mui/icons-material/Campaign";
+import { BannerAvisosGenerales } from "./AvisosGenerales";
 import { AvisosSuperiores, DialogoAusencia } from "./Disponibilidad";
 import { useAuth } from "../auth/AuthContext";
 import { useConteoNotificaciones } from "../api/hooks";
@@ -44,6 +48,7 @@ interface ItemNav {
   texto: string;
   icono: ReactNode;
   permisos?: string[];
+  insignia?: number;
 }
 
 const PRINCIPAL: ItemNav[] = [
@@ -60,12 +65,14 @@ const EQUIPO_MESA: ItemNav[] = [
   { a: "/recurrentes", texto: "Tickets recurrentes", icono: <EventRepeatIcon />, permisos: [P.RECURRENTES] },
   { a: "/reportes-correo", texto: "Reportes por correo", icono: <ScheduleSendIcon />, permisos: [P.REPORTES_PROGRAMAR] },
   { a: "/inventario", texto: "Inventario de equipos", icono: <ComputerIcon />, permisos: [P.INVENTARIO_VER, P.INVENTARIO] },
+  { a: "/avisos", texto: "Avisos generales", icono: <CampaignIcon />, permisos: [P.AVISOS] },
 ];
 
 const ADMIN: ItemNav[] = [
   { a: "/admin/usuarios", texto: "Usuarios", icono: <PeopleIcon />, permisos: [P.USUARIOS] },
   { a: "/admin/roles", texto: "Roles y permisos", icono: <AdminPanelSettingsIcon />, permisos: [P.ROLES] },
   { a: "/admin/catalogo", texto: "Categorías y clientes", icono: <CategoryIcon />, permisos: [P.CATALOGO] },
+  { a: "/admin/aprobaciones", texto: "Reglas de aprobación", icono: <RuleIcon />, permisos: [P.APROBACIONES] },
   { a: "/admin/sla", texto: "SLA y calendario", icono: <TimerIcon />, permisos: [P.SLA] },
   { a: "/admin/auditoria", texto: "Auditoría", icono: <HistoryIcon />, permisos: [P.AUDITORIA] },
   { a: "/admin/configuracion", texto: "Configuración", icono: <SettingsIcon />, permisos: [P.SISTEMA] },
@@ -175,7 +182,17 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const aprobaciones = useQuery({
+    queryKey: ["aprobaciones", "conteo"],
+    queryFn: () => get<{ pendientes: number; es_aprobador: boolean }>("/aprobaciones/conteo"),
+    refetchInterval: 60_000,
+  });
   const visibles = (items: ItemNav[]) => items.filter((i) => !i.permisos || puede(...i.permisos));
+  const principal: ItemNav[] = [...visibles(PRINCIPAL)];
+  if (aprobaciones.data?.es_aprobador || aprobaciones.data?.pendientes) {
+    principal.splice(principal.findIndex((i) => i.a === "/tickets/nuevo") + 1 || 3, 0,
+      { a: "/aprobaciones", texto: "Por aprobar", icono: <HowToRegIcon />, insignia: aprobaciones.data.pendientes });
+  }
   const admin = visibles(ADMIN);
   const mesa = visibles(EQUIPO_MESA);
 
@@ -200,6 +217,7 @@ export default function Layout() {
       >
         <ListItemIcon>{i.icono}</ListItemIcon>
         <ListItemText primary={i.texto} />
+        {!!i.insignia && <Badge badgeContent={i.insignia} color="warning" sx={{ mr: 1.5 }} />}
       </ListItemButton>
     );
   };
@@ -215,7 +233,7 @@ export default function Layout() {
           </Typography>
         </Box>
       </Box>
-      <List sx={{ pt: 1 }}>{visibles(PRINCIPAL).map(enlace)}</List>
+      <List sx={{ pt: 1 }}>{principal.map(enlace)}</List>
       {mesa.length > 0 && (
         <List
           subheader={
@@ -328,6 +346,7 @@ export default function Layout() {
         )}
       </Box>
       <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 3 }, mt: 8 }}>
+        <BannerAvisosGenerales />
         <AvisosSuperiores gestor={gestor} />
         <Outlet />
       </Box>
