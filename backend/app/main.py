@@ -10,7 +10,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm.exc import StaleDataError
 
-from app.api.v1.routers import admin, auditoria, ausencias, auth, catalogos, notificaciones, publico, reportes, teams, tickets
+from app.api.v1.routers import (admin, auditoria, ausencias, auth, catalogos, conocimiento, inventario, notificaciones, publico, recurrentes,
+                                reportes, reportes_programados, respuestas, teams, tickets)
 from app.application.errores import ErrorAplicacion
 from app.core.config import settings
 from app.infrastructure.db.session import engine
@@ -99,7 +100,8 @@ async def error_inesperado(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
 
 
-for r in (auth, tickets, catalogos, reportes, notificaciones, auditoria, admin, teams, publico, ausencias):
+for r in (auth, tickets, catalogos, reportes, notificaciones, auditoria, admin, teams, publico, ausencias, conocimiento, respuestas,
+          recurrentes, reportes_programados, inventario):
     app.include_router(r.router, prefix=settings.API_PREFIX)
 
 

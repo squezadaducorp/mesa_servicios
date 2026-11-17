@@ -15,6 +15,7 @@ import type { Ausencia, Pagina, Rol, UsuarioAdmin } from "../../api/types";
 import { mensajeError, useAviso } from "../../components/Aviso";
 import { Cargando, Encabezado, ErrorCarga } from "../../components/Comunes";
 import { DialogoAusencia } from "../../components/Disponibilidad";
+import PermisoEnNombre from "../../components/PermisoEnNombre";
 import { fechaHora } from "../../utils/formato";
 
 type Form = Partial<UsuarioAdmin> & { clave?: string };
@@ -260,6 +261,7 @@ export default function Usuarios() {
                 <TextField label="Contraseña inicial (opcional)" type="password" value={form?.clave ?? ""} onChange={(e) => set("clave", e.target.value)} helperText="Si la deja vacía se genera una temporal; el usuario deberá cambiarla al ingresar." />
               )
             )}
+            {form?.id && <PermisoEnNombre usuarioId={form.id} />}
           </Stack>
         </DialogContent>
         <DialogActions>

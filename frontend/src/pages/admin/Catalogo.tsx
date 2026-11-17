@@ -32,6 +32,8 @@ type FormCat = {
   activo: boolean;
   responsables: { usuario_id: number; es_principal: boolean }[];
   correos_copia: string[];
+  pide_equipo: boolean;
+  restringida_en_nombre: boolean;
 };
 
 export default function Catalogo() {
@@ -120,8 +122,10 @@ export default function Catalogo() {
             activo: c.activo,
             responsables: c.responsables.map((r) => ({ usuario_id: r.usuario_id, es_principal: r.es_principal })),
             correos_copia: c.correos_copia ?? [],
+            pide_equipo: !!c.pide_equipo,
+            restringida_en_nombre: !!c.restringida_en_nombre,
           }
-        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [], correos_copia: [] },
+        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [], correos_copia: [], pide_equipo: false, restringida_en_nombre: false },
     );
 
   const alternarResp = (id: number) =>
@@ -315,6 +319,10 @@ export default function Catalogo() {
                 onCambio={(correos_copia) => setFc({ ...fc, correos_copia })}
                 ayuda="Estos correos quedan en copia de cada ticket nuevo de la categoría; luego se pueden quitar en el ticket."
               />
+              <FormControlLabel control={<Switch checked={fc.pide_equipo} onChange={(e) => setFc({ ...fc, pide_equipo: e.target.checked })} />}
+                label="Pedir «Equipo afectado» al crear el ticket (para Sistemas, equipos, impresoras…)" />
+              <FormControlLabel control={<Switch checked={fc.restringida_en_nombre} onChange={(e) => setFc({ ...fc, restringida_en_nombre: e.target.checked })} />}
+                label="Restringida: no se puede pedir en nombre de otra persona (accesos, contraseñas, equipo nuevo)" />
               <FormControlLabel control={<Switch checked={fc.activo} onChange={(e) => setFc({ ...fc, activo: e.target.checked })} />} label="Activa" />
             </Stack>
           </DialogContent>

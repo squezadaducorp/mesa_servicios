@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import DbSession, requiere
 from app.application.errores import Contexto
 from app.application.schemas import esquemas as s
-from app.application.services.admin_service import AdminService, categoria_salida, usuario_salida
+from app.application.schemas import mejoras2 as s2
+from app.application.services.admin_service import (AdminService, categoria_salida, delegacion_salida, guardar_delegacion,
+                                                    usuario_salida)
 from app.domain.enums import Permiso
 from app.infrastructure.repositories.repositorios import CatalogoRepository
 
@@ -45,6 +47,20 @@ def restablecer(usuario_id: int, ctx: Contexto = Depends(ADMIN_USUARIOS), sessio
 def eliminar_usuario(usuario_id: int, ctx: Contexto = Depends(requiere(Permiso.REGISTRO_ELIMINAR)), session: Session = DbSession):
     AdminService(session).eliminar_usuario(usuario_id, ctx)
     return {"mensaje": "Usuario eliminado"}
+
+
+@router.get("/usuarios/{usuario_id}/en-nombre", response_model=s2.DelegacionSalida,
+            summary="Permiso para crear tickets en nombre de otras personas")
+def ver_delegacion(usuario_id: int, ctx: Contexto = Depends(ADMIN_USUARIOS), session: Session = DbSession):
+    from app.infrastructure.db import models as m
+
+    return delegacion_salida(session.get(m.UsuarioDelegacion, usuario_id), session)
+
+
+@router.put("/usuarios/{usuario_id}/en-nombre", response_model=s2.DelegacionSalida,
+            summary="Activar, limitar por áreas y fecha, o quitar el permiso de crear tickets en nombre de otras personas")
+def editar_delegacion(usuario_id: int, dto: s2.DelegacionEntrada, ctx: Contexto = Depends(ADMIN_USUARIOS), session: Session = DbSession):
+    return delegacion_salida(guardar_delegacion(session, usuario_id, dto, ctx), session)
 
 
 # --------------------------------------------------------------------- roles

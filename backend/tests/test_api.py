@@ -126,7 +126,9 @@ def test_asignar_y_escalar(client, como):
     t = crear_ticket(client, como("maria.andrade"))
     url = f"{API}/tickets/{t['id']}"
     juan = next(u for u in catalogo(client, como("admin"))["responsables"] if u["nombre"] == "Juan Manuel Villamar")
-    assert client.post(f"{url}/asignar", json={"responsable_id": juan["id"]}, headers=como("david.medina")).status_code == 403
+    # Un analista que no es el responsable del ticket no puede reasignarlo (el responsable sí: test_segunda_ronda)
+    assert t["responsable"]["nombre"] != "Denisse Quinga"
+    assert client.post(f"{url}/asignar", json={"responsable_id": juan["id"]}, headers=como("denisse.quinga")).status_code in (403, 404)
     r = client.post(f"{url}/asignar", json={"responsable_id": juan["id"], "motivo": "Tema legal"}, headers=como("supervisor.tecnico"))
     assert r.status_code == 200 and r.json()["responsable"]["nombre"] == "Juan Manuel Villamar"
     r = client.post(f"{url}/escalar", json={"motivo": "Requiere criterio del supervisor"}, headers=como("juan.villamar"))

@@ -23,6 +23,11 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ErrorIcon from "@mui/icons-material/Error";
 import InfoIcon from "@mui/icons-material/Info";
 import BeachAccessIcon from "@mui/icons-material/BeachAccessOutlined";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import BoltIcon from "@mui/icons-material/Bolt";
+import EventRepeatIcon from "@mui/icons-material/EventRepeat";
+import ScheduleSendIcon from "@mui/icons-material/ScheduleSend";
+import ComputerIcon from "@mui/icons-material/Computer";
 import { AvisosSuperiores, DialogoAusencia } from "./Disponibilidad";
 import { useAuth } from "../auth/AuthContext";
 import { useConteoNotificaciones } from "../api/hooks";
@@ -46,7 +51,15 @@ const PRINCIPAL: ItemNav[] = [
   { a: "/reportes", texto: "Indicadores", icono: <AssessmentIcon />, permisos: [P.REPORTE] },
   { a: "/tickets", texto: "Tickets", icono: <ConfirmationNumberIcon /> },
   { a: "/tickets/nuevo", texto: "Nuevo ticket", icono: <AddCircleIcon />, permisos: [P.CREAR] },
+  { a: "/conocimiento", texto: "Base de conocimiento", icono: <MenuBookIcon /> },
   { a: "/notificaciones", texto: "Notificaciones", icono: <NotificationsIcon /> },
+];
+
+const EQUIPO_MESA: ItemNav[] = [
+  { a: "/respuestas", texto: "Respuestas rápidas", icono: <BoltIcon />, permisos: [P.VER_TODOS, P.VER_AREA, P.VER_ASIGNADOS] },
+  { a: "/recurrentes", texto: "Tickets recurrentes", icono: <EventRepeatIcon />, permisos: [P.RECURRENTES] },
+  { a: "/reportes-correo", texto: "Reportes por correo", icono: <ScheduleSendIcon />, permisos: [P.REPORTES_PROGRAMAR] },
+  { a: "/inventario", texto: "Inventario de equipos", icono: <ComputerIcon />, permisos: [P.INVENTARIO_VER, P.INVENTARIO] },
 ];
 
 const ADMIN: ItemNav[] = [
@@ -164,9 +177,10 @@ export default function Layout() {
 
   const visibles = (items: ItemNav[]) => items.filter((i) => !i.permisos || puede(...i.permisos));
   const admin = visibles(ADMIN);
+  const mesa = visibles(EQUIPO_MESA);
 
   const enlace = (i: ItemNav) => {
-    const activo = i.a === "/tickets" ? location.pathname === "/tickets" || /^\/tickets\/\d+/.test(location.pathname) : location.pathname.startsWith(i.a);
+    const activo = i.a === "/tickets" ? location.pathname === "/tickets" || /^\/tickets\/\d+/.test(location.pathname) : location.pathname === i.a || location.pathname.startsWith(`${i.a}/`);
     return (
       <ListItemButton
         key={i.a}
@@ -191,7 +205,7 @@ export default function Layout() {
   };
 
   const contenidoMenu = (
-    <Box sx={{ height: "100%", bgcolor: marca.navy, display: "flex", flexDirection: "column" }}>
+    <Box sx={{ height: "100%", bgcolor: marca.navy, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       <Box sx={{ px: 2.5, py: 2.5, display: "flex", alignItems: "center", gap: 1.5 }}>
         <Box component="img" src="/isotipo.png" alt="" sx={{ width: 40, height: 40, objectFit: "contain", bgcolor: "#fff", borderRadius: 2, p: 0.5 }} />
         <Box>
@@ -202,6 +216,17 @@ export default function Layout() {
         </Box>
       </Box>
       <List sx={{ pt: 1 }}>{visibles(PRINCIPAL).map(enlace)}</List>
+      {mesa.length > 0 && (
+        <List
+          subheader={
+            <ListSubheader sx={{ bgcolor: "transparent", color: "#7C8CA6", fontSize: 11, letterSpacing: 1, lineHeight: "32px" }}>
+              EQUIPO DE LA MESA
+            </ListSubheader>
+          }
+        >
+          {mesa.map(enlace)}
+        </List>
+      )}
       {admin.length > 0 && (
         <List
           subheader={

@@ -172,13 +172,15 @@ export default function Tickets() {
             Filtros{activos ? ` (${activos})` : ""}
           </Button>
         </Stack>
-        {puede(P.VER_ASIGNADOS) && (
+        {(
           <Chip
             sx={{ mt: 1.5 }}
             color="primary"
             variant={filtro.participe ? "filled" : "outlined"}
             label="Tickets en los que participé"
-            title="Incluye los tickets que usted atendió y hoy están con otro responsable (solo lectura)"
+            title={puede(P.VER_ASIGNADOS)
+              ? "Incluye los tickets que usted atendió y hoy están con otro responsable, y los que registró en nombre de otra persona (solo lectura)"
+              : "Incluye los tickets que usted registró en nombre de otra persona (solo lectura)"}
             onClick={() => set("participe", filtro.participe ? undefined : true)}
           />
         )}

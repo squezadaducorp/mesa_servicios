@@ -130,6 +130,8 @@ class CategoriaSalida(Modelo):
     supervisor: UsuarioResumen | None
     responsables: list[ResponsableSalida]
     subcategorias: list[SubcategoriaSalida]
+    pide_equipo: bool = False             # el formulario pide «Equipo afectado»
+    restringida_en_nombre: bool = False   # no se puede pedir en nombre de otra persona
 
 
 class CategoriaEntrada(BaseModel):
@@ -144,6 +146,8 @@ class CategoriaEntrada(BaseModel):
     activo: bool = True
     responsables: list[ResponsableEntrada] = []
     correos_copia: list[str] = Field(default=[], description="Se agregan en copia a cada ticket nuevo de la categoría")
+    pide_equipo: bool = False
+    restringida_en_nombre: bool = False
 
     @field_validator("correos_copia")
     @classmethod
@@ -271,8 +275,11 @@ class TicketCrear(BaseModel):
     telefono: str | None = None
     correo: EmailStr | None = None
     canal: Literal["PORTAL", "CORREO", "TELEFONO", "PRESENCIAL", "WEB"] = "PORTAL"
-    solicitante_id: int | None = Field(default=None, description="Solo la mesa de servicio puede registrar a nombre de otro usuario")
+    solicitante_id: int | None = Field(default=None, description="En nombre de otra persona: la mesa de servicio o quien tenga la delegación activa")
+    en_nombre_motivo: str | None = Field(default=None, max_length=300, description="Obligatorio al crear en nombre de otra persona (salvo la mesa)")
     responsable_id: int | None = Field(default=None, description="Asignación directa (requiere permiso de asignar)")
+    equipo_id: int | None = Field(default=None, description="Equipo afectado (inventario)")
+    kb_vistos: list[int] = Field(default_factory=list, max_length=10, description="Artículos de la base de conocimiento que revisó antes de crear")
 
 
 class TicketEditar(BaseModel):
@@ -312,6 +319,7 @@ class CerrarEntrada(BaseModel):
 
 class ComentarioEntrada(BaseModel):
     texto: str = Field(min_length=1)
+    respuesta_rapida_id: int | None = Field(default=None, description="Respuesta rápida usada (suma un uso)")
     es_interno: bool = False
     tipo: Literal["COMENTARIO", "ACTIVIDAD"] = "COMENTARIO"
     minutos_invertidos: int | None = Field(default=None, ge=0, le=60 * 24)
@@ -484,6 +492,14 @@ class AlertaSla(Modelo):
     vence: datetime
 
 
+class EquipoTicket(Modelo):
+    id: int
+    codigo: str
+    tipo: str
+    marca_modelo: str
+    aviso: str | None = None
+
+
 class TicketDetalle(Modelo):
     id: int
     numero: str
@@ -534,6 +550,12 @@ class TicketDetalle(Modelo):
     acciones: list[str] = Field(description="Acciones que el usuario actual puede ejecutar")
     solo_lectura_participante: bool = Field(default=False, description="El usuario fue responsable antes y hoy solo puede consultarlo")
     encuesta: EncuestaSalida | None = Field(default=None, description="Calificación del solicitante, si ya respondió")
+    creado_por: UsuarioResumen | None = Field(default=None, description="Quien lo registró en nombre del solicitante")
+    en_nombre_motivo: str | None = None
+    solo_lectura_creador: bool = Field(default=False, description="Lo registró en nombre de otra persona: solo puede consultarlo")
+    equipo: EquipoTicket | None = None
+    recurrente_id: int | None = None
+    kb_vistos: list[Item] = Field(default_factory=list, description="Artículos que el solicitante revisó antes de crear el ticket")
 
 
 class FiltroTickets(BaseModel):

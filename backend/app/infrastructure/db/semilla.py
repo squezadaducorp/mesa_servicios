@@ -18,14 +18,16 @@ CLAVE_DEMO = "Aducorp2026!"
 PERMISOS_POR_ROL = {
     "ADMIN_MESA": ["sla.modificar", "ticket.ver_todos", "ticket.ver_area", "ticket.ver_asignados", "ticket.ver_propios", "ticket.crear",
                    "ticket.editar", "ticket.asignar", "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir",
-                   "ticket.comentar", "ticket.adjuntar", "reporte.ver", "dashboard.ver", "datos.exportar", "ia.usar"],
+                   "ticket.comentar", "ticket.adjuntar", "reporte.ver", "dashboard.ver", "datos.exportar", "ia.usar",
+                   "kb.gestionar", "respuestas.gestionar", "recurrentes.gestionar", "reportes.programar", "inventario.ver",
+                   "inventario.gestionar"],
     "SUPERVISOR": ["ticket.ver_area", "ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.asignar",
                    "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar",
-                   "reporte.ver", "dashboard.ver", "ia.usar"],
+                   "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver"],
     "ANALISTA": ["ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.escalar", "ticket.cambiar_estado",
-                 "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar"],
+                 "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar", "kb.gestionar", "inventario.ver", "ticket.asignar"],
     "CLIENTE": ["ticket.ver_propios", "ticket.crear", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar"],
-    "GERENCIA": ["ticket.ver_todos", "reporte.ver", "dashboard.ver", "datos.exportar"],
+    "GERENCIA": ["ticket.ver_todos", "reporte.ver", "dashboard.ver", "datos.exportar", "inventario.ver"],
 }
 TODOS_PERMISOS = sorted({p for ps in PERMISOS_POR_ROL.values() for p in ps} | {
     "sistema.administrar", "usuario.administrar", "rol.administrar", "categoria.administrar", "registro.eliminar", "auditoria.ver"})
@@ -109,9 +111,10 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                            ("SLA_AVISO_1", "[{numero}] Vence en {restante}"), ("SLA_AVISO_2", "[{numero}] Vence en {restante}"),
                            ("SLA_AVISO_RESPUESTA", "[{numero}] Falta la primera respuesta"),
                            ("ENCUESTA", "[{numero}] ¿Cómo lo atendimos?"), ("ENCUESTA_BAJA", "[{numero}] Calificación baja"),
-                           ("AUSENCIA_REASIGNADO", "[{numero}] Cambio de responsable")):
+                           ("AUSENCIA_REASIGNADO", "[{numero}] Cambio de responsable"),
+                           ("TICKET_EN_NOMBRE", "[{numero}] {creado_por} registró un ticket en su nombre")):
         session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} {restante} "
-                                      "{ausente} {reemplazo} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a></p>"))
+                                      "{ausente} {reemplazo} {creado_por} {motivo} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a></p>"))
     for k, v in (("empresa.nombre", "ADUCORP Asesores Aduaneros y Logísticos Cía. Ltda."), ("sla.umbral_aviso_1", "75"),
                  ("sla.umbral_aviso_2", "90"), ("ticket.cierre_automatico_h", "72"), ("adjuntos.max_mb", "20"),
                  ("adjuntos.extensiones", "pdf,doc,docx,xls,xlsx,csv,jpg,jpeg,png,txt,xml,zip,msg,eml"),

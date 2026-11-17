@@ -178,7 +178,26 @@ Además de la extensión, el sistema comprueba el contenido real de cada archivo
 
 Los administradores y la Gerencia ven el **Dashboard** y los **Reportes** (por categoría, responsable, cliente e histórico) y pueden exportar a Excel, PDF y CSV. Cada exportación queda en la auditoría. El uso de los reportes se explica en el [manual de usuario](09-manual-usuario.md#6-dashboard-y-reportes).
 
-## 9. Buenas prácticas
+## 9. Herramientas del equipo de la mesa
+
+Se encuentran en el menú, bajo **Equipo de la mesa**.
+
+* **Base de conocimiento** (menú principal). Artículos con la solución de los problemas frecuentes: síntoma, pasos (uno por línea) y una nota opcional. Un artículo en *Borrador* solo lo ve el equipo; al *Publicarlo* lo ve todo el personal (o solo la mesa, si se elige «Solo el equipo de la mesa»). Al crear un ticket, el sistema sugiere los artículos que coinciden con lo que la persona escribe; si con eso se resuelve, toca «Se resolvió, no crear ticket» y el artículo suma un *ticket evitado*. Si igual crea el ticket, el responsable ve qué artículos ya leyó. Con «Crear desde un ticket resuelto» se arma un borrador con el asunto, la descripción y la última respuesta del ticket. Pueden editar artículos los roles con el permiso `kb.gestionar` (analistas, supervisores y administradores).
+* **Respuestas rápidas**. Textos guardados con un atajo (por ejemplo `/datos`). En la respuesta del ticket se insertan con el botón ⚡ o escribiendo «/». Los datos `{solicitante}`, `{ticket}`, `{asunto}`, `{mi_nombre}`, `{mi_area}`, `{responsable}`, `{vence}` y `{categoria}` se llenan solos. Una respuesta puede además cambiar el estado al enviarse (por ejemplo a *Pendiente Cliente*). Cada analista puede guardar las suyas («Solo yo»); las compartidas con todo el equipo o con un área las crea quien tenga `respuestas.gestionar`. Al actualizar, las plantillas de respuesta de cada subcategoría se copiaron aquí.
+* **Tickets recurrentes** (`recurrentes.gestionar`). Programaciones que crean un ticket solo: diario (días laborables), semanal, mensual (día fijo, último día o «primer lunes»), trimestral, semestral o anual. Si la fecha cae en feriado o fin de semana se crea el siguiente día hábil, con el mismo calendario del SLA. El asunto admite `{mes}`, `{año}` y `{fecha}`, y la lista de tareas se copia en la descripción. Si está marcado «No crear uno nuevo si el anterior sigue abierto», en lugar de duplicarlo se avisa al supervisor y al responsable. El botón ▶ crea uno en el momento.
+* **Reportes por correo** (`reportes.programar`). Resumen diario, semanal o mensual para gerencia con totales, cumplimiento del SLA por área, vencidos abiertos, categorías más pedidas, satisfacción, comparación con el periodo anterior, detalle por responsable y recurrentes abiertos, con un Excel adjunto. «Enviarme una prueba» lo manda a su propio correo; «Vista previa» muestra cómo se verá.
+* **Inventario de equipos** (`inventario.ver` para consultar, `inventario.gestionar` para registrar). Cada equipo con su código, tipo, persona o área asignada, ubicación, compra y garantía. Se pueden importar desde Excel (botón «Descargar plantilla»). Cuando una categoría tiene marcado **Pedir «Equipo afectado»** (en *Categorías y clientes*), el formulario de ticket muestra primero los equipos de la persona y luego los compartidos; el ticket queda en el historial del equipo y, a partir de 3 fallas en 6 meses, el responsable ve un aviso. «Copiar enlace para la etiqueta» da un enlace que abre *Nuevo ticket* con el equipo ya elegido (útil para imprimirlo como QR).
+
+### Crear tickets en nombre de otra persona
+
+La mesa (roles con ver todos los tickets y asignar) siempre puede registrar un ticket a nombre de cualquier persona, por ejemplo cuando llaman por teléfono. Para el resto del personal está **apagado por defecto** y se activa usuario por usuario en **Usuarios › Editar › Crear tickets en nombre de otras personas**, limitado a las áreas que elija y, si quiere, hasta una fecha. Reglas que aplican siempre:
+
+* La persona beneficiaria recibe un correo (`TICKET_EN_NOMBRE`) con quién lo creó y el motivo, que es obligatorio.
+* Quien lo crea ve solo ese ticket, en solo lectura, desde «Tickets en los que participé».
+* Las categorías marcadas como **Restringida** (en *Categorías y clientes*), como accesos y contraseñas o equipo nuevo, no se pueden pedir en nombre de otra persona: debe pedirlas la propia persona o la mesa.
+* Todo queda en la auditoría (`TICKET_CREADO_EN_NOMBRE`, `DELEGACION_MODIFICADA`) con usuario, fecha, IP y motivo.
+
+## 10. Buenas prácticas
 
 * Mantenga al menos **dos** Super Administradores activos y no use la cuenta `admin` para el trabajo diario.
 * Revise la auditoría cada semana y los usuarios activos cada mes; desactive a quienes ya no trabajan en la empresa.

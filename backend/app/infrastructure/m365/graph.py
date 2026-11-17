@@ -43,13 +43,17 @@ class ClienteGraph:
         self._pedir("PATCH", ruta, json=json)
 
     # ---------------------------------------------------------- utilidades
-    def enviar_correo(self, remitente: str, para: list[str], asunto: str, cuerpo_html: str, cc: list[str] | None = None) -> None:
-        self.post(f"/users/{remitente}/sendMail", {
-            "message": {
-                "subject": asunto,
-                "body": {"contentType": "HTML", "content": cuerpo_html},
-                "toRecipients": [{"emailAddress": {"address": d}} for d in para],
-                "ccRecipients": [{"emailAddress": {"address": d}} for d in (cc or [])],
-            },
-            "saveToSentItems": True,
-        })
+    def enviar_correo(self, remitente: str, para: list[str], asunto: str, cuerpo_html: str, cc: list[str] | None = None,
+                      adjunto: tuple[str, bytes] | None = None) -> None:
+        mensaje = {
+            "subject": asunto,
+            "body": {"contentType": "HTML", "content": cuerpo_html},
+            "toRecipients": [{"emailAddress": {"address": d}} for d in para],
+            "ccRecipients": [{"emailAddress": {"address": d}} for d in (cc or [])],
+        }
+        if adjunto:   # hasta 3 MB por adjunto en sendMail (los reportes pesan unos pocos KB)
+            import base64
+
+            mensaje["attachments"] = [{"@odata.type": "#microsoft.graph.fileAttachment", "name": adjunto[0],
+                                       "contentBytes": base64.b64encode(adjunto[1]).decode()}]
+        self.post(f"/users/{remitente}/sendMail", {"message": mensaje, "saveToSentItems": True})

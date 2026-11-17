@@ -12,6 +12,8 @@ from app.application.services import export_service as ex
 from app.domain.archivos import mime_descarga
 from app.application.services.auditoria_service import AuditoriaService
 from app.application.services.ia_service import IaService
+from app.application.schemas.mejoras2 import PersonaEnNombre
+from app.application.services.respuestas_service import RespuestasService
 from app.application.services.ticket_service import TicketService, a_detalle, a_listado
 from app.core.config import settings
 from app.core.security import utcnow
@@ -89,6 +91,13 @@ def exportar(
     return Response(contenido, media_type=tipo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
 
 
+@router.get("/en-nombre/personas", response_model=list[PersonaEnNombre],
+            summary="Personas a cuyo nombre puedo crear tickets (vacío si no estoy autorizado)")
+def personas_en_nombre(ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    return [{"id": x.id, "nombre": x.nombre, "correo": x.correo, "area": x.area.nombre if x.area else None, "cargo": x.cargo}
+            for x in TicketService(session).personas_en_nombre(ctx.usuario)]
+
+
 @router.post("", response_model=s.TicketDetalle, status_code=201, summary="Crear ticket")
 def crear(dto: s.TicketCrear, ctx: Contexto = Depends(requiere(Permiso.TICKET_CREAR)), session: Session = DbSession):
     svc = TicketService(session)
@@ -147,6 +156,8 @@ def reabrir(ticket_id: int, dto: s.MotivoEntrada, ctx: Contexto = Depends(contex
 def comentar(ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto = Depends(contexto), session: Session = DbSession):
     svc = TicketService(session)
     svc.comentar(ticket_id, dto, ctx)
+    if dto.respuesta_rapida_id:
+        RespuestasService(session).registrar_uso(dto.respuesta_rapida_id, ctx.usuario)
     return _detalle(svc, ticket_id, ctx)
 
 

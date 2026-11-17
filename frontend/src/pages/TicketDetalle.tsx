@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Alert, Avatar, Box, Button, Chip, Divider, FormControlLabel, IconButton, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem,
+  Alert, Avatar, Box, Button, Chip, Divider, FormControlLabel, IconButton, Link, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem,
   Paper, Rating, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -16,8 +16,15 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import SendIcon from "@mui/icons-material/Send";
 import PauseCircleIcon from "@mui/icons-material/PauseCircle";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import BoltIcon from "@mui/icons-material/Bolt";
+import GroupIcon from "@mui/icons-material/SupervisorAccount";
+import MailOutlineIcon from "@mui/icons-material/EmailOutlined";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import EventRepeatIcon from "@mui/icons-material/EventRepeat";
 import { api, del, descargar, get, patch, post, put } from "../api/client";
-import type { Riesgo, TextoIa, TicketDetalle as Ticket } from "../api/types";
+import type { RespuestaParaTicket, Riesgo, TextoIa, TicketDetalle as Ticket } from "../api/types";
+import MenuRespuestas from "../components/MenuRespuestas";
+import { IconoEquipo } from "./admin/Inventario";
 import { mensajeError, useAviso } from "../components/Aviso";
 import CampoCorreos from "../components/CampoCorreos";
 import { CumplimientoChip, EstadoChip, NOMBRES_NOTA, PrioridadChip, SlaBarra, colorSla } from "../components/Chips";
@@ -137,6 +144,11 @@ export default function TicketDetalle() {
   const [copiaA, setCopiaA] = useState<string[] | null>(null);
   const [editandoCopias, setEditandoCopias] = useState<string[] | null>(null);
   const [resumen, setResumen] = useState<TextoIa | null>(null);
+  // Respuestas rápidas: menú ⚡ o «/» en la respuesta
+  const [menuResp, setMenuResp] = useState<HTMLElement | null>(null);
+  const [filtroResp, setFiltroResp] = useState("");
+  const [barraEn, setBarraEn] = useState<number | null>(null);
+  const [usada, setUsada] = useState<RespuestaParaTicket | null>(null);
   const clave = ["ticket", id];
   const q = useQuery({ queryKey: clave, queryFn: () => get<Ticket>(`/tickets/${id}`), refetchInterval: 60_000 });
   const t = q.data;
@@ -158,13 +170,25 @@ export default function TicketDetalle() {
       post<Ticket>(`/tickets/${id}/comentarios`, {
         texto,
         es_interno: interno,
+        respuesta_rapida_id: usada?.id ?? null,
         ...(!interno && t?.acciones.includes("copias") ? { copia_a: copiaA ?? t.copias.map((c) => c.correo) } : {}),
       }),
-    onSuccess: (n) => {
+    onSuccess: async (n) => {
       actualizar(n);
+      const destino = usada?.estado_destino;
       setTexto("");
       setInterno(false);
       setCopiaA(null);
+      setUsada(null);
+      // La respuesta rápida puede además cambiar el estado (p. ej. a Pendiente Cliente)
+      if (destino && destino !== n.estado && n.acciones.includes("cambiar_estado") && estadosDestino(n.estado).includes(destino)) {
+        try {
+          actualizar(await post<Ticket>(`/tickets/${id}/estado`, { estado: destino, comentario: null }));
+          avisar(`El ticket pasó a ${destino === "PENDIENTE_CLIENTE" ? "Pendiente Cliente" : destino === "EN_PROCESO" ? "En Proceso" : "Resuelto"}`);
+        } catch (e) {
+          avisar(mensajeError(e), "error");
+        }
+      }
     },
     onError: (e) => avisar(mensajeError(e), "error"),
   });
@@ -264,6 +288,13 @@ export default function TicketDetalle() {
         </Typography>
       </Stack>
 
+      {t.solo_lectura_creador && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Usted registró este ticket en nombre de {t.solicitante_nombre}. Puede seguirlo aquí en solo lectura; las respuestas del equipo le llegan a{" "}
+          {t.solicitante_nombre.split(" ")[0]}.
+        </Alert>
+      )}
+
       {t.solo_lectura_participante && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Usted atendió este ticket antes. Hoy está a cargo de {t.responsable?.nombre ?? "otro responsable"} ({t.categoria.nombre}), por eso
@@ -282,13 +313,27 @@ export default function TicketDetalle() {
               <PrioridadChip codigo={t.prioridad.codigo} nombre={t.prioridad.nombre} />
               <CumplimientoChip valor={t.cumplimiento_sla} />
               {t.reaperturas > 0 && <Chip size="small" variant="outlined" label={`${t.reaperturas} reapertura(s)`} />}
+              {t.recurrente_id && (
+                <Chip size="small" icon={<EventRepeatIcon />} label="Recurrente" sx={{ bgcolor: "#FFF3D6", color: "#8A5A00", "& .MuiChip-icon": { color: "#8A5A00" } }} />
+              )}
             </Stack>
             <Typography variant="h5" sx={{ wordBreak: "break-word" }}>
               {t.asunto}
             </Typography>
             <Typography variant="body2" sx={{ color: "text.secondary", mt: 0.5 }}>
-              {t.categoria.nombre} › {t.subcategoria.nombre} · creado {fechaHora(t.fecha_creacion)} por {t.solicitante_nombre}
+              {t.categoria.nombre} › {t.subcategoria.nombre} · creado {fechaHora(t.fecha_creacion)} por {t.creado_por?.nombre ?? t.solicitante_nombre}
             </Typography>
+            {t.creado_por && (
+              <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", bgcolor: "#FFF8E6", border: "1px solid #F2C14E", borderRadius: 2, p: 1.5, mt: 1.5 }}>
+                <GroupIcon sx={{ color: "#8A5A00" }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2"><b>Solicitante:</b> {t.solicitante_nombre}{t.area ? ` (${t.area.nombre})` : ""}</Typography>
+                  <Typography variant="body2"><b>Creado por:</b> {t.creado_por.nombre}, en su nombre · {fechaHora(t.fecha_creacion)}</Typography>
+                  {t.en_nombre_motivo && <Typography variant="caption" color="text.secondary">Motivo: {t.en_nombre_motivo}</Typography>}
+                </Box>
+                <Chip size="small" icon={<MailOutlineIcon />} label={`${t.solicitante_nombre.split(" ")[0]} fue avisado`} color="success" variant="outlined" />
+              </Stack>
+            )}
           </Box>
           <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1, flexShrink: 0 }}>
             {a.has("cambiar_estado") && siguiente && (
@@ -410,9 +455,19 @@ export default function TicketDetalle() {
                         </Alert>
                       )}
                       <TextField
-                        placeholder={interno ? "Nota interna (no la ve el solicitante)" : "Escriba un comentario"}
+                        placeholder={interno ? "Nota interna (no la ve el solicitante)" : a.has("nota_interna") ? "Escriba un comentario o «/» para una respuesta rápida" : "Escriba un comentario"}
                         value={texto}
-                        onChange={(e) => setTexto(e.target.value)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setTexto(v);
+                          if (!v.trim()) setUsada(null);
+                          // «/» al inicio de una línea o tras un espacio abre las respuestas rápidas
+                          if (a.has("nota_interna") && v.length === texto.length + 1 && /(^|\s)\/$/.test(v)) {
+                            setBarraEn(v.length - 1);
+                            setFiltroResp("/");
+                            setMenuResp(e.target);
+                          }
+                        }}
                         multiline
                         minRows={3}
                         fullWidth
@@ -434,7 +489,17 @@ export default function TicketDetalle() {
                       )}
                       <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: "center", flexWrap: "wrap", gap: 1 }}>
                         {a.has("nota_interna") && (
+                          <Button startIcon={<BoltIcon />} variant="outlined" color="warning"
+                            onClick={(e) => { setBarraEn(null); setFiltroResp(""); setMenuResp(e.currentTarget); }}>
+                            Respuestas rápidas
+                          </Button>
+                        )}
+                        {a.has("nota_interna") && (
                           <FormControlLabel control={<Switch checked={interno} onChange={(e) => setInterno(e.target.checked)} />} label="Nota interna" />
+                        )}
+                        {usada?.estado_destino && (
+                          <Chip size="small" color="warning" variant="outlined" onDelete={() => setUsada({ ...usada, estado_destino: null })}
+                            label={`Al enviar pasa a ${usada.estado_destino === "PENDIENTE_CLIENTE" ? "Pendiente Cliente" : usada.estado_destino === "EN_PROCESO" ? "En Proceso" : "Resuelto"}`} />
                         )}
                         {puedeIa && (
                           <Button startIcon={<AutoAwesomeIcon />} onClick={() => sugerirRespuesta.mutate()} disabled={sugerirRespuesta.isPending}>
@@ -580,6 +645,35 @@ export default function TicketDetalle() {
             </Typography>
           </Paper>
 
+          {t.equipo && (
+            <Paper sx={{ p: 2.5 }}>
+              <Typography variant="h6" sx={{ mb: 1 }}>Equipo</Typography>
+              <Stack direction="row" spacing={1.2} sx={{ alignItems: "center" }}>
+                <IconoEquipo tipo={t.equipo.tipo} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }}>{t.equipo.codigo}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t.equipo.marca_modelo}</Typography>
+                </Box>
+              </Stack>
+              {t.equipo.aviso && <Alert severity="warning" sx={{ mt: 1.5 }}>{t.equipo.aviso}</Alert>}
+            </Paper>
+          )}
+
+          {!!t.kb_vistos?.length && (
+            <Paper sx={{ p: 2.5 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
+                <MenuBookIcon color="primary" />
+                <Typography variant="h6">Ya revisó estos artículos</Typography>
+              </Stack>
+              <Typography variant="caption" color="text.secondary">El solicitante los leyó antes de crear el ticket y no le sirvieron.</Typography>
+              {t.kb_vistos.map((k) => (
+                <Typography key={k.id} variant="body2" sx={{ mt: 0.8 }}>
+                  • <Link component={RouterLink} to={`/conocimiento?articulo=${k.id}`}>{k.nombre}</Link>
+                </Typography>
+              ))}
+            </Paper>
+          )}
+
           {(a.has("copias") || t.copias.length > 0) && (
             <Paper sx={{ p: 2.5 }}>
               <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}>
@@ -687,6 +781,19 @@ export default function TicketDetalle() {
         </Stack>
       </Box>
 
+      <MenuRespuestas
+        ticketId={t.id}
+        categoria={t.subcategoria.nombre}
+        ancla={menuResp}
+        filtroInicial={filtroResp}
+        onCerrar={() => setMenuResp(null)}
+        onElegir={(r) => {
+          setTexto((x) => (barraEn !== null && x[barraEn] === "/" ? x.slice(0, barraEn) + r.texto + x.slice(barraEn + 1) : x.trim() ? `${x.trimEnd()}\n${r.texto}` : r.texto));
+          setUsada(r);
+          setInterno(false);
+          setMenuResp(null);
+        }}
+      />
       <TicketDialogos ticket={t} abierto={dialogo} estadoInicial={estadoInicial} onCerrar={() => setDialogo(null)} ejecutar={ejecutar} />
     </>
   );

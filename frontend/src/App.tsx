@@ -21,6 +21,11 @@ const Catalogo = lazy(() => import("./pages/admin/Catalogo"));
 const Sla = lazy(() => import("./pages/admin/Sla"));
 const Auditoria = lazy(() => import("./pages/admin/Auditoria"));
 const Configuracion = lazy(() => import("./pages/admin/Configuracion"));
+const Conocimiento = lazy(() => import("./pages/Conocimiento"));
+const RespuestasRapidas = lazy(() => import("./pages/admin/RespuestasRapidas"));
+const Recurrentes = lazy(() => import("./pages/admin/Recurrentes"));
+const ReportesProgramados = lazy(() => import("./pages/admin/ReportesProgramados"));
+const Inventario = lazy(() => import("./pages/admin/Inventario"));
 const SolicitudPublica = lazy(() => import("./pages/SolicitudPublica"));
 const EncuestaPublica = lazy(() => import("./pages/EncuestaPublica"));
 
@@ -70,6 +75,11 @@ export default function App() {
           <Route path="tickets/nuevo" element={<Requiere permisos={[P.CREAR]}><TicketNuevo /></Requiere>} />
           <Route path="tickets/:id" element={<TicketDetalle />} />
           <Route path="notificaciones" element={<Notificaciones />} />
+          <Route path="conocimiento" element={<Conocimiento />} />
+          <Route path="respuestas" element={<Requiere permisos={[P.VER_TODOS, P.VER_AREA, P.VER_ASIGNADOS]}><RespuestasRapidas /></Requiere>} />
+          <Route path="recurrentes" element={<Requiere permisos={[P.RECURRENTES]}><Recurrentes /></Requiere>} />
+          <Route path="reportes-correo" element={<Requiere permisos={[P.REPORTES_PROGRAMAR]}><ReportesProgramados /></Requiere>} />
+          <Route path="inventario" element={<Requiere permisos={[P.INVENTARIO_VER, P.INVENTARIO]}><Inventario /></Requiere>} />
           <Route path="cambiar-clave" element={<CambiarClave />} />
           <Route path="admin/usuarios" element={<Requiere permisos={[P.USUARIOS]}><Usuarios /></Requiere>} />
           <Route path="admin/roles" element={<Requiere permisos={[P.ROLES]}><Roles /></Requiere>} />
