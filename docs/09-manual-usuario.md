@@ -42,6 +42,12 @@ La sesión se renueva sola mientras trabaja. Al terminar, use **Cerrar sesión**
 5. Adjunte los documentos que ayuden (PDF, Word, Excel, imágenes, XML, ZIP, correos `.msg` o `.eml`, hasta 20 MB cada uno).
 6. Pulse **Crear ticket**. Recibirá el número (por ejemplo `ADU-2026-000651`) y el ticket queda asignado de forma automática al responsable de la categoría.
 
+**Antes de enviar, quizá ya tiene solución.** Mientras escribe, a la derecha aparecen artículos de la **Base de conocimiento** parecidos a su problema. Si uno lo resuelve, pulse **Se resolvió, no crear ticket**. Si no, cree el ticket normal: el responsable verá qué artículos ya revisó. La base de conocimiento también está en el menú para consultarla cuando quiera.
+
+**Equipo afectado.** En las categorías de equipos (computadoras, impresoras, tokens…) aparece el campo *Equipo afectado*: elija su equipo para que quede en su historial.
+
+**En nombre de otra persona.** Si un administrador le dio ese permiso, arriba aparece *¿Para quién es este ticket?*. Elija *En nombre de otra persona*, la persona y el motivo. Esa persona recibe un correo avisándole; usted podrá seguir el ticket en solo lectura desde «Tickets en los que participé».
+
 El personal de la mesa ve además los campos **Canal** (portal, correo, teléfono, presencial), para registrar pedidos que llegaron por otra vía, y **Asignar a**, para elegir el responsable. Si deja *Asignar a* vacío, la asignación es automática.
 
 ## 3. Lista de tickets

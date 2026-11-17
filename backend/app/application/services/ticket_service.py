@@ -14,6 +14,7 @@ from app.application.services.auditoria_service import AuditoriaService
 from app.application.services.encuesta_service import EncuestaService
 from app.application.services.encuesta_service import a_salida as encuesta_salida
 from app.application.services.ia_service import IaService
+from app.application.services.inventario_service import InventarioService
 from app.application.services.notificacion_service import NotificacionService, cuentas_sistema
 from app.application.services.sla_service import SlaService
 from app.core.config import settings
@@ -126,9 +127,11 @@ class TicketService:
         return None
 
     # ================================================================== crear
-    def crear(self, dto: s.TicketCrear, ctx: Contexto) -> m.Ticket:
-        u: m.Usuario = ctx.usuario
-        if not u.tiene(Permiso.TICKET_CREAR):
+    def crear(self, dto: s.TicketCrear, ctx: Contexto, *, sistema: bool = False, canal: str | None = None,
+              recurrente_id: int | None = None) -> m.Ticket:
+        """Registra un ticket. ``sistema`` lo usa el worker (tickets recurrentes): omite los permisos del usuario."""
+        u: m.Usuario | None = ctx.usuario
+        if not sistema and not u.tiene(Permiso.TICKET_CREAR):
             raise Prohibido("No tiene permiso para crear tickets")
         categoria = self.catalogo.categoria(dto.categoria_id)
         sub = self.catalogo.subcategoria(dto.subcategoria_id)
@@ -137,13 +140,19 @@ class TicketService:
         if not sub or sub.categoria_id != categoria.id or not sub.activo or sub.eliminado:
             raise ReglaNegocio("La subcategoría no pertenece a la categoría seleccionada")
 
-        solicitante = u
-        if dto.solicitante_id and dto.solicitante_id != u.id:
-            if not u.tiene(Permiso.TICKET_VER_TODOS) or not u.tiene(Permiso.TICKET_ASIGNAR):
-                raise Prohibido("Solo la mesa de servicio puede registrar tickets a nombre de otro usuario")
-            solicitante = self.usuarios.get(dto.solicitante_id)
-            if solicitante is None or not solicitante.activo:
+        solicitante, creado_por, motivo = u, None, None
+        if sistema:
+            solicitante = self.usuarios.get(dto.solicitante_id) if dto.solicitante_id else None
+            if solicitante is None:
                 raise ReglaNegocio("Solicitante no válido")
+        elif dto.solicitante_id and dto.solicitante_id != u.id:
+            solicitante = self.usuarios.get(dto.solicitante_id)
+            if solicitante is None or not solicitante.activo or solicitante.eliminado:
+                raise ReglaNegocio("Solicitante no válido")
+            motivo = (dto.en_nombre_motivo or "").strip() or None
+            if not self.es_mesa_registro(u):
+                self.validar_en_nombre(u, solicitante, categoria, motivo)
+            creado_por = u
 
         if dto.prioridad_id:
             prioridad = self.catalogo.prioridad(dto.prioridad_id)
@@ -156,11 +165,12 @@ class TicketService:
 
         responsable = None
         if dto.responsable_id:
-            if not u.tiene(Permiso.TICKET_ASIGNAR):
+            if not sistema and not u.tiene(Permiso.TICKET_ASIGNAR):
                 raise Prohibido("No tiene permiso para asignar responsables")
             responsable = self._validar_responsable(dto.responsable_id)
         else:
             responsable = self.ia.sugerir_responsable(categoria)
+        equipo = self._validar_equipo(dto.equipo_id, u, solicitante) if dto.equipo_id else None
 
         ahora = utcnow()
         resp_min, res_min = self.sla.minutos_sla(categoria.id, prioridad)
@@ -170,8 +180,9 @@ class TicketService:
             solicitante_id=solicitante.id, solicitante_nombre=solicitante.nombre, solicitante_cargo=solicitante.cargo,
             area_id=solicitante.area_id, cliente_id=dto.cliente_id, correo=str(dto.correo or solicitante.correo),
             telefono=dto.telefono or solicitante.telefono, categoria_id=categoria.id, subcategoria_id=sub.id,
-            prioridad_id=prioridad.id, estado=Estado.NUEVO, canal=dto.canal, fecha_creacion=ahora, fecha_actualizacion=ahora,
-            sla_respuesta_min=resp_min, sla_resolucion_min=res_min,
+            prioridad_id=prioridad.id, estado=Estado.NUEVO, canal=canal or dto.canal, fecha_creacion=ahora, fecha_actualizacion=ahora,
+            sla_respuesta_min=resp_min, sla_resolucion_min=res_min, equipo_id=equipo.id if equipo else None,
+            recurrente_id=recurrente_id, creado_por_id=creado_por.id if creado_por else None, en_nombre_motivo=motivo,
         )
         self.sla.inicializar(t)
         self.repo.add(t)
@@ -179,9 +190,22 @@ class TicketService:
         self._hist(t, u, "CREACION", None, None, t.numero, ahora=ahora)
         self._precargar_copias(t, categoria, ahora)
         self.auditoria.registrar(ctx, AccionAuditoria.TICKET_CREADO, "ticket", t.id, {"numero": t.numero, "categoria": categoria.nombre})
+        if creado_por:
+            self._hist(t, u, "EN_NOMBRE", "solicitante", None, solicitante.nombre,
+                       f"Registrado por {u.nombre} en nombre de {solicitante.nombre}" + (f". Motivo: {motivo}" if motivo else ""), ahora)
+            self.auditoria.registrar(ctx, AccionAuditoria.TICKET_CREADO_EN_NOMBRE, "ticket", t.id,
+                                     {"numero": t.numero, "creado_por": u.nombre, "en_nombre_de": solicitante.nombre,
+                                      "solicitante_id": solicitante.id, "motivo": motivo, "categoria": categoria.nombre})
+        if dto.kb_vistos:
+            from app.application.services.conocimiento_service import ConocimientoService
 
-        self.notif.notificar([solicitante], "TICKET_CREADO", f"{t.numero} registrado", f"Su solicitud «{t.asunto}» fue registrada.", t)
-        if t.canal not in ("CORREO", "WEB"):   # correo y formulario público envían su propio acuse
+            ConocimientoService(self.session).registrar_vistos(t.id, dto.kb_vistos)
+
+        self.notif.notificar([solicitante], "TICKET_CREADO", f"{t.numero} registrado",
+                             f"{u.nombre} registró «{t.asunto}» en su nombre." if creado_por else f"Su solicitud «{t.asunto}» fue registrada.", t)
+        if creado_por:   # el beneficiario siempre se entera, aunque no lo haya pedido
+            self.notif.correo("TICKET_EN_NOMBRE", [solicitante], t, creado_por=u.nombre, motivo=motivo or "(sin motivo)")
+        elif t.canal not in ("CORREO", "WEB", "PROGRAMADO"):   # correo y formulario público envían su propio acuse
             self.notif.correo("TICKET_CREADO", [solicitante], t)
         if responsable:
             self._asignar(t, responsable, u if dto.responsable_id else None, "MANUAL" if dto.responsable_id else "AUTOMATICA",
@@ -193,6 +217,52 @@ class TicketService:
         self.notif.teams("TICKET_CREADO", t)
         self.session.flush()
         return t
+
+    # ================================================== en nombre de otra persona
+    @staticmethod
+    def es_mesa_registro(u: m.Usuario) -> bool:
+        """La mesa de servicio registra tickets de llamadas o visitas a nombre de cualquier persona."""
+        return u.tiene(Permiso.TICKET_VER_TODOS) and u.tiene(Permiso.TICKET_ASIGNAR)
+
+    def delegacion_vigente(self, u: m.Usuario) -> m.UsuarioDelegacion | None:
+        d = self.session.get(m.UsuarioDelegacion, u.id)
+        if d is None:
+            return None
+        hoy = datetime.now(ZoneInfo(settings.ZONA_HORARIA)).date()
+        return None if d.hasta and d.hasta < hoy else d
+
+    def validar_en_nombre(self, u: m.Usuario, solicitante: m.Usuario, categoria: m.Categoria, motivo: str | None) -> None:
+        d = self.delegacion_vigente(u)
+        if d is None:
+            raise Prohibido("No tiene autorización para crear tickets en nombre de otra persona")
+        if d.area_ids and solicitante.area_id not in d.area_ids:
+            raise Prohibido(f"No está autorizado a crear tickets en nombre de personas de {solicitante.area.nombre if solicitante.area else 'esa área'}")
+        if categoria.restringida_en_nombre:
+            raise ReglaNegocio(f"«{categoria.nombre}» no se puede pedir en nombre de otra persona: debe solicitarlo {solicitante.nombre} "
+                               "o la Mesa de Servicios")
+        if not motivo or len(motivo) < 5:
+            raise ReglaNegocio("Indique el motivo por el que crea el ticket en nombre de otra persona")
+
+    def personas_en_nombre(self, u: m.Usuario) -> list[m.Usuario]:
+        """Personas a cuyo nombre puede registrar tickets el usuario (vacío si no está autorizado)."""
+        U = m.Usuario
+        stmt = select(U).where(U.activo == True, U.eliminado == False, U.id != u.id).order_by(U.nombre)
+        if not self.es_mesa_registro(u):
+            d = self.delegacion_vigente(u)
+            if d is None:
+                return []
+            if d.area_ids:
+                stmt = stmt.where(U.area_id.in_(d.area_ids))
+        return [x for x in self.session.scalars(stmt).unique() if x.correo.lower() not in cuentas_sistema()]
+
+    def _validar_equipo(self, equipo_id: int, u: m.Usuario | None, solicitante: m.Usuario) -> m.Equipo:
+        e = self.session.get(m.Equipo, equipo_id)
+        if e is None or e.eliminado or e.estado == "BAJA":
+            raise ReglaNegocio("Equipo no válido")
+        mesa = u is None or u.tiene(Permiso.TICKET_VER_TODOS) or u.tiene(Permiso.INVENTARIO_VER)
+        if not mesa and not (e.compartido or e.usuario_id == solicitante.id or (e.area_id and e.area_id == solicitante.area_id)):
+            raise Prohibido("Ese equipo no está asignado a usted ni es compartido")
+        return e
 
     def _validar_responsable(self, usuario_id: int) -> m.Usuario:
         r = self.usuarios.get(usuario_id)
@@ -662,7 +732,7 @@ class TicketService:
         if f.solo_mios:
             stmt = stmt.where(or_(T.responsable_id == u.id, T.solicitante_id == u.id))
         if f.participe:
-            stmt = stmt.where(or_(T.responsable_id == u.id, T.id.in_(self.repo.ids_participados(u.id))))
+            stmt = stmt.where(or_(T.responsable_id == u.id, T.creado_por_id == u.id, T.id.in_(self.repo.ids_participados(u.id))))
         orden = {
             "fecha_desc": (T.fecha_creacion.desc(), T.id.desc()),
             "fecha_asc": (T.fecha_creacion.asc(), T.id.asc()),
@@ -716,6 +786,8 @@ def a_listado(t: m.Ticket, sla: SlaService | None = None, ahora: datetime | None
 
 
 def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
+    from app.application.services.conocimiento_service import ConocimientoService
+
     gestor = svc.es_gestor(u, t) or u.tiene(Permiso.TICKET_VER_TODOS)
     # Quien fue responsable antes conserva la lectura completa (historial, notas internas), pero no las acciones.
     participante = not gestor and svc.repo.participo(u.id, t.id)
@@ -763,6 +835,12 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "acciones": svc.acciones(u, t),
         "solo_lectura_participante": participante,
         "encuesta": encuesta_salida(EncuestaService(svc.session).de_ticket(t.id)),
+        "creado_por": resumen(t.creado_por),
+        "en_nombre_motivo": t.en_nombre_motivo,
+        "solo_lectura_creador": bool(t.creado_por_id == u.id and not gestor and t.solicitante_id != u.id),
+        "equipo": InventarioService(svc.session).para_ticket(t),
+        "recurrente_id": t.recurrente_id,
+        "kb_vistos": ConocimientoService(svc.session).vistos(t.id) if lectura else [],
     }
 
 

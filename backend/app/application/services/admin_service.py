@@ -42,6 +42,7 @@ def categoria_salida(c: m.Categoria) -> dict:
         "responsables": [{"usuario_id": r.usuario_id, "nombre": r.usuario.nombre, "es_principal": r.es_principal} for r in c.responsables],
         "subcategorias": [x for x in c.subcategorias if not x.eliminado],
         "correos_copia": separar(c.correos_copia),
+        "pide_equipo": bool(c.pide_equipo), "restringida_en_nombre": bool(c.restringida_en_nombre),
     }
 
 
@@ -170,7 +171,8 @@ class AdminService:
                 raise Conflicto("Ya existe una categoría con ese código")
             c = m.Categoria(fecha_creacion=utcnow())
             self.session.add(c)
-        for k in ("codigo", "nombre", "descripcion", "palabras_clave", "color", "orden", "modo_asignacion", "supervisor_id", "activo"):
+        for k in ("codigo", "nombre", "descripcion", "palabras_clave", "color", "orden", "modo_asignacion", "supervisor_id", "activo",
+                  "pide_equipo", "restringida_en_nombre"):
             setattr(c, k, getattr(dto, k))
         c.correos_copia = unir(dto.correos_copia)
         self.session.flush()
@@ -297,3 +299,40 @@ class AdminService:
                 raise ReglaNegocio(f"Clave de configuración desconocida: {clave}")
             c.valor, c.fecha_actualizacion, c.actualizado_por = valor, utcnow(), ctx.usuario.id
         self.auditoria.registrar(ctx, "CONFIGURACION", "configuracion", None, valores)
+
+
+# ------------------------------------------------------------ en nombre de otra persona
+def delegacion_salida(d: m.UsuarioDelegacion | None, session: Session) -> dict:
+    if d is None:
+        return {"activa": False, "areas": None, "hasta": None, "otorgado_por": None, "fecha": None}
+    otorgante = session.get(m.Usuario, d.otorgado_por) if d.otorgado_por else None
+    return {"activa": True, "areas": d.area_ids or None, "hasta": d.hasta, "otorgado_por": otorgante.nombre if otorgante else None,
+            "fecha": d.fecha}
+
+
+def guardar_delegacion(session: Session, usuario_id: int, dto, ctx: Contexto) -> m.UsuarioDelegacion | None:
+    """Activa, cambia o quita el permiso de crear tickets en nombre de otras personas (queda en auditoría)."""
+    u = session.get(m.Usuario, usuario_id)
+    if u is None or u.eliminado:
+        raise NoEncontrado("Usuario no encontrado")
+    d = session.get(m.UsuarioDelegacion, usuario_id)
+    if not dto.activa:
+        if d is not None:
+            session.delete(d)
+        AuditoriaService(session).registrar(ctx, AccionAuditoria.DELEGACION_MODIFICADA, "usuario", u.id, {"usuario": u.correo, "activa": False})
+        session.flush()
+        return None
+    areas = sorted(set(dto.areas or []))
+    for a in areas:
+        if session.get(m.Area, a) is None:
+            raise ReglaNegocio("Área no válida")
+    if d is None:
+        d = m.UsuarioDelegacion(usuario_id=u.id)
+        session.add(d)
+    d.areas = ",".join(str(a) for a in areas) or None
+    d.hasta, d.otorgado_por, d.fecha = dto.hasta, ctx.usuario.id, utcnow()
+    session.flush()
+    AuditoriaService(session).registrar(ctx, AccionAuditoria.DELEGACION_MODIFICADA, "usuario", u.id,
+                                        {"usuario": u.correo, "activa": True, "areas": areas or "todas",
+                                         "hasta": dto.hasta.isoformat() if dto.hasta else None})
+    return d

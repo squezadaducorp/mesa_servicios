@@ -1,5 +1,6 @@
 """Envío SMTP (Exchange/Office 365/Postfix). Lo usa el worker al procesar la cola."""
 import logging
+import mimetypes
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -15,7 +16,7 @@ class EnviadorGraph:
     def __init__(self, graph=None):
         self._graph = graph
 
-    def enviar(self, para: str, asunto: str, cuerpo_html: str, cc: str | None = None) -> None:
+    def enviar(self, para: str, asunto: str, cuerpo_html: str, cc: str | None = None, adjunto: tuple[str, bytes] | None = None) -> None:
         if not settings.EMAIL_ENABLED:
             log.info("Correo simulado (EMAIL_ENABLED=false) para %s: %s", para, asunto)
             return
@@ -23,7 +24,7 @@ class EnviadorGraph:
 
         self._graph = self._graph or ClienteGraph()
         separar = lambda v: [d.strip() for d in (v or "").replace(";", ",").split(",") if d.strip()]  # noqa: E731
-        self._graph.enviar_correo(settings.BUZON_CORREO, separar(para), asunto, cuerpo_html, separar(cc))
+        self._graph.enviar_correo(settings.BUZON_CORREO, separar(para), asunto, cuerpo_html, separar(cc), adjunto=adjunto)
 
 
 def enviador():
@@ -31,7 +32,7 @@ def enviador():
 
 
 class EnviadorSmtp:
-    def enviar(self, para: str, asunto: str, cuerpo_html: str, cc: str | None = None) -> None:
+    def enviar(self, para: str, asunto: str, cuerpo_html: str, cc: str | None = None, adjunto: tuple[str, bytes] | None = None) -> None:
         msg = EmailMessage()
         msg["From"] = settings.SMTP_FROM
         msg["To"] = para
@@ -40,6 +41,11 @@ class EnviadorSmtp:
         msg["Subject"] = asunto
         msg.set_content("Este mensaje requiere un cliente de correo compatible con HTML.")
         msg.add_alternative(cuerpo_html, subtype="html")
+        if adjunto:
+            nombre, contenido = adjunto
+            tipo = mimetypes.guess_type(nombre)[0] or "application/octet-stream"
+            principal, sub = tipo.split("/", 1)
+            msg.add_attachment(contenido, maintype=principal, subtype=sub, filename=nombre)
 
         if not settings.EMAIL_ENABLED:
             log.info("Correo simulado (EMAIL_ENABLED=false) para %s: %s", para, asunto)

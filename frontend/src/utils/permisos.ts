@@ -14,4 +14,10 @@ export const P = {
   SISTEMA: "sistema.administrar",
   AUDITORIA: "auditoria.ver",
   IA: "ia.usar",
+  KB: "kb.gestionar",
+  RESPUESTAS: "respuestas.gestionar",
+  RECURRENTES: "recurrentes.gestionar",
+  REPORTES_PROGRAMAR: "reportes.programar",
+  INVENTARIO_VER: "inventario.ver",
+  INVENTARIO: "inventario.gestionar",
 } as const;

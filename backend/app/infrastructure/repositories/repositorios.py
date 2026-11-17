@@ -149,6 +149,8 @@ class TicketRepository(Repository[m.Ticket]):
                 condiciones.append(m.Ticket.id.in_(self.ids_participados(usuario.id)))
         if Permiso.TICKET_VER_PROPIOS in permisos:
             condiciones.append(m.Ticket.solicitante_id == usuario.id)
+        if incluir_participados:   # quien lo registró en nombre de otra persona lo ve en solo lectura
+            condiciones.append(m.Ticket.creado_por_id == usuario.id)
         return or_(*condiciones) if condiciones else false()
 
     def consulta_visible(self, usuario: m.Usuario, incluir_participados: bool = False):

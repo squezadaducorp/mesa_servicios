@@ -1,21 +1,32 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Alert, Box, Button, Chip, CircularProgress, Divider, List, ListItem, ListItemIcon, ListItemText, MenuItem, Paper, Stack, TextField, Typography,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, List, ListItem, ListItemIcon,
+  ListItemText, MenuItem, Paper, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
+import LightbulbIcon from "@mui/icons-material/TipsAndUpdates";
+import MenuBookIcon from "@mui/icons-material/MenuBook";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import PersonIcon from "@mui/icons-material/Person";
+import GroupIcon from "@mui/icons-material/SupervisorAccount";
+import ShieldIcon from "@mui/icons-material/Shield";
+import MailOutlineIcon from "@mui/icons-material/EmailOutlined";
+import LockIcon from "@mui/icons-material/Lock";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import CloseIcon from "@mui/icons-material/Close";
-import { api, post } from "../api/client";
+import { api, get, post } from "../api/client";
 import { useCatalogos } from "../api/hooks";
-import type { SugerenciaTicket, TicketDetalle } from "../api/types";
+import type { EquipoOpcion, KbArticulo, KbResumen, PersonaEnNombre, SugerenciaTicket, TicketDetalle } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { mensajeError, useAviso } from "../components/Aviso";
 import { Cargando, Encabezado } from "../components/Comunes";
 import { duracion, tamanoArchivo } from "../utils/formato";
 import { P } from "../utils/permisos";
+import { Pasos } from "./Conocimiento";
+import { IconoEquipo, TIPOS } from "./admin/Inventario";
 
 export default function TicketNuevo() {
   const { usuario, puede } = useAuth();
@@ -39,6 +50,54 @@ export default function TicketNuevo() {
   const [tocado, setTocado] = useState({ categoria: false, prioridad: false });
   const [error, setError] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [params] = useSearchParams();
+  const [paraOtro, setParaOtro] = useState(false);
+  const [persona, setPersona] = useState<PersonaEnNombre | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const [equipoId, setEquipoId] = useState<number | null>(Number(params.get("equipo")) || null);
+  const [kbSug, setKbSug] = useState<KbResumen[]>([]);
+  const [kbVistos, setKbVistos] = useState<number[]>([]);
+  const [kbAbierto, setKbAbierto] = useState<KbArticulo | null>(null);
+  const personas = useQuery({ queryKey: ["personas-en-nombre"], queryFn: () => get<PersonaEnNombre[]>("/tickets/en-nombre/personas"), staleTime: 60_000 });
+  const solicitanteId = paraOtro && persona ? persona.id : usuario?.id;
+  const equipos = useQuery({
+    queryKey: ["equipos-opciones", solicitanteId],
+    queryFn: () => get<EquipoOpcion[]>("/inventario/opciones", { solicitante_id: solicitanteId }),
+    enabled: !!solicitanteId,
+  });
+
+  // Artículos de la base de conocimiento que podrían resolverlo sin crear el ticket
+  useEffect(() => {
+    const texto = `${asunto} ${descripcion}`.trim();
+    if (texto.length < 12) {
+      setKbSug([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      post<KbResumen[]>("/conocimiento/sugerir", { texto, categoria_id: categoriaId || null, subcategoria_id: subId || null })
+        .then(setKbSug)
+        .catch(() => setKbSug([]));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [asunto, descripcion, categoriaId, subId]);
+
+  const abrirArticulo = async (id: number) => {
+    try {
+      setKbAbierto(await get<KbArticulo>(`/conocimiento/${id}`));
+      setKbVistos((v) => (v.includes(id) ? v : [...v, id]));
+    } catch (e) {
+      avisar(mensajeError(e), "error");
+    }
+  };
+  const resuelto = async (id: number) => {
+    try {
+      await post(`/conocimiento/${id}/evitar-ticket`);
+      avisar("¡Qué bien que se resolvió! No se creó ningún ticket.");
+      navigate("/tickets", { replace: true });
+    } catch (e) {
+      avisar(mensajeError(e), "error");
+    }
+  };
 
   // Sugerencias de IA mientras el usuario escribe
   useEffect(() => {
@@ -67,6 +126,10 @@ export default function TicketNuevo() {
   const categoria = cat.data.categorias.find((c) => c.id === categoriaId);
   const prioridad = cat.data.prioridades.find((p) => p.id === prioridadId);
   const gestorMesa = puede(P.VER_TODOS);
+  const puedeEnNombre = (personas.data?.length ?? 0) > 0;
+  const restringida = paraOtro && !gestorMesa && !!categoria?.restringida_en_nombre;
+  const mostrarEquipo = !!categoria?.pide_equipo || !!equipoId;
+  const equipo = equipos.data?.find((x) => x.id === equipoId) ?? null;
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
@@ -84,6 +147,10 @@ export default function TicketNuevo() {
         correo: correo || null,
         canal,
         responsable_id: responsableId || null,
+        solicitante_id: paraOtro && persona ? persona.id : null,
+        en_nombre_motivo: paraOtro && persona ? motivo.trim() || null : null,
+        equipo_id: mostrarEquipo ? equipoId : null,
+        kb_vistos: kbVistos,
       });
       for (const f of archivos) {
         const form = new FormData();
@@ -111,6 +178,48 @@ export default function TicketNuevo() {
         <Paper sx={{ p: 3 }}>
           <Stack spacing={2}>
             {error && <Alert severity="error">{error}</Alert>}
+            {puedeEnNombre && (
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>¿Para quién es este ticket?</Typography>
+                <ToggleButtonGroup value={paraOtro ? "otro" : "yo"} exclusive color="primary" size="small" sx={{ mb: paraOtro ? 2 : 0, flexWrap: "wrap" }}
+                  onChange={(_, v) => {
+                    if (!v) return;
+                    setParaOtro(v === "otro");
+                    setEquipoId(null);
+                    if (v === "yo") {
+                      setPersona(null);
+                      setCorreo(usuario?.correo ?? "");
+                      setTelefono(usuario?.telefono ?? "");
+                    }
+                  }}>
+                  <ToggleButton value="yo"><PersonIcon fontSize="small" sx={{ mr: 0.8 }} />Para mí</ToggleButton>
+                  <ToggleButton value="otro"><GroupIcon fontSize="small" sx={{ mr: 0.8 }} />En nombre de otra persona</ToggleButton>
+                </ToggleButtonGroup>
+                {paraOtro && (
+                  <Stack spacing={2}>
+                    <Autocomplete
+                      options={personas.data ?? []}
+                      value={persona}
+                      onChange={(_, p) => {
+                        setPersona(p);
+                        setEquipoId(null);
+                        if (p) {
+                          setCorreo(p.correo);
+                          setTelefono("");
+                        }
+                      }}
+                      getOptionLabel={(p) => `${p.nombre}${p.area ? ` · ${p.area}` : ""}`}
+                      renderInput={(p) => <TextField {...p} required label="Persona que necesita la atención"
+                        helperText={gestorMesa ? "Registro de la mesa (llamada, visita o correo)." : "Solo aparecen las personas que usted tiene autorizadas."} />}
+                    />
+                    <TextField label={gestorMesa ? "Motivo (opcional)" : "Motivo (obligatorio)"} required={!gestorMesa} multiline value={motivo}
+                      onChange={(e) => setMotivo(e.target.value)} slotProps={{ htmlInput: { maxLength: 300 } }}
+                      placeholder="Ej.: está de viaje sin acceso a la Mesa; me pidió por teléfono reportarlo." />
+                  </Stack>
+                )}
+                <Divider sx={{ mt: 2 }} />
+              </Box>
+            )}
             <TextField label="Asunto" value={asunto} onChange={(e) => setAsunto(e.target.value)} required slotProps={{ htmlInput: { maxLength: 200, minLength: 5 } }} />
             <TextField
               label="Descripción"
@@ -157,6 +266,38 @@ export default function TicketNuevo() {
                   </MenuItem>
                 ))}
               </TextField>
+              {restringida && (
+                <Alert severity="warning" icon={<LockIcon />} sx={{ gridColumn: "1 / -1" }}>
+                  «{categoria?.nombre}» no se puede pedir en nombre de otra persona: debe solicitarlo {persona?.nombre ?? "la persona"} o la Mesa de Servicios.
+                </Alert>
+              )}
+              {mostrarEquipo && (
+                <Autocomplete
+                  sx={{ gridColumn: "1 / -1" }}
+                  options={equipos.data ?? []}
+                  value={equipo}
+                  onChange={(_, o) => setEquipoId(o?.id ?? null)}
+                  getOptionLabel={(o) => `${o.codigo} · ${o.marca_modelo}`}
+                  renderInput={(p) => <TextField {...p} label="Equipo afectado (opcional)" helperText="Primero aparecen los equipos asignados a la persona, luego los compartidos." />}
+                  renderOption={(props, o) => {
+                    const { key, ...rest } = props as typeof props & { key: string };
+                    return (
+                      <li key={key} {...rest}>
+                        <Stack direction="row" spacing={1.2} sx={{ alignItems: "center", width: "100%" }}>
+                          <IconoEquipo tipo={o.tipo} />
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{o.codigo}</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {TIPOS[o.tipo]?.[0]} · {o.marca_modelo}{o.propio ? (paraOtro ? " · de la persona" : " · suyo") : o.compartido ? " · compartido" : ""}
+                            </Typography>
+                          </Box>
+                          {o.fallas_12m > 0 && <Typography variant="caption" color="text.secondary">{o.fallas_12m} falla{o.fallas_12m === 1 ? "" : "s"}</Typography>}
+                        </Stack>
+                      </li>
+                    );
+                  }}
+                />
+              )}
               <TextField
                 select
                 label="Prioridad"
@@ -240,14 +381,69 @@ export default function TicketNuevo() {
             <Divider />
             <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
               <Button onClick={() => navigate(-1)}>Cancelar</Button>
-              <Button type="submit" variant="contained" disabled={enviando || !categoriaId || !subId}>
-                {enviando ? "Creando…" : "Crear ticket"}
+              <Button type="submit" variant="contained"
+                disabled={enviando || !categoriaId || !subId || restringida || (paraOtro && (!persona || (!gestorMesa && motivo.trim().length < 5)))}>
+                {enviando ? "Creando…" : paraOtro && persona ? `Crear en nombre de ${persona.nombre.split(" ")[0]}` : "Crear ticket"}
               </Button>
             </Stack>
           </Stack>
         </Paper>
 
-        <Paper sx={{ p: 3, position: { lg: "sticky" }, top: { lg: 88 } }}>
+        <Stack spacing={2} sx={{ position: { lg: "sticky" }, top: { lg: 88 } }}>
+        {kbSug.length > 0 && (
+          <Paper sx={{ p: 2.5, border: "1.5px solid", borderColor: "primary.light", background: "linear-gradient(180deg,#EEF5FC 0%,#fff 60%)" }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 0.5 }}>
+              <LightbulbIcon sx={{ color: "#B57400" }} />
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>Antes de enviar: quizá esto lo resuelve</Typography>
+            </Stack>
+            <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>Artículos de la base de conocimiento parecidos a lo que escribe.</Typography>
+            <Stack spacing={1.2}>
+              {kbSug.map((k, i) => (
+                <Paper key={k.id} variant="outlined" sx={{ p: 1.6, ...(i === 0 ? { borderColor: "primary.main", borderWidth: 1.5 } : {}) }}>
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+                    <MenuBookIcon color="primary" fontSize="small" sx={{ mt: 0.2 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main", cursor: "pointer" }} onClick={() => abrirArticulo(k.id)}>{k.titulo}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {k.categoria ?? "General"}{k.util_pct !== null ? ` · a ${k.util_pct} % le sirvió` : ""} · {k.vistas} vistas
+                      </Typography>
+                      {i === 0 && k.extracto && <Typography variant="body2" sx={{ mt: 0.8 }}>{k.extracto}</Typography>}
+                    </Box>
+                    {k.util_pct !== null && k.util_pct >= 50 && <Chip size="small" label={`${k.util_pct} %`} sx={{ bgcolor: "#E8F5E9", color: "#2E7D32" }} />}
+                  </Stack>
+                  {i === 0 && (
+                    <Stack direction="row" sx={{ mt: 1.2, flexWrap: "wrap", gap: 1 }}>
+                      <Button size="small" variant="contained" color="success" startIcon={<CheckCircleIcon />} onClick={() => resuelto(k.id)}>Se resolvió, no crear ticket</Button>
+                      <Button size="small" variant="outlined" onClick={() => abrirArticulo(k.id)}>Ver artículo completo</Button>
+                    </Stack>
+                  )}
+                </Paper>
+              ))}
+            </Stack>
+            <Typography variant="caption" sx={{ display: "block", mt: 1.5, color: "text.secondary" }}>
+              Si ninguno sirve, cree el ticket normal: el responsable verá qué artículos ya revisó.
+            </Typography>
+          </Paper>
+        )}
+        {paraOtro && !gestorMesa && (
+          <Paper sx={{ p: 2.5 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1.5 }}>
+              <ShieldIcon color="primary" />
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Controles de seguridad</Typography>
+            </Stack>
+            <Alert severity="info" icon={<MailOutlineIcon />} sx={{ mb: 1.5 }}>
+              {persona ? persona.nombre.split(" ")[0] : "La persona"} recibirá un correo avisando que usted creó el ticket en su nombre, con el motivo.
+            </Alert>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.8 }}>Qué podrá ver usted</Typography>
+            {["Este ticket, en solo lectura, desde «Tickets en los que participé».", "No verá otros tickets de esa persona.", "Las respuestas del analista le llegan a la persona, no a usted."].map((x, i) => (
+              <Stack key={i} direction="row" spacing={1} sx={{ mb: 0.6 }}>
+                <Typography variant="body2" sx={{ color: "primary.main", fontWeight: 700 }}>{i + 1}.</Typography>
+                <Typography variant="body2">{x}</Typography>
+              </Stack>
+            ))}
+          </Paper>
+        )}
+        <Paper sx={{ p: 3 }}>
           <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 2 }}>
             <AutoAwesomeIcon color="primary" />
             <Typography variant="h6">Asistente IA</Typography>
@@ -325,7 +521,20 @@ export default function TicketNuevo() {
             </Stack>
           )}
         </Paper>
+        </Stack>
       </Box>
+      <Dialog open={!!kbAbierto} onClose={() => setKbAbierto(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{kbAbierto?.titulo}</DialogTitle>
+        <DialogContent>
+          {kbAbierto?.sintoma && <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>{kbAbierto.sintoma}</Typography>}
+          {kbAbierto && <Pasos texto={kbAbierto.solucion} />}
+          {kbAbierto?.nota && <Alert severity="warning" sx={{ mt: 1.5 }}>{kbAbierto.nota}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setKbAbierto(null)}>No me sirvió, seguir con el ticket</Button>
+          <Button variant="contained" color="success" startIcon={<CheckCircleIcon />} onClick={() => kbAbierto && resuelto(kbAbierto.id)}>Se resolvió, no crear ticket</Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

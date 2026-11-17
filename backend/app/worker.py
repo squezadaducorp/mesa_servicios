@@ -132,7 +132,10 @@ def ciclo_correos(lote: int = 50) -> dict:
         ).all()
         for c in pendientes:
             try:
-                enviador.enviar(c.para, c.asunto, c.cuerpo_html, c.cc)
+                if c.adjunto_nombre and c.adjunto:
+                    enviador.enviar(c.para, c.asunto, c.cuerpo_html, c.cc, adjunto=(c.adjunto_nombre, c.adjunto))
+                else:
+                    enviador.enviar(c.para, c.asunto, c.cuerpo_html, c.cc)
                 c.estado, c.fecha_envio = "ENVIADO", utcnow()
                 enviados += 1
             except Exception as exc:   # reintento con backoff exponencial: 1, 2, 4, 8, 16 min
@@ -145,6 +148,30 @@ def ciclo_correos(lote: int = 50) -> dict:
                 log.warning("Error enviando correo %s a %s: %s", c.id, c.para, exc)
             session.commit()
     return {"enviados": enviados, "errores": errores}
+
+
+def ciclo_recurrentes() -> dict:
+    """Crea los tickets programados (mantenimientos preventivos, tareas mensuales…)."""
+    from app.application.services.recurrentes_service import RecurrentesService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "recurrentes", settings.WORKER_INTERVALO_SEG * 3):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        r = RecurrentesService(session).procesar()
+        session.commit()
+        return r
+
+
+def ciclo_reportes() -> dict:
+    """Envía por correo los reportes programados (p. ej. el semanal a gerencia)."""
+    from app.application.services.reportes_programados_service import ReportesProgramadosService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "reportes_programados", settings.WORKER_INTERVALO_SEG * 3):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        r = ReportesProgramadosService(session).procesar()
+        session.commit()
+        return r
 
 
 def ciclo_buzon() -> dict:
@@ -191,7 +218,8 @@ def ciclo_entra() -> dict:
 
 def ejecutar_ciclo() -> None:
     for nombre, fn in (("ausencias", ciclo_ausencias), ("sla", ciclo_sla), ("resumen", ciclo_resumen_diario),
-                       ("cierre", ciclo_cierre_automatico), ("buzon", ciclo_buzon), ("correo", ciclo_correos),
+                       ("cierre", ciclo_cierre_automatico), ("recurrentes", ciclo_recurrentes), ("reportes", ciclo_reportes),
+                       ("buzon", ciclo_buzon), ("correo", ciclo_correos),
                        ("teams", ciclo_teams), ("entra", ciclo_entra)):
         try:
             r = fn()

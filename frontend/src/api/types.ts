@@ -76,6 +76,8 @@ export interface Categoria {
   responsables: { usuario_id: number; nombre: string; es_principal: boolean }[];
   subcategorias: Subcategoria[];
   correos_copia?: string[];
+  pide_equipo?: boolean;
+  restringida_en_nombre?: boolean;
 }
 
 export interface Cliente {
@@ -287,6 +289,12 @@ export interface TicketDetalle {
   acciones: AccionTicket[];
   solo_lectura_participante?: boolean;
   encuesta?: Encuesta | null;
+  creado_por?: UsuarioResumen | null;
+  en_nombre_motivo?: string | null;
+  solo_lectura_creador?: boolean;
+  equipo?: EquipoTicket | null;
+  recurrente_id?: number | null;
+  kb_vistos?: Item[];
 }
 
 export interface FiltroTickets {
@@ -532,4 +540,185 @@ export interface IndicadorCliente {
   cumplimiento_sla_pct: number | null;
   categorias: { nombre: string; tickets: number }[];
   tendencia: { periodo: string; tickets: number }[];
+}
+
+// ------------------------------------------------------------ segunda ronda
+export interface EquipoTicket {
+  id: number;
+  codigo: string;
+  tipo: string;
+  marca_modelo: string;
+  aviso: string | null;
+}
+
+export interface KbResumen {
+  id: number;
+  titulo: string;
+  categoria_id: number | null;
+  categoria: string | null;
+  subcategoria: string | null;
+  estado: "BORRADOR" | "PUBLICADO" | "ARCHIVADO";
+  visibilidad: "TODOS" | "MESA";
+  vistas: number;
+  util_pct: number | null;
+  tickets_evitados: number;
+  extracto: string | null;
+}
+
+export interface KbArticulo extends KbResumen {
+  sintoma: string | null;
+  solucion: string;
+  nota: string | null;
+  palabras_clave: string | null;
+  subcategoria_id: number | null;
+  ticket_origen_id: number | null;
+  ticket_origen_numero: string | null;
+  util_si: number;
+  util_no: number;
+  actualizado_por: string | null;
+  fecha_actualizacion: string | null;
+  fecha_creacion: string;
+  puede_editar: boolean;
+}
+
+export interface RespuestaRapida {
+  id: number;
+  atajo: string;
+  titulo: string;
+  texto: string;
+  categoria_id: number | null;
+  subcategoria_id: number | null;
+  categoria: string | null;
+  subcategoria: string | null;
+  estado_destino: string | null;
+  alcance: "TODOS" | "AREA" | "PERSONAL";
+  area_id: number | null;
+  area: string | null;
+  propietario_id: number | null;
+  propietario: string | null;
+  usos: number;
+  activo: boolean;
+  puede_editar: boolean;
+}
+
+export interface RespuestaParaTicket {
+  id: number;
+  atajo: string;
+  titulo: string;
+  texto: string;
+  estado_destino: string | null;
+  sugerida: boolean;
+  alcance: string;
+  usos: number;
+}
+
+export type Frecuencia = "DIARIA" | "SEMANAL" | "MENSUAL" | "TRIMESTRAL" | "SEMESTRAL" | "ANUAL";
+
+export interface Recurrente {
+  id: number;
+  nombre: string;
+  asunto: string;
+  descripcion: string;
+  tareas: string | null;
+  categoria_id: number;
+  subcategoria_id: number;
+  prioridad_id: number;
+  responsable_id: number | null;
+  solicitante_id: number;
+  categoria: string;
+  subcategoria: string;
+  prioridad: string;
+  responsable: string | null;
+  frecuencia: Frecuencia;
+  dia_semana: number | null;
+  dia_mes: number | null;
+  semana_mes: number | null;
+  hora: string;
+  desde: string;
+  hasta: string | null;
+  omitir_si_abierto: boolean;
+  activo: boolean;
+  descripcion_frecuencia: string;
+  proxima_ejecucion: string | null;
+  ultima_ejecucion: string | null;
+  ultimo_ticket_id: number | null;
+  ultimo_ticket_numero: string | null;
+  ultimo_resultado: string | null;
+}
+
+export interface ReporteProgramado {
+  id: number;
+  nombre: string;
+  destinatarios: string[];
+  frecuencia: "DIARIA" | "SEMANAL" | "MENSUAL";
+  dia_semana: number | null;
+  dia_mes: number | null;
+  hora: string;
+  secciones: string[];
+  areas: number[] | null;
+  adjuntar_excel: boolean;
+  activo: boolean;
+  proximo_envio: string | null;
+  ultimo_envio: string | null;
+  descripcion_frecuencia: string;
+}
+
+export interface ReporteEnvio {
+  id: number;
+  fecha: string;
+  periodo: string;
+  destinatarios: string;
+  es_prueba: boolean;
+  estado: string | null;
+}
+
+export interface Equipo {
+  id: number;
+  codigo: string;
+  tipo: string;
+  marca_modelo: string;
+  serie: string | null;
+  usuario_id: number | null;
+  usuario: string | null;
+  area_id: number | null;
+  area: string | null;
+  compartido: boolean;
+  ubicacion: string | null;
+  estado: "EN_USO" | "BODEGA" | "REPARACION" | "BAJA";
+  fecha_compra: string | null;
+  garantia_hasta: string | null;
+  sistema: string | null;
+  notas: string | null;
+  fallas_12m: number;
+}
+
+export interface EquipoDetalle extends Equipo {
+  aviso: string | null;
+  historial: { ticket_id: number; numero: string; asunto: string; estado: string; fecha_creacion: string; minutos_resolucion: number | null }[];
+}
+
+export interface EquipoOpcion {
+  id: number;
+  codigo: string;
+  tipo: string;
+  marca_modelo: string;
+  propio: boolean;
+  compartido: boolean;
+  fallas_12m: number;
+}
+
+export interface Delegacion {
+  activa: boolean;
+  areas: number[] | null;
+  hasta: string | null;
+  otorgado_por: string | null;
+  fecha: string | null;
+}
+
+export interface PersonaEnNombre {
+  id: number;
+  nombre: string;
+  correo: string;
+  area: string | null;
+  cargo: string | null;
 }
