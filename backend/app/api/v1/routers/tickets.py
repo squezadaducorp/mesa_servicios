@@ -140,6 +140,13 @@ def comentar(ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto = Depends(c
     return _detalle(svc, ticket_id, ctx)
 
 
+@router.put("/{ticket_id}/copias", response_model=s.TicketDetalle, summary="Reemplazar la lista de personas en copia del ticket")
+def copias(ticket_id: int, dto: s.CopiasEntrada, ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    svc = TicketService(session)
+    svc.actualizar_copias(ticket_id, dto.correos, ctx)
+    return _detalle(svc, ticket_id, ctx)
+
+
 @router.post("/{ticket_id}/adjuntos", response_model=s.TicketDetalle, status_code=201, summary="Adjuntar archivo")
 async def adjuntar(ticket_id: int, archivo: UploadFile = File(...), ctx: Contexto = Depends(contexto), session: Session = DbSession):
     contenido = await archivo.read(settings.ADJUNTOS_MAX_MB * 1024 * 1024 + 1)

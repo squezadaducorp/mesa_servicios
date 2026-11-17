@@ -12,11 +12,12 @@ from app.application.errores import Conflicto, Contexto, NoEncontrado, Prohibido
 from app.application.schemas import esquemas as s
 from app.application.services.auditoria_service import AuditoriaService
 from app.application.services.ia_service import IaService
-from app.application.services.notificacion_service import NotificacionService
+from app.application.services.notificacion_service import NotificacionService, cuentas_sistema
 from app.application.services.sla_service import SlaService
 from app.core.config import settings
 from app.core.security import utcnow
 from app.domain.archivos import contenido_valido
+from app.domain.correos import MAX_COPIAS, separar, unir
 from app.domain.enums import ESTADOS_PAUSA_SLA, AccionAuditoria, Estado, Permiso, Rol
 from app.domain.reglas import TransicionInvalida, cuenta_como_primera_respuesta, es_reapertura, validar_transicion
 from app.infrastructure.db import models as m
@@ -85,6 +86,7 @@ class TicketService:
             a.append("comentar")
             if gestor:
                 a.append("nota_interna")
+                a.append("copias")
         if u.tiene(Permiso.TICKET_ADJUNTAR) and (gestor or propio):
             a.append("adjuntar")
         if u.tiene(Permiso.SLA_MODIFICAR) and abierto:
@@ -171,6 +173,7 @@ class TicketService:
         self.repo.add(t)
         self.session.refresh(t)
         self._hist(t, u, "CREACION", None, None, t.numero, ahora=ahora)
+        self._precargar_copias(t, categoria, ahora)
         self.auditoria.registrar(ctx, AccionAuditoria.TICKET_CREADO, "ticket", t.id, {"numero": t.numero, "categoria": categoria.nombre})
 
         self.notif.notificar([solicitante], "TICKET_CREADO", f"{t.numero} registrado", f"Su solicitud «{t.asunto}» fue registrada.", t)
@@ -306,30 +309,93 @@ class TicketService:
         ahora = utcnow()
         self._aplicar_estado(t, actual, destino, u, ctx, ahora)
         if comentario and comentario.strip():
-            self._agregar_comentario(t, u, comentario.strip(), False, "COMENTARIO", None, ahora)
+            c = self._agregar_comentario(t, u, comentario.strip(), False, "COMENTARIO", None, ahora)
             if self.es_gestor(u, t):
-                self.responder_por_correo(t, u, comentario.strip())
+                c.copia_a = unir(self.responder_por_correo(t, u, comentario.strip(), self.copias(t)))
         return t
 
-    def correo_solicitante(self, codigo: str, t: m.Ticket, **extra) -> None:
-        """Al usuario solicitante o, si el ticket vino de un remitente externo, a la dirección del correo original."""
+    def correo_solicitante(self, codigo: str, t: m.Ticket, *, cc: list[str] | None = None, **extra) -> bool:
+        """Al usuario solicitante o, si el ticket vino de un remitente externo, a la dirección del correo original.
+        `cc` son las personas en copia; devuelve si el correo quedó en cola."""
         cuenta = t.solicitante.correo.lower()
         if cuenta == settings.FORMULARIO_WEB_CORREO.lower():
             # Formulario público: el solicitante no tiene cuenta, el enlace lleva al formulario y no al ticket
             extra.setdefault("url", f"{settings.APP_URL.rstrip('/')}/solicitud")
-            self.notif.correo_directo(codigo, t.correo, t.solicitante_nombre, t, **extra)
-        elif settings.BUZON_ENABLED and cuenta == settings.BUZON_CORREO.lower():
-            self.notif.correo_directo(codigo, t.correo, t.correo, t, **extra)
-        else:
-            self.notif.correo(codigo, [t.solicitante], t, **extra)
+            return self.notif.correo_directo(codigo, t.correo, t.solicitante_nombre, t, cc=cc, **extra)
+        if settings.BUZON_ENABLED and cuenta == settings.BUZON_CORREO.lower():
+            return self.notif.correo_directo(codigo, t.correo, t.correo, t, cc=cc, **extra)
+        return self.notif.correo(codigo, [t.solicitante], t, cc=cc, **extra)
 
-    def responder_por_correo(self, t: m.Ticket, autor: m.Usuario, texto: str) -> None:
+    def responder_por_correo(self, t: m.Ticket, autor: m.Usuario, texto: str, copias: list[str] | None = None) -> list[str]:
         """Los tickets que llegaron por correo reciben las respuestas del equipo en el mismo hilo de correo;
-        los del formulario público, un aviso por correo (el solicitante no tiene cuenta para verlas)."""
+        los del formulario público, un aviso por correo (el solicitante no tiene cuenta para verlas).
+        Las personas en copia reciben la respuesta en CC o, si el solicitante no recibe correo, en un aviso aparte.
+        Devuelve los correos que quedaron en copia."""
+        cc = self._cc_validos(t, copias)
+        datos = {"comentario": texto[:4000], "autor": autor.nombre}
+        enviado = False
         if settings.BUZON_ENABLED and t.canal == "CORREO":
-            self.correo_solicitante("RESPUESTA_TICKET", t, comentario=texto[:4000], autor=autor.nombre)
+            enviado = self.correo_solicitante("RESPUESTA_TICKET", t, cc=cc, **datos)
         elif t.canal == "WEB":
-            self.correo_solicitante("RESPUESTA_WEB", t, comentario=texto[:4000], autor=autor.nombre)
+            enviado = self.correo_solicitante("RESPUESTA_WEB", t, cc=cc, **datos)
+        if cc and not enviado and not self.notif.correo_copias("RESPUESTA_COPIA", cc, t, **datos):
+            return []
+        return cc
+
+    # ======================================================= personas en copia
+    def copias(self, t: m.Ticket) -> list[str]:
+        return [c.correo for c in self.repo.copias(t.id)]
+
+    def _cc_validos(self, t: m.Ticket, correos: list[str] | None) -> list[str]:
+        """Quita al propio solicitante y a las cuentas técnicas; el resto ya viene validado."""
+        excluir = {(t.correo or "").lower(), t.solicitante.correo.lower(), *cuentas_sistema()}
+        return [c for c in (correos or []) if c.lower() not in excluir]
+
+    def _precargar_copias(self, t: m.Ticket, categoria: m.Categoria, ahora: datetime) -> None:
+        """Copia automática configurada en la categoría y en el cliente del ticket."""
+        cliente = self.session.get(m.Cliente, t.cliente_id) if t.cliente_id else None
+        vistos: set[str] = set()
+        for origen, texto in (("CATEGORIA", categoria.correos_copia), ("CLIENTE", cliente.correos_copia if cliente else None)):
+            for correo in self._cc_validos(t, separar(texto)):
+                if correo not in vistos and len(vistos) < MAX_COPIAS:
+                    vistos.add(correo)
+                    self.session.add(m.TicketCopia(ticket_id=t.id, correo=correo, origen=origen, fecha=ahora))
+        if vistos:
+            self.session.flush()
+            self._hist(t, None, "COPIAS", "copias", None, ", ".join(vistos), "Copia automática por categoría o cliente", ahora)
+
+    def agregar_copias(self, t: m.Ticket, correos: list[str], origen: str, ahora: datetime | None = None) -> list[str]:
+        """Suma correos a la lista del ticket sin quitar los existentes (lo usa el buzón con los CC del correo original)."""
+        actuales = self.copias(t)
+        nuevos = [c for c in self._cc_validos(t, correos) if c not in actuales][: max(0, MAX_COPIAS - len(actuales))]
+        for correo in nuevos:
+            self.session.add(m.TicketCopia(ticket_id=t.id, correo=correo, origen=origen, fecha=ahora or utcnow()))
+        if nuevos:
+            self.session.flush()
+        return nuevos
+
+    def actualizar_copias(self, ticket_id: int, correos: list[str], ctx: Contexto) -> m.Ticket:
+        u = ctx.usuario
+        t = self.obtener(ticket_id, u)
+        self._exigir(u, t, "copias")
+        filas = self.repo.copias(t.id)
+        antes = [f.correo for f in filas]
+        despues = self._cc_validos(t, correos)
+        if antes == despues:
+            return t
+        ahora = utcnow()
+        for f in filas:
+            if f.correo not in despues:
+                self.session.delete(f)
+        for correo in despues:
+            if correo not in antes:
+                self.session.add(m.TicketCopia(ticket_id=t.id, correo=correo, origen="MANUAL", agregado_por=u.id, fecha=ahora))
+        self.session.flush()
+        self._hist(t, u, "COPIAS", "copias", unir(antes), unir(despues), ahora=ahora)
+        self.auditoria.registrar(ctx, AccionAuditoria.TICKET_MODIFICADO, "ticket", t.id,
+                                 {"numero": t.numero, "copias_antes": antes, "copias_despues": despues})
+        t.fecha_actualizacion = ahora
+        return t
 
     def _aplicar_estado(self, t: m.Ticket, actual: Estado, destino: Estado, u: m.Usuario | None, ctx: Contexto, ahora: datetime) -> None:
         reapertura = es_reapertura(actual, destino)
@@ -363,7 +429,7 @@ class TicketService:
         solicitante = t.solicitante
         if destino == Estado.CERRADO:
             self.notif.notificar([solicitante], "TICKET_CERRADO", f"{t.numero} cerrado", f"Su solicitud «{t.asunto}» fue cerrada.", t)
-            self.correo_solicitante("TICKET_CERRADO", t)
+            self.correo_solicitante("TICKET_CERRADO", t, cc=self._cc_validos(t, self.copias(t)))
             self.notif.teams("TICKET_CERRADO", t)
         elif destino == Estado.RESUELTO:
             self.notif.notificar([solicitante], "TICKET_RESUELTO", f"{t.numero} resuelto",
@@ -448,7 +514,9 @@ class TicketService:
             if not dto.es_interno:
                 self.sla.registrar_primera_respuesta(t, ahora)
                 self.notif.notificar([t.solicitante], "COMENTARIO", f"{t.numero}: respuesta del equipo", f"{u.nombre}: {dto.texto[:200]}", t)
-                self.responder_por_correo(t, u, dto.texto.strip())
+                # Sin lista explícita se usan las personas en copia del ticket; una lista vacía no copia a nadie
+                copias = self.copias(t) if dto.copia_a is None else dto.copia_a
+                c.copia_a = unir(self.responder_por_correo(t, u, dto.texto.strip(), copias))
         t.fecha_actualizacion = ahora
         return c
 
@@ -631,7 +699,7 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "riesgo_ia": float(t.riesgo_ia) if t.riesgo_ia is not None and gestor else None,
         "comentarios": [
             {"id": c.id, "usuario": resumen(c.usuario), "texto": c.texto, "es_interno": c.es_interno, "tipo": c.tipo,
-             "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha}
+             "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha, "copia_a": separar(c.copia_a) if lectura else []}
             for c in svc.repo.comentarios(t.id, incluir_internos=lectura)
         ],
         "adjuntos": [
@@ -647,6 +715,7 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
              "sla_consumido_pct": float(e.sla_consumido_pct) if e.sla_consumido_pct is not None else None, "fecha": e.fecha}
             for e in (svc.repo.escalamientos(t.id) if lectura else [])
         ],
+        "copias": [{"correo": c.correo, "origen": c.origen} for c in svc.repo.copias(t.id)] if lectura else [],
         "acciones": svc.acciones(u, t),
         "solo_lectura_participante": participante,
     }

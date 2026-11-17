@@ -65,17 +65,17 @@ def permisos_rol(rol_id: int, dto: s.RolPermisosEntrada, ctx: Contexto = Depends
 
 
 # ----------------------------------------------------------------- catálogo
-@router.get("/categorias", response_model=list[s.CategoriaSalida], summary="Categorías (incluye inactivas)")
+@router.get("/categorias", response_model=list[s.CategoriaAdminSalida], summary="Categorías (incluye inactivas)")
 def categorias(ctx: Contexto = Depends(ADMIN_CATALOGO), session: Session = DbSession):
     return [categoria_salida(c) for c in CatalogoRepository(session).categorias(solo_activas=False)]
 
 
-@router.post("/categorias", response_model=s.CategoriaSalida, status_code=201)
+@router.post("/categorias", response_model=s.CategoriaAdminSalida, status_code=201)
 def crear_categoria(dto: s.CategoriaEntrada, ctx: Contexto = Depends(ADMIN_CATALOGO), session: Session = DbSession):
     return categoria_salida(AdminService(session).guardar_categoria(dto, ctx))
 
 
-@router.put("/categorias/{categoria_id}", response_model=s.CategoriaSalida)
+@router.put("/categorias/{categoria_id}", response_model=s.CategoriaAdminSalida)
 def editar_categoria(categoria_id: int, dto: s.CategoriaEntrada, ctx: Contexto = Depends(ADMIN_CATALOGO), session: Session = DbSession):
     return categoria_salida(AdminService(session).guardar_categoria(dto, ctx, categoria_id))
 
@@ -96,13 +96,18 @@ def editar_sub(categoria_id: int, sub_id: int, dto: s.SubcategoriaEntrada, ctx: 
     return AdminService(session).guardar_subcategoria(categoria_id, dto, ctx, sub_id)
 
 
-@router.post("/clientes", response_model=s.ClienteSalida, status_code=201)
+@router.get("/clientes", response_model=list[s.ClienteAdminSalida], summary="Clientes con sus correos en copia automática")
+def clientes(ctx: Contexto = Depends(requiere(Permiso.CATEGORIA_ADMINISTRAR, Permiso.TICKET_VER_TODOS)), session: Session = DbSession):
+    return CatalogoRepository(session).clientes()
+
+
+@router.post("/clientes", response_model=s.ClienteAdminSalida, status_code=201)
 def crear_cliente(dto: s.ClienteEntrada, ctx: Contexto = Depends(requiere(Permiso.CATEGORIA_ADMINISTRAR, Permiso.TICKET_VER_TODOS)),
                   session: Session = DbSession):
     return AdminService(session).guardar_cliente(dto, ctx)
 
 
-@router.put("/clientes/{cliente_id}", response_model=s.ClienteSalida)
+@router.put("/clientes/{cliente_id}", response_model=s.ClienteAdminSalida)
 def editar_cliente(cliente_id: int, dto: s.ClienteEntrada, ctx: Contexto = Depends(requiere(Permiso.CATEGORIA_ADMINISTRAR, Permiso.TICKET_VER_TODOS)),
                    session: Session = DbSession):
     return AdminService(session).guardar_cliente(dto, ctx, cliente_id)

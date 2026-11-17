@@ -195,6 +195,9 @@ class TicketRepository(Repository[m.Ticket]):
             stmt = stmt.where(m.TicketComentario.es_interno == False)
         return list(self.session.scalars(stmt).unique())
 
+    def copias(self, ticket_id: int) -> list[m.TicketCopia]:
+        return list(self.session.scalars(select(m.TicketCopia).where(m.TicketCopia.ticket_id == ticket_id).order_by(m.TicketCopia.id)))
+
     def adjuntos(self, ticket_id: int) -> list[m.TicketAdjunto]:
         return list(
             self.session.scalars(

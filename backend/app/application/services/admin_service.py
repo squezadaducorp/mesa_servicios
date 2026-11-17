@@ -12,6 +12,7 @@ from app.application.schemas import esquemas as s
 from app.application.services.auditoria_service import AuditoriaService
 from app.application.services.sla_service import invalidar_calendario
 from app.core.security import hash_clave, utcnow, validar_politica_clave
+from app.domain.correos import separar, unir
 from app.domain.enums import AccionAuditoria, Rol
 from app.infrastructure.db import models as m
 from app.infrastructure.repositories.repositorios import CatalogoRepository, RefreshTokenRepository, UsuarioRepository
@@ -40,6 +41,7 @@ def categoria_salida(c: m.Categoria) -> dict:
         "supervisor": {"id": c.supervisor.id, "nombre": c.supervisor.nombre, "correo": c.supervisor.correo, "cargo": c.supervisor.cargo} if c.supervisor else None,
         "responsables": [{"usuario_id": r.usuario_id, "nombre": r.usuario.nombre, "es_principal": r.es_principal} for r in c.responsables],
         "subcategorias": [x for x in c.subcategorias if not x.eliminado],
+        "correos_copia": separar(c.correos_copia),
     }
 
 
@@ -170,6 +172,7 @@ class AdminService:
             self.session.add(c)
         for k in ("codigo", "nombre", "descripcion", "palabras_clave", "color", "orden", "modo_asignacion", "supervisor_id", "activo"):
             setattr(c, k, getattr(dto, k))
+        c.correos_copia = unir(dto.correos_copia)
         self.session.flush()
         c.responsables = [m.CategoriaResponsable(categoria_id=c.id, usuario_id=r.usuario_id, es_principal=r.es_principal) for r in dto.responsables]
         self.session.flush()
@@ -208,8 +211,9 @@ class AdminService:
         else:
             c = m.Cliente(fecha_creacion=utcnow())
             self.session.add(c)
-        for k, v in dto.model_dump().items():
+        for k, v in dto.model_dump(exclude={"correos_copia"}).items():
             setattr(c, k, str(v) if k == "correo" and v else v)
+        c.correos_copia = unir(dto.correos_copia)
         self.session.flush()
         self.auditoria.registrar(ctx, "CLIENTE_MODIFICADO", "cliente", c.id, {"razon_social": c.razon_social})
         return c

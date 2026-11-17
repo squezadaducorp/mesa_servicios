@@ -75,6 +75,7 @@ export interface Categoria {
   supervisor: UsuarioResumen | null;
   responsables: { usuario_id: number; nombre: string; es_principal: boolean }[];
   subcategorias: Subcategoria[];
+  correos_copia?: string[];
 }
 
 export interface Cliente {
@@ -85,6 +86,7 @@ export interface Cliente {
   telefono: string | null;
   es_vip: boolean;
   activo: boolean;
+  correos_copia?: string[];
 }
 
 export interface Catalogos {
@@ -126,6 +128,7 @@ export interface Comentario {
   tipo: string;
   minutos_invertidos: number | null;
   fecha: string;
+  copia_a: string[];
 }
 
 export interface Adjunto {
@@ -159,7 +162,12 @@ export interface Escalamiento {
 
 export type AccionTicket =
   | "editar" | "asignar" | "cambiar_estado" | "escalar" | "cerrar" | "reabrir" | "comentar"
-  | "nota_interna" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia";
+  | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia";
+
+export interface CopiaTicket {
+  correo: string;
+  origen: "MANUAL" | "CATEGORIA" | "CLIENTE" | "CORREO";
+}
 
 export interface TicketDetalle {
   id: number;
@@ -207,6 +215,7 @@ export interface TicketDetalle {
   adjuntos: Adjunto[];
   historial: Historial[];
   escalamientos: Escalamiento[];
+  copias: CopiaTicket[];
   acciones: AccionTicket[];
   solo_lectura_participante?: boolean;
 }

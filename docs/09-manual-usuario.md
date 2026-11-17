@@ -89,6 +89,10 @@ flowchart LR
 
 El ticket resuelto se **cierra solo** después de 72 horas laborables. También puede cerrarse antes desde *Más acciones › Cerrar directamente*.
 
+**Personas en copia.** En el panel **Personas en copia** del ticket, pulse **Editar** para agregar o quitar correos (hasta 10). Esas personas reciben por correo cada respuesta que se envía al solicitante y el aviso de cierre; nunca reciben las notas internas. Pueden venir ya cargadas por la copia automática de la categoría o del cliente, o desde el CC del correo con el que llegó el ticket.
+
+Al escribir una respuesta, el campo **Enviar copia a (opcional)** viene con esas personas. Puede quitar o agregar correos **solo para ese envío**, sin cambiar la lista del ticket. Cada comentario muestra a quién se copió («Copia a: …»). Si alguien en copia contesta el correo, su respuesta entra al ticket como **nota interna** para que el equipo decida.
+
 **Asistente IA en el ticket:**
 
 * **Sugerir respuesta:** propone un borrador a partir de la plantilla de la subcategoría. Revíselo y edítelo antes de enviarlo.

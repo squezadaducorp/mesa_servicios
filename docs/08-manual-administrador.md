@@ -79,6 +79,8 @@ La matriz inicial está en [01-arquitectura.md §9](01-arquitectura.md#9-matriz-
 
 **Clientes.** Cada cliente tiene RUC, razón social, correo, teléfono y la marca **VIP**. Los tickets de clientes VIP reciben una prioridad sugerida más alta.
 
+**Copia automática (opcional).** En la categoría y en el cliente puede indicar hasta 10 correos. Cada ticket nuevo de esa categoría o de ese cliente los agrega a sus **Personas en copia**, que reciben por correo las respuestas al solicitante y el cierre. En cada ticket se pueden quitar o agregar correos.
+
 Una categoría o subcategoría con tickets no se elimina: se marca **Inactiva**, deja de ofrecerse en los tickets nuevos y su historial se conserva.
 
 ## 5. SLA y calendario
