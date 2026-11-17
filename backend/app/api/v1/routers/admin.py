@@ -156,6 +156,38 @@ def eliminar_excepcion(excepcion_id: int, ctx: Contexto = Depends(ADMIN_SLA), se
 
 
 # ------------------------------------------------------------ configuración
+CLAVES_ALERTAS = ("sla.avisar_por", "sla.aviso_previo_1_min", "sla.aviso_previo_2_min", "sla.aviso_respuesta_min",
+                  "sla.resumen_diario_hora", "sla.umbral_aviso_1", "sla.umbral_aviso_2")
+
+
+@router.get("/sla/alertas", response_model=dict[str, str], summary="Avisos antes de vencer y resumen diario")
+def alertas(ctx: Contexto = Depends(ADMIN_SLA), session: Session = DbSession):
+    valores = {c.clave: c.valor for c in AdminService(session).configuracion()}
+    return {k: valores.get(k, "") for k in CLAVES_ALERTAS}
+
+
+@router.put("/sla/alertas", response_model=s.Mensaje, summary="Guardar avisos antes de vencer y resumen diario")
+def guardar_alertas(dto: s.ConfiguracionEntrada, ctx: Contexto = Depends(ADMIN_SLA), session: Session = DbSession):
+    from app.application.errores import ReglaNegocio
+    from app.application.services.resumen_service import hora_configurada
+
+    v = {k: str(x).strip() for k, x in dto.valores.items() if k in CLAVES_ALERTAS}
+    if set(dto.valores) - set(CLAVES_ALERTAS):
+        raise ReglaNegocio("Solo se pueden modificar los parámetros de alertas de SLA")
+    for k in ("sla.aviso_previo_1_min", "sla.aviso_previo_2_min", "sla.aviso_respuesta_min", "sla.umbral_aviso_1", "sla.umbral_aviso_2"):
+        if k in v and not v[k].isdigit():
+            raise ReglaNegocio("Los minutos y porcentajes deben ser números enteros")
+    actual = {c.clave: c.valor for c in AdminService(session).configuracion()} | v
+    if int(actual.get("sla.aviso_previo_2_min", "30")) >= int(actual.get("sla.aviso_previo_1_min", "120")):
+        raise ReglaNegocio("El 2.º aviso debe ser más cercano al vencimiento que el 1.º")
+    if v.get("sla.avisar_por", "tiempo") not in ("tiempo", "porcentaje"):
+        raise ReglaNegocio("Indique si se avisa por tiempo o por porcentaje")
+    if v.get("sla.resumen_diario_hora") and hora_configurada(v["sla.resumen_diario_hora"]) is None:
+        raise ReglaNegocio("La hora del resumen debe tener el formato HH:MM")
+    AdminService(session).guardar_configuracion(v, ctx)
+    return {"mensaje": "Alertas guardadas"}
+
+
 @router.get("/configuracion", response_model=list[s.ConfiguracionItem])
 def configuracion(ctx: Contexto = Depends(ADMIN_SISTEMA), session: Session = DbSession):
     return AdminService(session).configuracion()

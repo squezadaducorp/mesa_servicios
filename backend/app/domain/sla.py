@@ -160,3 +160,56 @@ def umbrales_configurados(config: dict[str, str]) -> tuple[int, int, int]:
 def nuevos_umbrales(porcentaje: float, nivel_actual: int, umbrales: tuple[int, int, int] = UMBRALES_ALERTA) -> list[int]:
     """Umbrales de alerta (aviso 1, aviso 2 y 100 %) alcanzados que aún no se notificaron."""
     return [u for u in umbrales if porcentaje >= u and nivel_actual < u]
+
+
+# ---------------------------------------------------------------------------
+# Avisos previos por tiempo que falta
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ConfigAvisos:
+    """Cómo se avisa antes de vencer (Configuración sla.*)."""
+
+    por_tiempo: bool = True        # True: avisos 1 y 2 por minutos que faltan; False: por % consumido (umbral_aviso_1/2)
+    previo_1_min: int = 120        # 1.er aviso al responsable
+    previo_2_min: int = 30         # 2.º aviso al responsable, supervisor y coordinación (+ aviso en pantalla)
+    respuesta_min: int = 60        # aviso previo de 1.ª respuesta (0 = desactivado)
+
+
+def _entero(config: dict[str, str], clave: str, defecto: int) -> int:
+    try:
+        return max(int(str(config.get(clave, defecto)).strip()), 0)
+    except ValueError:
+        return defecto
+
+
+def avisos_configurados(config: dict[str, str]) -> ConfigAvisos:
+    p1, p2 = _entero(config, "sla.aviso_previo_1_min", 120), _entero(config, "sla.aviso_previo_2_min", 30)
+    if p2 >= p1 or p2 == 0:   # valores incoherentes: se vuelve a los recomendados
+        p1, p2 = 120, 30
+    return ConfigAvisos(
+        por_tiempo=str(config.get("sla.avisar_por", "tiempo")).strip().lower() != "porcentaje",
+        previo_1_min=p1, previo_2_min=p2, respuesta_min=_entero(config, "sla.aviso_respuesta_min", 60),
+    )
+
+
+def umbrales_por_tiempo(porcentaje: float, restante_min: int, nivel_actual: int, umbrales: tuple[int, int, int],
+                        avisos: ConfigAvisos) -> list[int]:
+    """Como nuevos_umbrales, pero los avisos 1 y 2 se disparan por minutos laborables que faltan para vencer.
+    El 100 % (vencido) sigue dependiendo del consumo."""
+    alcanzados = []
+    if restante_min <= avisos.previo_1_min:
+        alcanzados.append(umbrales[0])
+    if restante_min <= avisos.previo_2_min:
+        alcanzados.append(umbrales[1])
+    if porcentaje >= 100:
+        alcanzados.append(umbrales[2])
+    return [u for u in alcanzados if nivel_actual < u]
+
+
+def texto_minutos(minutos: int) -> str:
+    """120 → «2 h», 95 → «1 h 35 min», 40 → «40 min»."""
+    minutos = max(int(minutos), 0)
+    h, mi = divmod(minutos, 60)
+    if not h:
+        return f"{mi} min"
+    return f"{h} h" if not mi else f"{h} h {mi} min"

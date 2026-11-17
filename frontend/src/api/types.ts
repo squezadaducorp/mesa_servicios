@@ -118,6 +118,74 @@ export interface TicketListado {
   sla_resolucion_vence: string;
   sla_incumplido: boolean;
   cumplimiento_sla: CumplimientoSla;
+  /** Próximo plazo del ticket abierto: RESPUESTA (1.ª respuesta) o RESOLUCION. */
+  vence_tipo?: "RESPUESTA" | "RESOLUCION" | null;
+  /** Minutos laborables que faltan (negativo si ya venció). */
+  vence_en_min?: number | null;
+}
+
+export interface Encuesta {
+  calificacion: number;
+  comentario: string | null;
+  origen: "PORTAL" | "CORREO";
+  fecha: string;
+}
+
+export interface EncuestaPublica {
+  numero: string;
+  asunto: string;
+  responsable: string | null;
+  calificacion: number | null;
+  comentario: string | null;
+  puede_comentar: boolean;
+}
+
+export interface PersonaCorta {
+  id: number;
+  nombre: string;
+  correo: string;
+}
+
+export type MotivoAusencia = "VACACIONES" | "PERMISO" | "ENFERMEDAD" | "CAPACITACION" | "OTRO";
+
+export interface Ausencia {
+  id: number;
+  usuario: PersonaCorta;
+  reemplazo: PersonaCorta;
+  motivo: MotivoAusencia;
+  desde: string;
+  hasta: string;
+  estado: "PROGRAMADA" | "ACTIVA" | "FINALIZADA" | "CANCELADA";
+  pasar_abiertos: boolean;
+  devolver: boolean;
+  avisar_solicitantes: boolean;
+  tickets_abiertos: number | null;
+}
+
+export interface ReemplazoSugerido {
+  id: number;
+  nombre: string;
+  correo: string;
+  tickets_abiertos: number;
+  categorias_comunes: string[];
+  sugerido: boolean;
+}
+
+export interface TicketCorto {
+  id: number;
+  numero: string;
+  asunto: string;
+}
+
+export interface AlertaSla {
+  id: number;
+  numero: string;
+  asunto: string;
+  prioridad: string;
+  prioridad_codigo: string;
+  vence_tipo: "RESPUESTA" | "RESOLUCION";
+  vence_en_min: number;
+  vence: string;
 }
 
 export interface Comentario {
@@ -162,7 +230,7 @@ export interface Escalamiento {
 
 export type AccionTicket =
   | "editar" | "asignar" | "cambiar_estado" | "escalar" | "cerrar" | "reabrir" | "comentar"
-  | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia";
+  | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia" | "calificar";
 
 export interface CopiaTicket {
   correo: string;
@@ -218,6 +286,7 @@ export interface TicketDetalle {
   copias: CopiaTicket[];
   acciones: AccionTicket[];
   solo_lectura_participante?: boolean;
+  encuesta?: Encuesta | null;
 }
 
 export interface FiltroTickets {
@@ -233,7 +302,8 @@ export interface FiltroTickets {
   hasta?: string;
   solo_mios?: boolean;
   participe?: boolean;
-  orden?: "fecha_desc" | "fecha_asc" | "sla_desc" | "prioridad";
+  vence?: "HOY" | "VENCIDOS";
+  orden?: "fecha_desc" | "fecha_asc" | "sla_desc" | "prioridad" | "vence";
 }
 
 export interface Notificacion {
@@ -410,6 +480,20 @@ export interface Dashboard {
     vence: string;
     estado: string;
   }[];
+  satisfaccion?: Satisfaccion;
+}
+
+export interface Satisfaccion {
+  total: number;
+  promedio: number | null;
+  respondidas_pct: number | null;
+  tickets_resueltos: number;
+  distribucion: Record<string, number>;
+  satisfechos_pct: number | null;
+  insatisfechos_pct: number | null;
+  por_responsable: { nombre: string; promedio: number; encuestas: number }[];
+  tendencia: { periodo: string; promedio: number; encuestas: number }[];
+  comentarios: { ticket_id: number; numero: string; calificacion: number; comentario: string; responsable: string | null; fecha: string }[];
 }
 
 export interface IndicadorCategoria {

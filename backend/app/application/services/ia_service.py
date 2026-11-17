@@ -12,7 +12,7 @@ from app.core.security import utcnow
 from app.domain.enums import Estado
 from app.infrastructure.ai.local import CategoriaIA, Clasificacion, MotorIALocal, SubcatIA
 from app.infrastructure.db import models as m
-from app.infrastructure.repositories.repositorios import CatalogoRepository, TicketRepository, UsuarioRepository
+from app.infrastructure.repositories.repositorios import ausencias_activas, reemplazo_vigente, CatalogoRepository, TicketRepository, UsuarioRepository
 
 log = logging.getLogger(__name__)
 
@@ -65,14 +65,20 @@ class IaService:
         return self.local.clasificar(texto, catalogo), "LOCAL"
 
     def sugerir_responsable(self, categoria: m.Categoria) -> m.Usuario | None:
+        """Responsable según el modo de la categoría. Si quien corresponde está ausente, se usa su reemplazo."""
         candidatos = [r for r in categoria.responsables if r.usuario.activo and not r.usuario.eliminado]
         if not candidatos or categoria.modo_asignacion == "MANUAL":
             return None
+        ausentes = ausencias_activas(self.session)
         if categoria.modo_asignacion == "PRINCIPAL" or len(candidatos) == 1:
-            principal = next((r for r in candidatos if r.es_principal), candidatos[0])
-            return principal.usuario
-        carga = UsuarioRepository(self.session).carga_abierta([r.usuario_id for r in candidatos])
-        return min(candidatos, key=lambda r: (carga[r.usuario_id], not r.es_principal, r.usuario_id)).usuario
+            elegido = next((r for r in candidatos if r.es_principal), candidatos[0]).usuario
+        else:
+            presentes = [r for r in candidatos if r.usuario_id not in ausentes] or candidatos
+            carga = UsuarioRepository(self.session).carga_abierta([r.usuario_id for r in presentes])
+            elegido = min(presentes, key=lambda r: (carga[r.usuario_id], not r.es_principal, r.usuario_id)).usuario
+        if elegido.id in ausentes:
+            return reemplazo_vigente(self.session, elegido.id) or elegido
+        return elegido
 
     def sugerir_ticket(self, asunto: str, descripcion: str, cliente_id: int | None, usuario_id: int | None) -> dict:
         texto = f"{asunto}. {descripcion}"

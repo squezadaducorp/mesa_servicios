@@ -146,6 +146,57 @@ class ReportService:
             "top_categorias": [{"nombre": n, "tickets": c} for n, c in Counter(f.categoria for f in filas).most_common(5)],
             "top_responsables": [{"nombre": n, "tickets": c} for n, c in Counter(f.responsable for f in filas if f.responsable).most_common(5)],
             "en_riesgo": self._en_riesgo(),
+            "satisfaccion": self.satisfaccion(f),
+        }
+
+    # -------------------------------------------------------- satisfacción
+    def satisfaccion(self, f: FiltroReporte) -> dict:
+        """Encuestas respondidas en el período (por fecha de la calificación), con los mismos filtros del dashboard."""
+        E, T = m.TicketEncuesta, m.Ticket
+        desde, hasta = limites_dia_utc(f.desde, f.hasta)
+
+        def filtrar(stmt):
+            alcance = self._alcance_categorias()
+            if alcance is not None:
+                stmt = stmt.where(T.categoria_id.in_(alcance or [-1]))
+            for campo in ("categoria_id", "responsable_id", "cliente_id"):
+                if getattr(f, campo):
+                    stmt = stmt.where(getattr(T, campo) == getattr(f, campo))
+            return stmt.where(T.eliminado == False)
+
+        filas = self.session.execute(filtrar(
+            select(E.calificacion, E.comentario, E.fecha, T.id, T.numero, m.Usuario.nombre)
+            .join(T, T.id == E.ticket_id).outerjoin(m.Usuario, m.Usuario.id == E.responsable_id)
+            .where(E.fecha >= desde, E.fecha < hasta)
+        )).all()
+        resueltos = len(self.session.execute(filtrar(
+            select(T.id).where(T.fecha_resolucion >= desde, T.fecha_resolucion < hasta, T.estado.in_(["RESUELTO", "CERRADO"]))
+        )).all())
+        total = len(filas)
+        notas = [r[0] for r in filas]
+        por_resp: dict[str, list[int]] = defaultdict(list)
+        por_mes: dict[str, list[int]] = defaultdict(list)
+        for r in filas:
+            if r[5]:
+                por_resp[r[5]].append(r[0])
+            por_mes[r[2].replace(tzinfo=timezone.utc).astimezone(self.tz).strftime("%Y-%m")].append(r[0])
+        comentarios = sorted((r for r in filas if r[1]), key=lambda r: r[2], reverse=True)[:10]
+        return {
+            "total": total,
+            "promedio": round(mean(notas), 2) if notas else None,
+            "respondidas_pct": round(100.0 * total / resueltos, 1) if resueltos else None,
+            "tickets_resueltos": resueltos,
+            "distribucion": {str(n): notas.count(n) for n in range(1, 6)},
+            "satisfechos_pct": round(100.0 * sum(n >= 4 for n in notas) / total, 1) if total else None,
+            "insatisfechos_pct": round(100.0 * sum(n <= 2 for n in notas) / total, 1) if total else None,
+            "por_responsable": sorted(
+                ({"nombre": n, "promedio": round(mean(v), 2), "encuestas": len(v)} for n, v in por_resp.items()),
+                key=lambda x: (-x["promedio"], -x["encuestas"]))[:8],
+            "tendencia": [{"periodo": k, "promedio": round(mean(v), 2), "encuestas": len(v)} for k, v in sorted(por_mes.items())],
+            "comentarios": [
+                {"ticket_id": r[3], "numero": r[4], "calificacion": r[0], "comentario": r[1], "responsable": r[5],
+                 "fecha": r[2].isoformat() + "Z"} for r in comentarios
+            ],
         }
 
     def _en_riesgo(self) -> list[dict]:

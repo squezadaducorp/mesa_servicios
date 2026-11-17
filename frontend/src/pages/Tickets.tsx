@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
-  Box, Button, Card, CardActionArea, Chip, Collapse, FormControlLabel, InputAdornment, MenuItem, Paper, Stack, Switch, Table,
-  TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Typography, useMediaQuery, useTheme,
+  Box, Button, Card, CardActionArea, Chip, Collapse, FormControlLabel, InputAdornment, MenuItem, Paper, Stack, Switch, Tab, Table,
+  TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, Tabs, TextField, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
@@ -14,12 +14,20 @@ import { useCatalogos } from "../api/hooks";
 import type { FiltroTickets, Pagina, TicketListado } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { mensajeError, useAviso } from "../components/Aviso";
-import { CumplimientoChip, EstadoChip, NOMBRE_ESTADO, PrioridadChip, SlaBarra } from "../components/Chips";
+import { CumplimientoChip, EstadoChip, NOMBRE_ESTADO, PrioridadChip, SlaBarra, VenceChip } from "../components/Chips";
 import { Cargando, Encabezado, ErrorCarga, Vacio } from "../components/Comunes";
 import { fechaHora } from "../utils/formato";
 import { P } from "../utils/permisos";
 
 const CLAVE_FILTRO = "aducorp.filtroTickets";
+
+type Vista = "mios" | "HOY" | "VENCIDOS" | "todos";
+
+function vistaDe(f: FiltroTickets): Vista | false {
+  if (f.vence && f.solo_mios) return f.vence;
+  if (f.vence) return false;
+  return f.solo_mios ? "mios" : "todos";
+}
 
 function filtroInicial(params: URLSearchParams): FiltroTickets {
   const desdeUrl: FiltroTickets = {};
@@ -27,6 +35,8 @@ function filtroInicial(params: URLSearchParams): FiltroTickets {
   if (params.get("sla")) desdeUrl.sla = params.get("sla") as FiltroTickets["sla"];
   if (params.get("solo_mios")) desdeUrl.solo_mios = true;
   if (params.get("participe")) desdeUrl.participe = true;
+  const vence = params.get("vence");
+  if (vence === "HOY" || vence === "VENCIDOS") return { orden: "vence", vence, solo_mios: true };
   if (Object.keys(desdeUrl).length) return { orden: "fecha_desc", ...desdeUrl };
   try {
     const g = sessionStorage.getItem(CLAVE_FILTRO);
@@ -51,6 +61,16 @@ export default function Tickets() {
   const [tamano, setTamano] = useState(20);
   const [verFiltros, setVerFiltros] = useState(false);
   const gestor = puede(P.VER_TODOS, P.VER_AREA, P.VER_ASIGNADOS);
+  const conteo = (vence: "HOY" | "VENCIDOS") =>
+    get<Pagina<TicketListado>>("/tickets", { vence, solo_mios: true, pagina: 1, tamano: 1 }).then((p) => p.total);
+  const porVencer = useQuery({ queryKey: ["tickets", "conteo", "HOY"], queryFn: () => conteo("HOY"), enabled: gestor, refetchInterval: 120_000 });
+  const vencidos = useQuery({ queryKey: ["tickets", "conteo", "VENCIDOS"], queryFn: () => conteo("VENCIDOS"), enabled: gestor, refetchInterval: 120_000 });
+  const cambiarVista = (v: Vista) =>
+    setFiltro((f) => {
+      const { vence: _v, solo_mios: _m, ...resto } = f;
+      if (v === "HOY" || v === "VENCIDOS") return { ...resto, vence: v, solo_mios: true, orden: "vence" };
+      return { ...resto, solo_mios: v === "mios" || undefined, orden: f.orden === "vence" ? "fecha_desc" : f.orden };
+    });
 
   useEffect(() => {
     const t = setTimeout(() => setFiltro((f) => ({ ...f, texto: texto || undefined })), 350);
@@ -76,7 +96,7 @@ export default function Tickets() {
   const set = <K extends keyof FiltroTickets>(k: K, v: FiltroTickets[K] | "" | undefined) =>
     setFiltro((f) => ({ ...f, [k]: v === "" ? undefined : v }));
   const categoria = cat.data?.categorias.find((c) => c.id === filtro.categoria_id);
-  const activos = Object.entries(filtro).filter(([k, v]) => !["orden", "texto"].includes(k) && v !== undefined && v !== false && !(Array.isArray(v) && !v.length)).length;
+  const activos = Object.entries(filtro).filter(([k, v]) => !["orden", "texto", ...(gestor ? ["vence", "solo_mios"] : [])].includes(k) && v !== undefined && v !== false && !(Array.isArray(v) && !v.length)).length;
 
   const exportar = async (formato: string) => {
     try {
@@ -107,6 +127,37 @@ export default function Tickets() {
           </>
         }
       />
+
+      {gestor && (
+        <Tabs
+          value={vistaDe(filtro)}
+          onChange={(_, v) => cambiarVista(v)}
+          variant="scrollable"
+          allowScrollButtonsMobile
+          sx={{ mb: 1, borderBottom: 1, borderColor: "divider" }}
+        >
+          <Tab value="mios" label="Mis tickets" />
+          <Tab
+            value="HOY"
+            label={
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                <span>Por vencer hoy</span>
+                {!!porVencer.data && <Chip size="small" label={porVencer.data} sx={{ height: 20, bgcolor: "#E65100", color: "#fff", fontWeight: 700 }} />}
+              </Stack>
+            }
+          />
+          <Tab
+            value="VENCIDOS"
+            label={
+              <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+                <span>Vencidos</span>
+                {!!vencidos.data && <Chip size="small" label={vencidos.data} sx={{ height: 20, bgcolor: "#C62828", color: "#fff", fontWeight: 700 }} />}
+              </Stack>
+            }
+          />
+          <Tab value="todos" label="Todos" />
+        </Tabs>
+      )}
 
       <Paper sx={{ p: 2, mb: 2 }}>
         <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
@@ -200,11 +251,22 @@ export default function Tickets() {
               <MenuItem value="CUMPLIDO">Cumplido</MenuItem>
               <MenuItem value="INCUMPLIDO">Incumplido</MenuItem>
             </TextField>
+            <TextField
+              select
+              label="Vencimiento"
+              value={filtro.vence ?? ""}
+              onChange={(e) => setFiltro((f) => ({ ...f, vence: (e.target.value || undefined) as FiltroTickets["vence"], orden: e.target.value ? "vence" : f.orden === "vence" ? "fecha_desc" : f.orden }))}
+            >
+              <MenuItem value="">Todos</MenuItem>
+              <MenuItem value="HOY">Vencen hoy</MenuItem>
+              <MenuItem value="VENCIDOS">Ya vencidos</MenuItem>
+            </TextField>
             <TextField select label="Ordenar por" value={filtro.orden ?? "fecha_desc"} onChange={(e) => set("orden", e.target.value as FiltroTickets["orden"])}>
               <MenuItem value="fecha_desc">Más recientes</MenuItem>
               <MenuItem value="fecha_asc">Más antiguos</MenuItem>
               <MenuItem value="sla_desc">Mayor consumo de SLA</MenuItem>
               <MenuItem value="prioridad">Prioridad</MenuItem>
+              <MenuItem value="vence">Próximo a vencer</MenuItem>
             </TextField>
             <TextField type="date" label="Desde" value={filtro.desde ?? ""} onChange={(e) => set("desde", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
             <TextField type="date" label="Hasta" value={filtro.hasta ?? ""} onChange={(e) => set("hasta", e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
@@ -253,6 +315,7 @@ export default function Tickets() {
                   <Box sx={{ flex: 1 }}>
                     <SlaBarra pct={t.sla_consumido_pct} pausado={t.estado === "PENDIENTE_CLIENTE"} ancho={80} />
                   </Box>
+                  {t.vence_en_min !== null && t.vence_en_min !== undefined && <VenceChip min={t.vence_en_min} tipo={t.vence_tipo} />}
                 </Stack>
               </CardActionArea>
             </Card>
@@ -270,7 +333,7 @@ export default function Tickets() {
                   <TableCell>Prioridad</TableCell>
                   <TableCell>Responsable</TableCell>
                   <TableCell>Estado</TableCell>
-                  <TableCell>SLA</TableCell>
+                  <TableCell>SLA / vence en</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -305,11 +368,16 @@ export default function Tickets() {
                     <TableCell>
                       <EstadoChip estado={t.estado} nombre={t.estado_nombre} />
                     </TableCell>
-                    <TableCell sx={{ minWidth: 120 }}>
+                    <TableCell sx={{ minWidth: 150 }}>
                       {t.cumplimiento_sla === "EN_CURSO" ? (
                         <SlaBarra pct={t.sla_consumido_pct} pausado={t.estado === "PENDIENTE_CLIENTE"} ancho={90} />
                       ) : (
                         <CumplimientoChip valor={t.cumplimiento_sla} />
+                      )}
+                      {t.vence_en_min !== null && t.vence_en_min !== undefined && (
+                        <Box sx={{ mt: 0.5, whiteSpace: "nowrap" }}>
+                          <VenceChip min={t.vence_en_min} tipo={t.vence_tipo} />
+                        </Box>
                       )}
                     </TableCell>
                   </TableRow>

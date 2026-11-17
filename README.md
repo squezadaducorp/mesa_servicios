@@ -48,6 +48,7 @@ docs/         Arquitectura, modelo de datos, seguridad, manuales, diagramas y ca
 | [Microsoft 365](docs/10-microsoft-365.md) | TI: login con Entra ID, buzón soporte@ en Exchange Online, app de Teams |
 | [Publicar en internet](docs/11-publicar-en-internet.md) | TI: dejar la Mesa disponible fuera de la oficina, gratis, con Cloudflare Tunnel desde un equipo propio |
 | [Publicar en la nube](docs/12-publicar-en-la-nube.md) | TI: servidor en la nube con un solo comando, sin depender de un PC encendido |
+| [Monitoreo y respaldos](docs/14-monitoreo-y-respaldos.md) | TI: alertas por correo si la Mesa se cae, copia de respaldos en S3 y alarmas de AWS |
 | [Diagramas](docs/diagramas/) | Arquitectura y modelo ER en SVG |
 
 ## Desarrollo

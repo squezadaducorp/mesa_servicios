@@ -82,10 +82,12 @@ fi
 sql < deploy/cloudflare/antes-de-publicar.sql
 "${C[@]}" --profile nube up -d
 
-# Respaldos diarios de la base y los adjuntos, y del registro de transacciones en horario laboral (hora UTC del servidor)
+# Respaldos diarios de la base y los adjuntos, registro de transacciones en horario laboral (hora UTC del servidor)
+# y vigilante cada 5 minutos (avisa a ALERTA_CORREOS; docs/14-monitoreo-y-respaldos.md)
 cat > /etc/cron.d/mesa-servicios <<CRON
 0 4 * * *  root  cd $DIR && ./deploy/respaldo.sh completo >> /var/log/mesa-respaldo.log 2>&1
 */15 13-23 * * 1-5  root  cd $DIR && ./deploy/respaldo.sh log >> /var/log/mesa-respaldo.log 2>&1
+*/5 * * * *  root  cd $DIR && ./deploy/vigilante.sh >> /var/log/mesa-vigilante.log 2>&1
 CRON
 
 echo

@@ -94,7 +94,7 @@ La base trae solo la cuenta `admin@` y unos usuarios de ejemplo. Para dejar úni
 
 | Tarea | Cómo |
 |---|---|
-| Respaldos | Automáticos: base y adjuntos todas las noches a las 23:00, y el registro de transacciones cada 15 minutos en horario laboral. Quedan en `/opt/mesa-servicios/backups` (se guardan 30 días) |
+| Respaldos | Automáticos: base y adjuntos todas las noches a las 23:00, y el registro de transacciones cada 15 minutos en horario laboral. Quedan en `/opt/mesa-servicios/backups` (30 días, o `RESPALDO_DIAS_LOCAL`) y pueden copiarse a Amazon S3. Un vigilante revisa la Mesa cada 5 minutos y avisa por correo: ver [Monitoreo y respaldos](14-monitoreo-y-respaldos.md) |
 | Copia fuera del servidor | Recomendado una vez al mes: EC2 > *Volumes* > el volumen de la instancia > *Create snapshot* |
 | Actualizar a la última versión | Conectarse como en el paso 4.1 y volver a pegar el mismo comando. Conserva la base, la configuración y los adjuntos |
 | Ver si todo está en marcha | `cd /opt/mesa-servicios && sudo docker compose ps` |

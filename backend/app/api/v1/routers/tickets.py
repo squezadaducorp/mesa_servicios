@@ -14,6 +14,7 @@ from app.application.services.auditoria_service import AuditoriaService
 from app.application.services.ia_service import IaService
 from app.application.services.ticket_service import TicketService, a_detalle, a_listado
 from app.core.config import settings
+from app.core.security import utcnow
 from app.domain.enums import AccionAuditoria, Permiso
 
 router = APIRouter(prefix="/tickets", tags=["Tickets"])
@@ -32,7 +33,8 @@ def filtro_tickets(
     hasta: date | None = None,
     solo_mios: bool = False,
     participe: bool = False,
-    orden: Literal["fecha_desc", "fecha_asc", "sla_desc", "prioridad"] = "fecha_desc",
+    vence: Literal["HOY", "VENCIDOS"] | None = None,
+    orden: Literal["fecha_desc", "fecha_asc", "sla_desc", "prioridad", "vence"] = "fecha_desc",
 ) -> s.FiltroTickets:
     return s.FiltroTickets(**locals())
 
@@ -52,8 +54,16 @@ def listar(
     ctx: Contexto = Depends(contexto),
     session: Session = DbSession,
 ):
-    items, total = TicketService(session).listar(ctx.usuario, f, pagina, tamano)
-    return {"items": [a_listado(t) for t in items], "total": total, "pagina": pagina, "tamano": tamano}
+    svc = TicketService(session)
+    items, total = svc.listar(ctx.usuario, f, pagina, tamano)
+    ahora = utcnow()
+    return {"items": [a_listado(t, svc.sla, ahora) for t in items], "total": total, "pagina": pagina, "tamano": tamano}
+
+
+@router.get("/alertas-sla", response_model=list[s.AlertaSla],
+            summary="Mis tickets que vencen pronto (aviso en pantalla, según sla.aviso_previo_2_min)")
+def alertas_sla(ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    return TicketService(session).alertas_sla(ctx.usuario)
 
 
 @router.get("/exportar", summary="Exportar tickets filtrados a Excel, PDF o CSV")
@@ -137,6 +147,14 @@ def reabrir(ticket_id: int, dto: s.MotivoEntrada, ctx: Contexto = Depends(contex
 def comentar(ticket_id: int, dto: s.ComentarioEntrada, ctx: Contexto = Depends(contexto), session: Session = DbSession):
     svc = TicketService(session)
     svc.comentar(ticket_id, dto, ctx)
+    return _detalle(svc, ticket_id, ctx)
+
+
+@router.post("/{ticket_id}/encuesta", response_model=s.TicketDetalle, status_code=201,
+             summary="Calificar la atención (solicitante, ticket resuelto): 1 a 5 estrellas y comentario; cierra el ticket")
+def calificar(ticket_id: int, dto: s.EncuestaEntrada, ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    svc = TicketService(session)
+    svc.calificar(ticket_id, dto.calificacion, dto.comentario, ctx)
     return _detalle(svc, ticket_id, ctx)
 
 

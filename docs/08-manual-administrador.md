@@ -124,6 +124,28 @@ Ambas piden un motivo y quedan registradas con el nombre de quien las aprobó.
 | 90 % | Aviso al supervisor de la categoría y al coordinador de la mesa |
 | 100 % | Marca *Incumplido*, pasa a *Escalado* y avisa al supervisor y al coordinador |
 
+### Alertas antes de vencer
+
+En **SLA y calendario › Alertas antes de vencer**:
+
+| Parámetro | Por defecto | Qué hace |
+|---|---|---|
+| Avisar por | Tiempo que falta | *Tiempo*: avisos cuando faltan X minutos laborables (recomendado: un ticket de 4 h y otro de 48 h reciben el aviso con el mismo margen). *Porcentaje*: el esquema anterior de 75 % y 90 % |
+| 1.er aviso | 120 min | Campana y correo al responsable |
+| 2.º aviso (urgente) | 30 min | Campana y correo al responsable y al supervisor; campana al coordinador. Escala el ticket |
+| Aviso de 1.ª respuesta | 60 min | Si el ticket aún no tiene primera respuesta |
+| Resumen diario | 08:30 | Cada día laborable, un correo a cada responsable con lo que le vence hoy. Vacío = desactivado |
+
+Al 100 % el ticket se marca *Incumplido* y se escala igual que antes.
+
+### Encuesta de satisfacción
+
+Al resolver un ticket, el solicitante recibe un correo con 1 a 5 estrellas y puede calificar también desde el portal. Calificar cierra el ticket. Las notas de 1 o 2 estrellas avisan al supervisor de la categoría (campana y correo) y al coordinador. Los resultados están en el **Dashboard › Satisfacción del solicitante**: promedio, distribución, promedio por responsable, tendencia mensual y últimos comentarios. En *Configuración*: `encuesta.activa` (si/no) y `encuesta.aviso_nota_max` (nota máxima que dispara el aviso, 2 por defecto).
+
+### Ausencias y reemplazos
+
+En **Usuarios**, el ícono de sombrilla registra una ausencia para un analista o supervisor (vacaciones, permiso, enfermedad, capacitación), con el reemplazo sugerido según categorías y carga. La columna *Estado* muestra quién está ausente y quién lo cubre. Cada persona puede registrar la suya en *Mi disponibilidad*; el supervisor, las de su equipo. Mientras dura la ausencia, la asignación automática envía los tickets al reemplazo; al terminar, devuelve los que sigan abiertos.
+
 ## 6. Auditoría
 
 ![Auditoría](capturas/06-admin-auditoria.png)

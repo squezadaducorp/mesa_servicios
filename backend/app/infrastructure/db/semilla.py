@@ -105,13 +105,20 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                            ("RESPUESTA_TICKET", "[{numero}] Respuesta: {asunto}"),
                            ("ACUSE_WEB", "[{numero}] Recibimos su solicitud: {asunto}"),
                            ("RESPUESTA_WEB", "[{numero}] Respuesta: {asunto}"),
-                           ("RESPUESTA_COPIA", "[{numero}] Respuesta: {asunto}")):
-        session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} <a href='{url}'>ver</a></p>"))
+                           ("RESPUESTA_COPIA", "[{numero}] Respuesta: {asunto}"),
+                           ("SLA_AVISO_1", "[{numero}] Vence en {restante}"), ("SLA_AVISO_2", "[{numero}] Vence en {restante}"),
+                           ("SLA_AVISO_RESPUESTA", "[{numero}] Falta la primera respuesta"),
+                           ("ENCUESTA", "[{numero}] ¿Cómo lo atendimos?"), ("ENCUESTA_BAJA", "[{numero}] Calificación baja"),
+                           ("AUSENCIA_REASIGNADO", "[{numero}] Cambio de responsable")):
+        session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} {restante} "
+                                      "{ausente} {reemplazo} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a></p>"))
     for k, v in (("empresa.nombre", "ADUCORP Asesores Aduaneros y Logísticos Cía. Ltda."), ("sla.umbral_aviso_1", "75"),
                  ("sla.umbral_aviso_2", "90"), ("ticket.cierre_automatico_h", "72"), ("adjuntos.max_mb", "20"),
                  ("adjuntos.extensiones", "pdf,doc,docx,xls,xlsx,csv,jpg,jpeg,png,txt,xml,zip,msg,eml"),
                  ("seguridad.max_intentos", "5"), ("seguridad.bloqueo_min", "15"),
-                 ("seguridad.inactividad_min", "30")):
+                 ("seguridad.inactividad_min", "30"), ("sla.avisar_por", "tiempo"), ("sla.aviso_previo_1_min", "120"),
+                 ("sla.aviso_previo_2_min", "30"), ("sla.aviso_respuesta_min", "60"), ("sla.resumen_diario_hora", "08:30"),
+                 ("encuesta.activa", "si"), ("encuesta.aviso_nota_max", "2")):
         session.add(m.Configuracion(clave=k, valor=v))
     session.commit()
 

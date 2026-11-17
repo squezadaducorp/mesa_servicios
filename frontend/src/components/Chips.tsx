@@ -78,3 +78,42 @@ export function CumplimientoChip({ valor }: { valor: CumplimientoSla }) {
   const c = CUMPLIMIENTO[valor] ?? CUMPLIMIENTO.EN_CURSO;
   return <Chip size="small" variant="outlined" color={c.color} label={c.texto} />;
 }
+
+/** «1 h 35 min», «2 h», «40 min» (minutos laborables). */
+export function textoMinutos(n: number) {
+  const m = Math.abs(Math.round(n));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (h && r) return `${h} h ${r} min`;
+  if (h) return `${h} h`;
+  return `${r} min`;
+}
+
+export function colorVence(min: number) {
+  if (min < 0) return "#C62828";
+  if (min <= 30) return "#E65100";
+  if (min <= 120) return "#B57400";
+  return "#2E7D32";
+}
+
+/** Tiempo laborable que falta para el próximo plazo del ticket (1.ª respuesta o resolución). */
+export function VenceChip({ min, tipo }: { min: number | null | undefined; tipo?: string | null }) {
+  if (min === null || min === undefined) return <Typography variant="caption" color="text.secondary">—</Typography>;
+  const c = colorVence(min);
+  const texto = min < 0 ? `Vencido hace ${textoMinutos(min)}` : `Faltan ${textoMinutos(min)}`;
+  const titulo = (tipo === "RESPUESTA" ? "Plazo de la 1.ª respuesta" : "Plazo de resolución") + " · tiempo en horario laboral";
+  return (
+    <Tooltip title={titulo}>
+      <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75 }}>
+        <Chip size="small" label={texto} sx={{ height: 22, bgcolor: `${c}1A`, color: c, border: `1px solid ${c}55`, fontWeight: 700 }} />
+        {tipo === "RESPUESTA" && (
+          <Typography variant="caption" sx={{ color: "text.secondary", fontSize: 11 }}>
+            1.ª resp.
+          </Typography>
+        )}
+      </Box>
+    </Tooltip>
+  );
+}
+
+export const NOMBRES_NOTA: Record<number, string> = { 1: "Muy mala", 2: "Mala", 3: "Regular", 4: "Buena", 5: "Excelente" };

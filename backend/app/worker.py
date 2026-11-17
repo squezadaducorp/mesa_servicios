@@ -95,6 +95,33 @@ def ciclo_cierre_automatico() -> int:
         return cerrados
 
 
+def ciclo_ausencias() -> dict:
+    """Inicia y termina las ausencias programadas (reasigna y devuelve tickets)."""
+    from app.application.services.ausencia_service import AusenciaService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "ausencias", settings.WORKER_INTERVALO_SEG * 3):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        r = AusenciaService(session).procesar()
+        session.commit()
+        return r
+
+
+def ciclo_resumen_diario() -> dict:
+    """Correo de la mañana a cada responsable con los tickets que le vencen hoy (sla.resumen_diario_hora)."""
+    from app.application.services.resumen_service import ResumenDiarioService
+
+    with SessionLocal() as session:
+        svc = ResumenDiarioService(session)
+        if not svc.corresponde(utcnow()):
+            return {"omitido": "no corresponde"}
+        if not tomar_bloqueo(session, "resumen_diario", 600):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        r = svc.enviar()
+        session.commit()
+        return r
+
+
 def ciclo_correos(lote: int = 50) -> dict:
     enviador = crear_enviador()
     enviados = errores = 0
@@ -163,7 +190,8 @@ def ciclo_entra() -> dict:
 
 
 def ejecutar_ciclo() -> None:
-    for nombre, fn in (("sla", ciclo_sla), ("cierre", ciclo_cierre_automatico), ("buzon", ciclo_buzon), ("correo", ciclo_correos),
+    for nombre, fn in (("ausencias", ciclo_ausencias), ("sla", ciclo_sla), ("resumen", ciclo_resumen_diario),
+                       ("cierre", ciclo_cierre_automatico), ("buzon", ciclo_buzon), ("correo", ciclo_correos),
                        ("teams", ciclo_teams), ("entra", ciclo_entra)):
         try:
             r = fn()
