@@ -324,3 +324,21 @@ def test_enviador_smtp_adjunta_archivo(monkeypatch):
     smtp.EnviadorSmtp().enviar("a@b.com", "Reporte", "<p>hola</p>", adjunto=("reporte.xlsx", b"PK123"))
     adjuntos = list(enviados[0].iter_attachments())
     assert adjuntos[0].get_filename() == "reporte.xlsx" and adjuntos[0].get_content() == b"PK123"
+
+
+# ================================================== analistas: reasignar su propio ticket
+def test_analista_responsable_puede_reasignar_su_ticket(client, como):
+    t = crear_ticket(client, como("maria.andrade"))
+    url = f"{API}/tickets/{t['id']}"
+    responsables = catalogo(client, como("admin"))["responsables"]
+    juan = next(u for u in responsables if u["nombre"] == "Juan Manuel Villamar")
+    claudia = next(u for u in responsables if u["nombre"] == "Claudia Vásquez")
+    client.post(f"{url}/asignar", json={"responsable_id": juan["id"]}, headers=como("admin"))
+    # Otro analista que no es responsable no ve el botón ni puede reasignar
+    assert client.post(f"{url}/asignar", json={"responsable_id": claudia["id"]}, headers=como("david.medina")).status_code in (403, 404)
+    # El responsable sí puede traspasar su ticket
+    assert "asignar" in client.get(url, headers=como("juan.villamar")).json()["acciones"]
+    r = client.post(f"{url}/asignar", json={"responsable_id": claudia["id"], "motivo": "Lo atiende Claudia"}, headers=como("juan.villamar"))
+    assert r.status_code == 200 and r.json()["responsable"]["nombre"] == "Claudia Vásquez"
+    # Después del traspaso ya no puede reasignarlo
+    assert client.post(f"{url}/asignar", json={"responsable_id": juan["id"]}, headers=como("juan.villamar")).status_code in (403, 404)

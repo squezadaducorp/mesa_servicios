@@ -75,7 +75,10 @@ class TicketService:
         abierto = estado not in (Estado.RESUELTO, Estado.CERRADO)
         if gestor and u.tiene(Permiso.TICKET_EDITAR) and abierto:
             a.append("editar")
-        if u.tiene(Permiso.TICKET_ASIGNAR) and abierto and (u.tiene(Permiso.TICKET_VER_TODOS) or t.categoria.supervisor_id == u.id):
+        # Reasignar: mesa de servicio (ver todos), supervisor de la categoría o el responsable actual (traspasa su ticket)
+        if u.tiene(Permiso.TICKET_ASIGNAR) and abierto and (
+            u.tiene(Permiso.TICKET_VER_TODOS) or t.categoria.supervisor_id == u.id or t.responsable_id == u.id
+        ):
             a.append("asignar")
         if gestor and u.tiene(Permiso.TICKET_CAMBIAR_ESTADO) and abierto:
             a.append("cambiar_estado")

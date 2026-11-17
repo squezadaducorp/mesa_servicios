@@ -25,7 +25,7 @@ PERMISOS_POR_ROL = {
                    "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar",
                    "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver"],
     "ANALISTA": ["ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.escalar", "ticket.cambiar_estado",
-                 "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar", "kb.gestionar", "inventario.ver"],
+                 "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar", "kb.gestionar", "inventario.ver", "ticket.asignar"],
     "CLIENTE": ["ticket.ver_propios", "ticket.crear", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar"],
     "GERENCIA": ["ticket.ver_todos", "reporte.ver", "dashboard.ver", "datos.exportar", "inventario.ver"],
 }

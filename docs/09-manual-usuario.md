@@ -93,7 +93,7 @@ flowchart LR
 | Dar la solución | **Resolver** | Detiene el SLA de resolución |
 | Pedir ayuda a su supervisor | **Más acciones › Escalar** | Pasa a *Escalado* con el motivo y avisa al supervisor |
 | Cambiar asunto, categoría o prioridad | **Más acciones › Editar** | Si cambia la prioridad, el plazo se recalcula |
-| Reasignar (Supervisor y Admin Mesa) | **Reasignar** | Avisa al nuevo responsable |
+| Reasignar (Supervisor, Admin Mesa y el analista responsable del ticket) | **Reasignar** | Avisa al nuevo responsable. El analista que lo traspasa lo sigue viendo en «Tickets en los que participé» |
 
 El ticket resuelto se **cierra solo** después de 72 horas laborables. También puede cerrarse antes desde *Más acciones › Cerrar directamente*.
 

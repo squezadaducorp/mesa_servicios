@@ -255,5 +255,19 @@ ON d.codigo = o.codigo
 WHEN NOT MATCHED THEN INSERT (codigo, asunto, cuerpo_html) VALUES (o.codigo, o.asunto, o.cuerpo_html);
 GO
 
+/* ---------------- Analistas: reasignar los tickets que tienen a su cargo ----------------
+   Se otorga una sola vez: si luego se quita el permiso en Roles, una nueva instalación no lo vuelve a poner. */
+IF NOT EXISTS (SELECT 1 FROM dbo.configuracion WHERE clave = 'permisos.analista_reasigna')
+BEGIN
+    INSERT INTO dbo.rol_permisos (rol_id, permiso_id)
+    SELECT r.id, p.id
+    FROM dbo.roles r JOIN dbo.permisos p ON p.codigo = 'ticket.asignar'
+    WHERE r.codigo = 'ANALISTA'
+      AND NOT EXISTS (SELECT 1 FROM dbo.rol_permisos rp WHERE rp.rol_id = r.id AND rp.permiso_id = p.id);
+    INSERT INTO dbo.configuracion (clave, valor, descripcion)
+    VALUES ('permisos.analista_reasigna', CONVERT(NVARCHAR(30), SYSUTCDATETIME(), 126), N'Uso interno: permiso de reasignar otorgado a analistas');
+END
+GO
+
 PRINT N'11_segunda_ronda aplicado';
 GO
