@@ -102,7 +102,7 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                       for i, f in ((time(8, 30), time(13, 0)), (time(14, 0), time(17, 30)))]
     session.add(horario)
     session.add(m.CalendarioExcepcion(fecha=date(2026, 11, 2), tipo="FERIADO", descripcion="Día de los Difuntos"))
-    for codigo, asunto in (("TICKET_CREADO", "[{numero}] Ticket creado"), ("TICKET_ASIGNADO", "[{numero}] Ticket asignado"),
+    for codigo, asunto in (("TICKET_CREADO", "[{numero}] Recibimos su solicitud: {asunto}"), ("TICKET_ASIGNADO", "[{numero}] Ticket asignado"),
                            ("TICKET_ESCALADO", "[{numero}] Ticket escalado"), ("SLA_75", "[{numero}] Próximo a vencer"),
                            ("SLA_90", "[{numero}] SLA 90 %"), ("SLA_VENCIDO", "[{numero}] SLA incumplido"), ("TICKET_CERRADO", "[{numero}] Ticket cerrado"),
                            ("ACUSE_CORREO", "[{numero}] Recibimos su solicitud: {asunto}"),

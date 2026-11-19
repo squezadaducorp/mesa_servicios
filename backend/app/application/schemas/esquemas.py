@@ -595,7 +595,7 @@ class TicketDetalle(Modelo):
     vinculos: list[dict] = Field(default_factory=list, description="Tickets relacionados, duplicados o que lo bloquean")
     duplicado_de: dict | None = Field(default=None, description="Ticket principal si este se unió como duplicado")
     avisos: list[dict] = Field(default_factory=list, description="Avisos generales a los que pertenece")
-    seguimiento_url: str | None = Field(default=None, description="Enlace de seguimiento sin cuenta (solo tickets de externos)")
+    seguimiento_url: str | None = Field(default=None, description="Enlace de seguimiento sin cuenta que recibe el solicitante")
 
 
 class FiltroTickets(BaseModel):

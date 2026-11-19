@@ -15,7 +15,7 @@ from app.infrastructure.db import models as m
 from app.infrastructure.db.session import SessionLocal
 from tests.conftest import API
 from tests.test_api import crear_ticket, ids
-from tests.test_segunda_ronda import correos, usuario_id
+from tests.test_segunda_ronda import area_id, correos, usuario_id
 
 
 @pytest.fixture(autouse=True)
@@ -285,13 +285,35 @@ def detalle_url(client, h, tid) -> str:
     return client.get(f"{API}/tickets/{tid}", headers=h).json()["seguimiento_url"]
 
 
-def test_seguimiento_no_aplica_a_usuarios_con_cuenta(client, como):
+def test_seguimiento_tambien_para_usuarios_con_cuenta(client, como):
+    """El acuse «Recibimos su solicitud» lleva el enlace de seguimiento a todo solicitante, también al personal con cuenta."""
     hm = como("maria.andrade")
     t = crear_ticket(client, hm)
-    assert t["seguimiento_url"] is None
     with SessionLocal() as s:
         tk = s.get(m.Ticket, t["id"])
-        assert client.get(f"{API}/publico/seguimiento/{tk.id}", params={"t": token(tk)}).status_code == 404
+        enlace = f"/seguimiento/{tk.id}/{token(tk)}"
+        acuse = [c for c in s.scalars(select(m.ColaCorreo).where(m.ColaCorreo.ticket_id == tk.id, m.ColaCorreo.plantilla == "TICKET_CREADO"))]
+        assert len(acuse) == 1 and acuse[0].para == "maria.andrade@aducorp.com.ec"
+        assert enlace in acuse[0].cuerpo_html
+        r = client.get(f"{API}/publico/seguimiento/{tk.id}", params={"t": token(tk)})
+        assert r.status_code == 200 and r.json()["numero"] == tk.numero
+        # El aviso al responsable no lleva el botón: es personal del solicitante
+        otros = s.scalars(select(m.ColaCorreo).where(m.ColaCorreo.ticket_id == tk.id, m.ColaCorreo.plantilla != "TICKET_CREADO")).all()
+        assert all(enlace not in c.cuerpo_html for c in otros)
+
+
+def test_seguimiento_en_correo_del_beneficiario_en_nombre_de(client, como):
+    ha = como("admin")
+    cid, sid = ids(client, ha, "CLASIF_ARANCEL", "Presentación DAI")
+    maria = usuario_id("maria.andrade")
+    r = client.post(f"{API}/tickets", json={"asunto": "Registro telefónico", "descripcion": "Llamó para pedir apoyo con la DAI.",
+                                            "categoria_id": cid, "subcategoria_id": sid, "solicitante_id": maria,
+                                            "en_nombre_motivo": "Llamada telefónica"}, headers=ha)
+    assert r.status_code == 201, r.text
+    with SessionLocal() as s:
+        tk = s.get(m.Ticket, r.json()["id"])
+        aviso = s.scalars(select(m.ColaCorreo).where(m.ColaCorreo.ticket_id == tk.id, m.ColaCorreo.para == "maria.andrade@aducorp.com.ec")).all()
+        assert aviso and any(f"/seguimiento/{tk.id}/{token(tk)}" in c.cuerpo_html for c in aviso)
 
 
 def test_seguimiento_se_puede_apagar(client, como):
@@ -325,3 +347,36 @@ def test_cliente_por_dominio_de_correo(client, como):
     fs.reiniciar_limites()
     ext2 = solicitud_publica(client)
     assert ext2.cliente_id == r.json()["id"]
+
+
+# ============================================================ inventario: cada uno ve solo lo suyo
+def test_inventario_cada_usuario_ve_solo_sus_equipos(client, como):
+    ha, hd, hg = como("admin"), como("david.medina"), como("gerencia")
+    propio = client.post(f"{API}/inventario", json={"codigo": "ADU-PC-201", "tipo": "PORTATIL", "marca_modelo": "HP ProBook",
+                                                    "usuario_id": usuario_id("david.medina")}, headers=ha).json()
+    ajeno = client.post(f"{API}/inventario", json={"codigo": "ADU-PC-202", "tipo": "ESCRITORIO", "marca_modelo": "Dell Optiplex",
+                                                   "usuario_id": usuario_id("maria.andrade")}, headers=ha).json()
+    comun = client.post(f"{API}/inventario", json={"codigo": "ADU-IMP-01", "tipo": "IMPRESORA", "marca_modelo": "Epson",
+                                                   "compartido": True}, headers=ha).json()
+    # El analista solo ve el equipo asignado a él, en la lista y en la ficha
+    assert [e["codigo"] for e in client.get(f"{API}/inventario", headers=hd).json()] == ["ADU-PC-201"]
+    assert [e["codigo"] for e in client.get(f"{API}/inventario", params={"texto": "Dell"}, headers=hd).json()] == []
+    assert client.get(f"{API}/inventario/{propio['id']}", headers=hd).status_code == 200
+    assert client.get(f"{API}/inventario/{ajeno['id']}", headers=hd).status_code == 404
+    assert client.get(f"{API}/inventario/{comun['id']}", headers=hd).status_code == 404
+    # Gerencia tampoco ve el inventario completo; el administrador sí
+    assert client.get(f"{API}/inventario", headers=hg).json() == []
+    assert {"ADU-PC-201", "ADU-PC-202", "ADU-IMP-01"} <= {e["codigo"] for e in client.get(f"{API}/inventario", headers=ha).json()}
+    # Al crear un ticket, el analista elige entre su equipo y los compartidos, no los de otras personas
+    opciones = [o["codigo"] for o in client.get(f"{API}/inventario/opciones", headers=hd).json()]
+    assert opciones == ["ADU-PC-201", "ADU-IMP-01"]
+    assert [o["codigo"] for o in client.get(f"{API}/inventario/opciones", params={"solicitante_id": usuario_id("maria.andrade")},
+                                            headers=hd).json()] == ["ADU-PC-201", "ADU-IMP-01"]
+    cid, sid = ids(client, hd, "CLASIF_ARANCEL", "Presentación DAI")
+    body = {"asunto": "Equipo lento", "descripcion": "El equipo está muy lento desde ayer.", "categoria_id": cid, "subcategoria_id": sid}
+    assert client.post(f"{API}/tickets", json={**body, "equipo_id": ajeno["id"]}, headers=hd).status_code in (403, 422)
+    assert client.post(f"{API}/tickets", json={**body, "equipo_id": propio["id"]}, headers=hd).status_code == 201
+    # El administrador sigue eligiendo cualquier equipo al registrar en nombre de otra persona
+    assert "ADU-PC-202" in [o["codigo"] for o in client.get(f"{API}/inventario/opciones", params={"solicitante_id": usuario_id("maria.andrade")},
+                                                            headers=ha).json()]
+    assert area_id

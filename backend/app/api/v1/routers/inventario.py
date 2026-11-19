@@ -13,6 +13,7 @@ from app.application.services.inventario_service import InventarioService
 from app.domain.enums import Permiso
 
 router = APIRouter(prefix="/inventario", tags=["Inventario de equipos"])
+# Quien no administra el inventario solo ve los equipos asignados a él (el filtro está en InventarioService)
 VER = requiere(Permiso.INVENTARIO_VER, Permiso.INVENTARIO_GESTIONAR)
 GESTIONAR = requiere(Permiso.INVENTARIO_GESTIONAR)
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -21,7 +22,7 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 @router.get("", response_model=list[s.EquipoSalida], summary="Equipos con sus fallas de los últimos 12 meses")
 def listar(texto: str | None = None, tipo: str | None = None, estado: Literal["EN_USO", "BODEGA", "REPARACION", "BAJA"] | None = None,
            ctx: Contexto = Depends(VER), session: Session = DbSession):
-    return InventarioService(session).listar(texto, tipo, estado)
+    return InventarioService(session).listar(texto, tipo, estado, ctx.usuario)
 
 
 @router.get("/opciones", response_model=list[s.EquipoOpcion], summary="Equipos que se pueden elegir al crear un ticket")
@@ -45,7 +46,7 @@ async def importar(archivo: UploadFile = File(...), ctx: Contexto = Depends(GEST
 
 @router.get("/{equipo_id}", response_model=s.EquipoDetalle, summary="Ficha del equipo con su historial de tickets")
 def detalle(equipo_id: int, ctx: Contexto = Depends(VER), session: Session = DbSession):
-    return InventarioService(session).detalle(equipo_id)
+    return InventarioService(session).detalle(equipo_id, ctx.usuario)
 
 
 @router.post("", response_model=s.EquipoSalida, status_code=201, summary="Registrar equipo")

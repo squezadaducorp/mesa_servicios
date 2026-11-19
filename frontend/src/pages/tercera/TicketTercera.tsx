@@ -283,10 +283,10 @@ export function PanelTercera({ t, onCambio }: { t: Ticket; onCambio: () => void 
         <Paper sx={{ p: 2.5 }}>
           <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
             <ShareIcon sx={{ color: marca.azul }} />
-            <Typography variant="h6">Seguimiento del cliente</Typography>
+            <Typography variant="h6">Seguimiento del solicitante</Typography>
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            El solicitante no tiene cuenta: cada correo le lleva este enlace para ver el estado y responder. No muestra notas internas.
+            El acuse y cada correo del ticket le llevan este enlace para ver el estado y responder sin iniciar sesión. No muestra notas internas.
           </Typography>
           <Button size="small" variant="outlined" startIcon={<ContentCopyIcon />}
             onClick={() => navigator.clipboard?.writeText(t.seguimiento_url!).then(() => avisar("Enlace copiado"), () => avisar("No se pudo copiar", "error"))}>

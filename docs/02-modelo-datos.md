@@ -19,6 +19,7 @@ Todas las fechas se guardan en **UTC** (`DATETIME2`); la aplicación las present
 | 10 | `database/10_mejoras_post_piloto.sql` | Mejoras post-piloto: `tickets.sla_aviso_respuesta`, tablas `ticket_encuestas`, `usuario_ausencias` y `ausencia_tickets`, plantillas de avisos antes de vencer, encuesta y ausencias, y parámetros `sla.*` / `encuesta.*` |
 | 11 | `database/11_segunda_ronda.sql` | Segunda ronda: base de conocimiento (`kb_articulos`, `kb_ticket_vistos`), `respuestas_rapidas` (copia una vez las plantillas de subcategoría), `tickets_recurrentes`, `reportes_programados` y `reporte_envios`, inventario `equipos`, `usuario_delegaciones` (crear en nombre de otra persona); columnas `tickets.equipo_id/recurrente_id/creado_por_id/en_nombre_motivo`, `cola_correos.adjunto*`, `categorias.pide_equipo/restringida_en_nombre`; 6 permisos nuevos y plantilla `TICKET_EN_NOMBRE` |
 | 12 | `database/12_tercera_ronda.sql` | Tercera ronda: estado `POR_APROBAR`; tablas `aprobacion_reglas`, `ticket_aprobaciones`, `ticket_vinculos`, `avisos_generales`, `aviso_actualizaciones`, `aviso_afectados`; columna `clientes.dominios` (crea «Aducorp CIA LTDA» con `aducorp.com.ec` y completa el cliente de los tickets que no tenían); permisos `aprobaciones.gestionar` y `avisos.gestionar`; plantillas de aprobación, unión de duplicados, cambio de responsable y enlace de seguimiento; parámetros `seguimiento.*` |
+| 13 | `database/13_acuse_seguimiento.sql` | Plantilla `TICKET_CREADO` pasa a «Recibimos su solicitud» (solo si no fue editada); la aplicación agrega el enlace de seguimiento sin cuenta al acuse de todo solicitante |
 | 6 | `database/06_datos_demo.sql` | 650 tickets demo (abril–octubre 2026), 15 clientes, 10 clientes internos, historial, escalamientos, auditoría |
 
 Todos los scripts son **idempotentes** (se pueden ejecutar varias veces). Se probaron sobre SQL Server 2022 (imagen oficial `mcr.microsoft.com/mssql/server:2022-latest`).
@@ -26,7 +27,7 @@ Todos los scripts son **idempotentes** (se pueden ejecutar varias veces). Se pro
 ```bash
 # Ejecución manual (sqlcmd 18). -I activa QUOTED_IDENTIFIER, necesario para los índices filtrados.
 sqlcmd -S servidor -U sa -C -I -v DB_NAME=AducorpMesaServicios APP_LOGIN=aducorp_app APP_PASSWORD="..." -i 00_crear_base.sql
-for f in 01_tablas 02_vistas 03_procedimientos 04_triggers 05_datos_iniciales 07_microsoft365 08_formulario_web 09_copias_correo 10_mejoras_post_piloto 11_segunda_ronda 12_tercera_ronda; do
+for f in 01_tablas 02_vistas 03_procedimientos 04_triggers 05_datos_iniciales 07_microsoft365 08_formulario_web 09_copias_correo 10_mejoras_post_piloto 11_segunda_ronda 12_tercera_ronda 13_acuse_seguimiento; do
   sqlcmd -S servidor -U sa -C -I -b -d AducorpMesaServicios -i $f.sql
 done
 # Solo en ambientes de demostración:

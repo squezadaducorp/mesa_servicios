@@ -179,7 +179,9 @@ export default function Inventario() {
 
   return (
     <>
-      <Encabezado titulo="Inventario de equipos" subtitulo="Cada ticket queda en el historial del equipo, y el inventario cuenta sus fallas."
+      <Encabezado titulo={gestiona ? "Inventario de equipos" : "Mis equipos"}
+        subtitulo={gestiona ? "Cada ticket queda en el historial del equipo, y el inventario cuenta sus fallas."
+          : "Equipos asignados a usted y su historial de tickets."}
         acciones={gestiona && (
           <>
             <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => setImportando(true)}>Importar desde Excel</Button>
@@ -226,7 +228,7 @@ export default function Inventario() {
                   ))}
                 </TableBody>
               </Table>
-              {lista.data?.length === 0 && <Vacio texto={gestiona ? "No hay equipos. Regístrelos uno a uno o impórtelos desde Excel." : "No hay equipos"} />}
+              {lista.data?.length === 0 && <Vacio texto={gestiona ? "No hay equipos. Regístrelos uno a uno o impórtelos desde Excel." : "No tiene equipos asignados. Si usa uno, pida a la Mesa que se lo asigne."} />}
             </Box>
           )}
         </Paper>
