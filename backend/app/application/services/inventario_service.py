@@ -4,7 +4,7 @@ from __future__ import annotations
 import io
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.application.errores import Conflicto, Contexto, NoEncontrado, Prohibido
@@ -72,8 +72,15 @@ class InventarioService:
             "fallas_12m": fallas if fallas is not None else self.fallas([e.id]).get(e.id, 0),
         }
 
-    def detalle(self, equipo_id: int) -> dict:
+    @staticmethod
+    def ve_todo(u: m.Usuario) -> bool:
+        """Solo quien administra el inventario lo ve completo; los demás ven únicamente los equipos asignados a ellos."""
+        return u.tiene(Permiso.INVENTARIO_GESTIONAR)
+
+    def detalle(self, equipo_id: int, u: m.Usuario | None = None) -> dict:
         e = self.obtener(equipo_id)
+        if u is not None and not self.ve_todo(u) and e.usuario_id != u.id:
+            raise NoEncontrado("Equipo no encontrado")
         hist = self.historial(e.id)
         return {**self.salida(e), "aviso": self.aviso(e, hist), "historial": [
             {"ticket_id": t.id, "numero": t.numero, "asunto": t.asunto, "estado": t.estado, "fecha_creacion": t.fecha_creacion,
@@ -93,9 +100,11 @@ class InventarioService:
             raise NoEncontrado("Equipo no encontrado")
         return e
 
-    def listar(self, texto: str | None, tipo: str | None, estado: str | None) -> list[dict]:
+    def listar(self, texto: str | None, tipo: str | None, estado: str | None, u: m.Usuario | None = None) -> list[dict]:
         E = m.Equipo
         stmt = select(E).outerjoin(m.Usuario, m.Usuario.id == E.usuario_id).where(E.eliminado == False)
+        if u is not None and not self.ve_todo(u):
+            stmt = stmt.where(E.usuario_id == u.id)
         if tipo:
             stmt = stmt.where(E.tipo == tipo)
         if estado:
@@ -107,16 +116,41 @@ class InventarioService:
         conteo = self.fallas([e.id for e in equipos])
         return [self.salida(e, conteo.get(e.id, 0)) for e in equipos]
 
+    @staticmethod
+    def ve_todo_al_registrar(u: m.Usuario | None) -> bool:
+        """Al crear un ticket, el administrador del inventario y la mesa que registra para cualquiera eligen entre todos los equipos."""
+        return u is None or u.tiene(Permiso.INVENTARIO_GESTIONAR) or (u.tiene(Permiso.TICKET_VER_TODOS) and u.tiene(Permiso.TICKET_ASIGNAR))
+
+    @staticmethod
+    def disponible_para(e: m.Equipo, persona: m.Usuario) -> bool:
+        """Equipo propio, compartido o de uso común del área (sin persona asignada)."""
+        return e.usuario_id == persona.id or e.compartido or (e.usuario_id is None and e.area_id is not None and e.area_id == persona.area_id)
+
+    def _persona(self, u: m.Usuario, solicitante_id: int | None) -> m.Usuario:
+        """La persona cuyos equipos se ofrecen: uno mismo, o el beneficiario si se puede registrar en su nombre."""
+        if not solicitante_id or solicitante_id == u.id:
+            return u
+        otro = self.session.get(m.Usuario, solicitante_id)
+        if otro is None:
+            return u
+        if self.ve_todo_al_registrar(u):
+            return otro
+        from app.application.services.ticket_service import TicketService
+
+        d = TicketService(self.session).delegacion_vigente(u)
+        if d is not None and (not d.area_ids or otro.area_id in d.area_ids):
+            return otro
+        return u
+
     def opciones(self, u: m.Usuario, solicitante_id: int | None = None) -> list[dict]:
-        """Equipos que se pueden elegir al crear un ticket: primero los de la persona, luego los compartidos y de su área."""
-        persona = self.session.get(m.Usuario, solicitante_id) if solicitante_id else u
-        persona = persona or u
+        """Equipos que se pueden elegir al crear un ticket: los de la persona y los compartidos o comunes de su área."""
+        persona = self._persona(u, solicitante_id)
         E = m.Equipo
         stmt = select(E).where(E.eliminado == False, E.estado != "BAJA")
-        if not (u.tiene(Permiso.TICKET_VER_TODOS) or u.tiene(Permiso.INVENTARIO_VER)):
+        if not self.ve_todo_al_registrar(u):
             condiciones = [E.usuario_id == persona.id, E.compartido == True]
             if persona.area_id:
-                condiciones.append(E.area_id == persona.area_id)
+                condiciones.append(and_(E.usuario_id.is_(None), E.area_id == persona.area_id))
             stmt = stmt.where(or_(*condiciones))
         equipos = list(self.session.scalars(stmt).unique())
         conteo = self.fallas([e.id for e in equipos])

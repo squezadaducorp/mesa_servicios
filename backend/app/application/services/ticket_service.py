@@ -294,8 +294,9 @@ class TicketService:
         e = self.session.get(m.Equipo, equipo_id)
         if e is None or e.eliminado or e.estado == "BAJA":
             raise ReglaNegocio("Equipo no válido")
-        mesa = u is None or u.tiene(Permiso.TICKET_VER_TODOS) or u.tiene(Permiso.INVENTARIO_VER)
-        if not mesa and not (e.compartido or e.usuario_id == solicitante.id or (e.area_id and e.area_id == solicitante.area_id)):
+        from app.application.services.inventario_service import InventarioService
+
+        if not InventarioService.ve_todo_al_registrar(u) and not InventarioService.disponible_para(e, solicitante):
             raise Prohibido("Ese equipo no está asignado a usted ni es compartido")
         return e
 

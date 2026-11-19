@@ -63,7 +63,8 @@ class SeguimientoService:
         return cuenta in (settings.FORMULARIO_WEB_CORREO.lower(), settings.BUZON_CORREO.lower())
 
     def url(self, t: m.Ticket) -> str | None:
-        if not self.activo or not self.es_externo(t):
+        """Enlace sin cuenta para cualquier solicitante (externo o del personal); llega en el acuse y en cada correo de su ticket."""
+        if not self.activo:
             return None
         return f"{settings.APP_URL.rstrip('/')}/seguimiento/{t.id}/{token(t)}"
 
@@ -73,7 +74,7 @@ class SeguimientoService:
 
     def verificar(self, ticket_id: int, llave: str) -> m.Ticket:
         t = self.session.get(m.Ticket, ticket_id)
-        if not self.activo or t is None or t.eliminado or not self.es_externo(t) or not hmac.compare_digest(token(t), llave or ""):
+        if not self.activo or t is None or t.eliminado or not hmac.compare_digest(token(t), llave or ""):
             raise NoEncontrado("Enlace no válido. Pida un enlace nuevo con el número de ticket y su correo.")
         if self._vencido(t):
             raise ReglaNegocio(f"Este enlace venció ({self.dias} días después del cierre). Si necesita más ayuda, registre una nueva solicitud.")
@@ -151,6 +152,6 @@ class SeguimientoService:
         from app.infrastructure.repositories.repositorios import TicketRepository
 
         t = TicketRepository(self.session).por_numero(numero.strip().upper())
-        if t is None or not self.activo or not self.es_externo(t) or (t.correo or "").strip().lower() != correo.strip().lower() or self._vencido(t):
+        if t is None or not self.activo or (t.correo or "").strip().lower() != correo.strip().lower() or self._vencido(t):
             return
         NotificacionService(self.session).correo_directo("SEGUIMIENTO_ENLACE", t.correo, t.solicitante_nombre, t, url_seguimiento=self.url(t))

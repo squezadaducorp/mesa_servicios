@@ -194,7 +194,8 @@ export default function Layout() {
       { a: "/aprobaciones", texto: "Por aprobar", icono: <HowToRegIcon />, insignia: aprobaciones.data.pendientes });
   }
   const admin = visibles(ADMIN);
-  const mesa = visibles(EQUIPO_MESA);
+  // Quien no administra el inventario solo ve los equipos asignados a él
+  const mesa = visibles(EQUIPO_MESA).map((i) => (i.a === "/inventario" && !puede(P.INVENTARIO) ? { ...i, texto: "Mis equipos" } : i));
 
   const enlace = (i: ItemNav) => {
     const activo = i.a === "/tickets" ? location.pathname === "/tickets" || /^\/tickets\/\d+/.test(location.pathname) : location.pathname === i.a || location.pathname.startsWith(`${i.a}/`);

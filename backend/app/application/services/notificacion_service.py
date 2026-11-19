@@ -87,11 +87,20 @@ class NotificacionService:
         enviados: set[str] = cuentas_sistema()   # nunca se escribe al buzón de soporte ni a la cuenta del formulario
         copia = list(cc or [])
         alguno = False
+        enlace = None
+        if "url_seguimiento" not in extra and codigo not in SIN_SEGUIMIENTO:
+            from app.application.services.seguimiento_service import SeguimientoService
+
+            enlace = SeguimientoService(self.session).url(ticket)
         for u in destinatarios:
             if u is None or not u.activo or u.correo.lower() in enviados:
                 continue
             enviados.add(u.correo.lower())
-            self._encolar(plantilla, codigo, u.correo, u.nombre, ticket, extra, [c for c in copia if c != u.correo.lower()])
+            cc_u = [c for c in copia if c != u.correo.lower()]
+            datos = extra
+            if enlace and u.id == ticket.solicitante_id and not cc_u:   # el botón es personal: no va en correos con personas en copia
+                datos = {**extra, "url_seguimiento": enlace}
+            self._encolar(plantilla, codigo, u.correo, u.nombre, ticket, datos, cc_u)
             copia, alguno = [], True
         return alguno
 

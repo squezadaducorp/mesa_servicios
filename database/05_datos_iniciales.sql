@@ -289,8 +289,8 @@ WHERE NOT EXISTS (SELECT 1 FROM dbo.categoria_responsables x WHERE x.categoria_i
 /* ---------------- Plantillas de correo ---------------- */
 MERGE dbo.plantillas_correo AS d
 USING (VALUES
-    ('TICKET_CREADO',   N'[{numero}] Ticket creado: {asunto}',
-        N'<p>Hola {destinatario},</p><p>Se registró el ticket <b>{numero}</b> «{asunto}» en la categoría <b>{categoria}</b> con prioridad <b>{prioridad}</b>.</p><p>Primera respuesta comprometida: {sla_respuesta_vence}<br>Resolución comprometida: {sla_resolucion_vence}</p><p><a href="{url}">Ver ticket</a></p>'),
+    ('TICKET_CREADO',   N'[{numero}] Recibimos su solicitud: {asunto}',
+        N'<p>Hola {destinatario},</p><p>Recibimos su solicitud y la registramos con el número <b>{numero}</b> «{asunto}» en la categoría <b>{categoria}</b>, prioridad <b>{prioridad}</b>.</p><p>Primera respuesta comprometida: {sla_respuesta_vence}<br>Resolución comprometida: {sla_resolucion_vence}</p><p>Con el botón de abajo puede ver en qué va su solicitud, quién la atiende, responder y adjuntar documentos sin usuario ni contraseña. También puede <a href="{url}">abrirla en la Mesa de Servicios</a>.</p>'),
     ('TICKET_ASIGNADO', N'[{numero}] Ticket asignado a usted',
         N'<p>Hola {destinatario},</p><p>Se le asignó el ticket <b>{numero}</b> «{asunto}» ({categoria} / {subcategoria}), prioridad <b>{prioridad}</b>.</p><p>Vence: {sla_resolucion_vence}</p><p><a href="{url}">Atender ticket</a></p>'),
     ('TICKET_ESCALADO', N'[{numero}] Ticket escalado',
