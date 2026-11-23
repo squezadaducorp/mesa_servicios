@@ -6,7 +6,7 @@ CATEGORIA = {"codigo": "SERVICIOS_TI", "nombre": "Servicios de TI",
              "subcategorias": ["Accesos", "Equipos", "Personal", "Aduanas"],
              "palabras": "acceso,usuario nuevo,alta,baja,equipo,portátil,laptop,impresora,vpn,carpeta,buzón,token,firma electrónica"}
 
-SUCURSALES = ["Guayaquil · Matriz", "Guayaquil · Puerto Marítimo", "Quito · Aeropuerto", "Manta"]
+SUCURSALES = ["Guayaquil", "Quito", "Tababela"]
 
 SERVICIOS = [
     {
