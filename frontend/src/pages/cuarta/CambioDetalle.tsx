@@ -13,6 +13,7 @@ import AttachFileIcon from "@mui/icons-material/AttachFile";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFileOutlined";
 import EditIcon from "@mui/icons-material/Edit";
 import { Stack } from "../../components/Pila";
+import TiempoTrabajado from "../ronda4c/TiempoTrabajado";
 import { api, descargar, get, post } from "../../api/client";
 import type { Cambio, OpcionesCambio, Persona } from "../../api/cuarta";
 import { mensajeError, useAviso } from "../../components/Aviso";
@@ -475,6 +476,7 @@ export default function CambioDetalle() {
         <Stack sx={{ gap: 2.5 }}>
           <Aprobaciones c={c} onListo={refrescar} />
           <Ventana c={c} onListo={refrescar} />
+          {(c.acciones.includes("reprogramar") || c.acciones.includes("implementar") || c.acciones.includes("revisar")) && <TiempoTrabajado tipo="cambio" id={c.id} />}
         </Stack>
       </Box>
     </Box>

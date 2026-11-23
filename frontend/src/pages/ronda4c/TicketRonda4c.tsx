@@ -22,7 +22,6 @@ import { fecha, fechaHora } from "../../utils/formato";
 export const NOMBRE_AVISOS: Record<AvisosCorreo, string> = { TODO: "Todo", ESTADO: "Estado y cierre", NINGUNO: "Solo campana" };
 const ORIGEN: Record<Visualizador["origen"], string> = { MANUAL: "agregado por", SEGUIR: "se unió con «Seguir»", CATEGORIA: "automático por categoría" };
 const iniciales = (n: string) => n.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
-const hora = (iso: string) => new Date(iso).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
 
 /** Chip de la cabecera: «3 visualizadores». */
 export function ChipVisualizadores({ t }: { t: Ticket }) {
@@ -125,22 +124,23 @@ export function PanelVisualizadores({ t, onCambio }: { t: Ticket; onCambio: (n: 
       {t.visualizadores.length === 0 && <Typography variant="body2" color="text.secondary">Nadie sigue este ticket todavía.</Typography>}
       <Stack spacing={1.2}>
         {t.visualizadores.map((v) => (
-          <Stack key={v.usuario_id} direction="row" spacing={1.2} alignItems="center">
-            <Avatar sx={{ width: 34, height: 34, fontSize: 13, bgcolor: v.origen === "CATEGORIA" ? "#5E35B1" : "primary.main" }}>{iniciales(v.nombre)}</Avatar>
+          <Stack key={v.usuario_id} direction="row" spacing={1.2} alignItems="flex-start">
+            <Avatar sx={{ width: 34, height: 34, fontSize: 13, mt: 0.25, bgcolor: v.origen === "CATEGORIA" ? "#5E35B1" : "primary.main" }}>{iniciales(v.nombre)}</Avatar>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>{v.nombre}</Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                 {[v.cargo ?? v.area, v.origen === "MANUAL" ? `agregado por ${v.agregado_por ?? "—"}` : ORIGEN[v.origen]].filter(Boolean).join(" · ")}
               </Typography>
+              {v.editable ? (
+                <TextField select size="small" value={v.avisos_correo} sx={{ mt: 0.5, minWidth: 150, "& .MuiSelect-select": { py: 0.4, fontSize: 13 } }}
+                  onChange={(e) => avisos.mutate({ id: v.usuario_id, v: e.target.value as AvisosCorreo })}
+                  slotProps={{ htmlInput: { "aria-label": `Avisos por correo de ${v.nombre}` } }}>
+                  {(Object.keys(NOMBRE_AVISOS) as AvisosCorreo[]).map((k) => <MenuItem key={k} value={k}>{NOMBRE_AVISOS[k]}</MenuItem>)}
+                </TextField>
+              ) : (
+                <Chip size="small" variant="outlined" sx={{ mt: 0.5 }} icon={v.avisos_correo === "NINGUNO" ? <BellIcon /> : <MailIcon />} label={NOMBRE_AVISOS[v.avisos_correo]} />
+              )}
             </Box>
-            {v.editable ? (
-              <TextField select size="small" value={v.avisos_correo} sx={{ minWidth: 130, "& .MuiSelect-select": { py: 0.5, fontSize: 13 } }}
-                onChange={(e) => avisos.mutate({ id: v.usuario_id, v: e.target.value as AvisosCorreo })} aria-label={`Avisos de ${v.nombre}`}>
-                {(Object.keys(NOMBRE_AVISOS) as AvisosCorreo[]).map((k) => <MenuItem key={k} value={k}>{NOMBRE_AVISOS[k]}</MenuItem>)}
-              </TextField>
-            ) : (
-              <Chip size="small" variant="outlined" icon={v.avisos_correo === "NINGUNO" ? <BellIcon /> : <MailIcon />} label={NOMBRE_AVISOS[v.avisos_correo]} />
-            )}
             {v.editable && (
               <IconButton size="small" aria-label={`Quitar a ${v.nombre}`} onClick={() => quitar.mutate(v.usuario_id)}>
                 <CloseIcon fontSize="small" />
@@ -201,10 +201,10 @@ export function BannerProveedor({ t, onCambio }: { t: Ticket; onCambio: () => vo
   return (
     <>
       <Alert severity={c.vencido ? "error" : "warning"} icon={<HandshakeIcon />} sx={{ mb: 2, alignItems: "center" }}
-        action={gestiona ? <Button color="inherit" size="small" variant="outlined" onClick={() => setAbierto(true)}>Proveedor dio solución</Button> : undefined}>
+        action={gestiona ? <Button color="inherit" size="small" variant="outlined" sx={{ whiteSpace: "nowrap" }} onClick={() => setAbierto(true)}>Proveedor dio solución</Button> : undefined}>
         <b>En manos de {c.proveedor}{c.numero_caso ? `, caso ${c.numero_caso}` : ""}.</b>{" "}
         {gestiona
-          ? <>Reportado {fechaHora(c.fecha_reporte)} · plazo {c.plazo} · {c.vencido ? "el plazo del contrato ya venció" : `debe resolver antes de ${fechaHora(c.vence)}`}. Nuestro SLA está en pausa.</>
+          ? <>Reportado {fechaHora(c.fecha_reporte)} · plazo {c.plazo} · {c.vencido ? "el plazo del contrato ya venció" : `debe resolver antes de ${fechaHora(c.vence)}`}; nuestro SLA está en pausa.</>
           : <>El proveedor está trabajando en la solución; le avisaremos cuando avance.</>}
       </Alert>
       <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="sm">
@@ -304,7 +304,7 @@ export function DialogoEscalarProveedor({ t, abierto, onCerrar, onListo }: { t: 
                   </Box>
                 </Paper>
                 <Alert severity="info">
-                  Debe resolver <b>antes de {fechaHora(elegido.vence_caso)}</b> ({hora(elegido.vence_caso)}). Le avisaremos 30 min antes si sigue abierto.
+                  Debe resolver <b>antes de {fechaHora(elegido.vence_caso)}</b>. Le avisaremos 30 min antes si sigue abierto.
                 </Alert>
                 {elegido.caida_mes > 1 && (
                   <Alert severity="warning" icon={<WarningIcon />}>

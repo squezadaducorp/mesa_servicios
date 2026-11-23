@@ -297,7 +297,8 @@ export default function TicketDetalle() {
     setMenu(null);
   };
   const destinos = estadosDestino(t.estado).filter((e) => e !== "CANCELADO");
-  const siguiente = destinos.includes("EN_PROCESO") && t.estado !== "PENDIENTE_CLIENTE" ? "EN_PROCESO" : destinos.includes("RESUELTO") ? "RESUELTO" : undefined;
+  // Con un caso abierto en el proveedor, la salida es «Proveedor dio solución» (no «Iniciar atención»)
+  const siguiente = t.proveedor_caso ? undefined : destinos.includes("EN_PROCESO") && t.estado !== "PENDIENTE_CLIENTE" ? "EN_PROCESO" : destinos.includes("RESUELTO") ? "RESUELTO" : undefined;
   const pct = t.sla_consumido_pct;
 
   return (

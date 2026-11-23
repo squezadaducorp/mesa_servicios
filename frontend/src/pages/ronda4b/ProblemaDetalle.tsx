@@ -19,6 +19,7 @@ import { mensajeError, useAviso } from "../../components/Aviso";
 import { Cargando, ErrorCarga } from "../../components/Comunes";
 import { fecha } from "../../utils/formato";
 import { EstadoProblemaChip } from "./comun";
+import TiempoTrabajado from "../ronda4c/TiempoTrabajado";
 
 const PASOS: { e: EstadoProblema; t: string }[] = [
   { e: "DETECTADO", t: "Detectado" }, { e: "EN_ANALISIS", t: "En análisis" }, { e: "ERROR_CONOCIDO", t: "Error conocido" },
@@ -237,6 +238,7 @@ export default function ProblemaDetalle() {
               {p.origen === "PATRON" && " · creado desde un patrón detectado"}
             </Typography>
           </Paper>
+          {p.gestor && <TiempoTrabajado tipo="problema" id={p.id} />}
         </Stack>
       </Box>
 

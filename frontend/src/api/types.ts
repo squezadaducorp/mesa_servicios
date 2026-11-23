@@ -83,6 +83,7 @@ export interface Categoria {
   responsables: { usuario_id: number; nombre: string; es_principal: boolean }[];
   subcategorias: Subcategoria[];
   correos_copia?: string[];
+  visualizadores?: number[];
   pide_equipo?: boolean;
   restringida_en_nombre?: boolean;
 }
