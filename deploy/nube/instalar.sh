@@ -41,7 +41,11 @@ cd "$DIR"
 
 echo "== 4/6 Configuración"
 # También se rehace si un intento anterior se cortó con las claves de ejemplo todavía puestas
-if [ ! -f .env ] || grep -q "^SA_PASSWORD=CAMBIAR" .env; then
+# Con las claves en AWS Secrets Manager (deploy/nube/secretos.sh) la configuración editable es .env.base
+ENVF=.env
+if [ -f .env.base ]; then
+  ENVF=.env.base
+elif [ ! -f .env ] || grep -q "^SA_PASSWORD=CAMBIAR" .env; then
   cp .env.example .env
   sed -i \
     -e "s|^SA_PASSWORD=.*|SA_PASSWORD=Sa-$(openssl rand -hex 16)-X9|" \
@@ -53,9 +57,10 @@ if [ ! -f .env ] || grep -q "^SA_PASSWORD=CAMBIAR" .env; then
 fi
 # El dominio puede cambiar entre ejecuciones (p. ej. de duckdns.org al dominio propio)
 sed -i -e '/^DOMINIO=/d' -e "s#^APP_URL=.*#APP_URL=https://$DOMINIO#" \
-  -e "s#^CORS_ORIGINS=.*#CORS_ORIGINS=[\"https://$DOMINIO\"]#" .env
-echo "DOMINIO=$DOMINIO" >> .env
-chmod 600 .env
+  -e "s#^CORS_ORIGINS=.*#CORS_ORIGINS=[\"https://$DOMINIO\"]#" "$ENVF"
+echo "DOMINIO=$DOMINIO" >> "$ENVF"
+chmod 600 "$ENVF"
+[ "$ENVF" = .env.base ] && ./deploy/nube/secretos.sh cargar
 leer() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
 SA_PASSWORD=$(leer SA_PASSWORD)
 BASE=$(leer DB_NAME); BASE=${BASE:-AducorpMesaServicios}
