@@ -8,6 +8,7 @@ import {
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import AddIcon from "@mui/icons-material/Add";
+import VisibilityIcon from "@mui/icons-material/VisibilityOutlined";
 import DownloadIcon from "@mui/icons-material/Download";
 import { descargar, get } from "../api/client";
 import { useCatalogos } from "../api/hooks";
@@ -36,6 +37,7 @@ function filtroInicial(params: URLSearchParams): FiltroTickets {
   if (params.get("sla")) desdeUrl.sla = params.get("sla") as FiltroTickets["sla"];
   if (params.get("solo_mios")) desdeUrl.solo_mios = true;
   if (params.get("participe")) desdeUrl.participe = true;
+  if (params.get("siguiendo")) desdeUrl.siguiendo = true;
   const vence = params.get("vence");
   if (vence === "HOY" || vence === "VENCIDOS") return { orden: "vence", vence, solo_mios: true };
   if (Object.keys(desdeUrl).length) return { orden: "fecha_desc", ...desdeUrl };
@@ -193,6 +195,15 @@ export default function Tickets() {
             onClick={() => set("participe", filtro.participe ? undefined : true)}
           />
         )}
+        <Chip
+          sx={{ mt: 1.5, ml: 1 }}
+          color="primary"
+          icon={<VisibilityIcon />}
+          variant={filtro.siguiendo ? "filled" : "outlined"}
+          label="Siguiendo"
+          title="Tickets que usted sigue como visualizador"
+          onClick={() => set("siguiendo", filtro.siguiendo ? undefined : true)}
+        />
         <Collapse in={verFiltros}>
           <Box sx={{ display: "grid", gap: 1.5, mt: 2, gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(4, 1fr)" } }}>
             <TextField

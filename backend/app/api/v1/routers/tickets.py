@@ -36,6 +36,7 @@ def filtro_tickets(
     hasta: date | None = None,
     solo_mios: bool = False,
     participe: bool = False,
+    siguiendo: bool = False,
     vence: Literal["HOY", "VENCIDOS"] | None = None,
     orden: Literal["fecha_desc", "fecha_asc", "sla_desc", "prioridad", "vence"] = "fecha_desc",
 ) -> s.FiltroTickets:
@@ -79,7 +80,7 @@ def exportar(
     svc = TicketService(session)
     tickets = list(session.scalars(svc.consulta(ctx.usuario, f).limit(50000)).unique())
     filas = [ex.fila_ticket(t) for t in tickets]
-    subtitulo = f"{len(filas)} tickets · filtros: " + ", ".join(f"{k}={v}" for k, v in f.model_dump(exclude_none=True, exclude={"orden", "solo_mios", "participe"}).items() if v) or "ninguno"
+    subtitulo = f"{len(filas)} tickets · filtros: " + ", ".join(f"{k}={v}" for k, v in f.model_dump(exclude_none=True, exclude={"orden", "solo_mios", "participe", "siguiendo"}).items() if v) or "ninguno"
     AuditoriaService(session).registrar(ctx, AccionAuditoria.EXPORTACION, "tickets", None, {"formato": formato, "filas": len(filas), **f.model_dump(mode="json", exclude_none=True)})
     nombre = f"tickets_aducorp_{date.today():%Y%m%d}.{formato}"
     if formato == "xlsx":

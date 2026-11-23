@@ -31,7 +31,7 @@ def usuario_sesion(u: m.Usuario) -> dict:
     return {
         "id": u.id, "nombre": u.nombre, "correo": u.correo, "cargo": u.cargo, "telefono": u.telefono,
         "rol": u.rol.codigo, "rol_nombre": u.rol.nombre, "area": u.area.nombre if u.area else None,
-        "permisos": sorted(u.permisos), "debe_cambiar_clave": u.debe_cambiar_clave,
+        "permisos": sorted(u.permisos), "debe_cambiar_clave": u.debe_cambiar_clave, "equipo_ti": bool(u.equipo_ti),
     }
 
 
@@ -183,6 +183,9 @@ class AuthService:
             registro = self.tokens.por_hash(hash_token(refresh_token))
             if registro and not registro.revocado:
                 self.tokens.revocar_familia(registro.familia, utcnow())
+                from app.application.services.tiempo_service import TiempoService
+
+                TiempoService(self.session).pausar_usuario(registro.usuario_id)   # (31) el cronómetro se pausa al salir
         self.auditoria.registrar(ctx, AccionAuditoria.LOGOUT, "sesion")
 
     # --------------------------------------------------------- cambio clave

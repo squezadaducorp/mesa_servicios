@@ -34,6 +34,11 @@ import CampaignIcon from "@mui/icons-material/Campaign";
 import StorefrontIcon from "@mui/icons-material/Storefront";
 import PublishedWithChangesIcon from "@mui/icons-material/PublishedWithChanges";
 import SecurityIcon from "@mui/icons-material/Security";
+import BugReportIcon from "@mui/icons-material/BugReport";
+import InsightsIcon from "@mui/icons-material/Insights";
+import AvTimerIcon from "@mui/icons-material/AvTimer";
+import HandshakeIcon from "@mui/icons-material/Handshake";
+import CronometroBarra from "../pages/ronda4c/CronometroBarra";
 import { BannerAvisosGenerales } from "./AvisosGenerales";
 import { AvisosSuperiores, DialogoAusencia } from "./Disponibilidad";
 import { useAuth } from "../auth/AuthContext";
@@ -61,6 +66,10 @@ const PRINCIPAL: ItemNav[] = [
   { a: "/tickets/nuevo", texto: "Nuevo ticket", icono: <AddCircleIcon />, permisos: [P.CREAR] },
   { a: "/catalogo", texto: "Catálogo de servicios", icono: <StorefrontIcon /> },
   { a: "/cambios", texto: "Cambios", icono: <PublishedWithChangesIcon /> },
+  { a: "/problemas", texto: "Problemas", icono: <BugReportIcon />, permisos: [P.PROBLEMAS, P.KB, P.PANEL] },
+  { a: "/tiempo", texto: "Control de tiempo", icono: <AvTimerIcon />, permisos: [P.TIEMPO] },
+  { a: "/proveedores", texto: "Proveedores", icono: <HandshakeIcon />, permisos: [P.PROVEEDORES] },
+  { a: "/panel", texto: "Panel gerencial", icono: <InsightsIcon />, permisos: [P.PANEL] },
   { a: "/conocimiento", texto: "Base de conocimiento", icono: <MenuBookIcon /> },
   { a: "/notificaciones", texto: "Notificaciones", icono: <NotificationsIcon /> },
 ];
@@ -285,6 +294,7 @@ export default function Layout() {
           )}
           {!escritorio && <Box component="img" src="/logo-aducorp.png" alt="ADUCORP" sx={{ height: 30 }} />}
           <Box sx={{ flex: 1 }} />
+          <CronometroBarra activo={puede(P.VER_TODOS) || puede(P.VER_AREA) || puede(P.VER_ASIGNADOS)} />
           <CampanaNotificaciones />
           <Button
             color="inherit"

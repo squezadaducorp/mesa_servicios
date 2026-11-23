@@ -14,6 +14,7 @@ from app.api.v1.routers import (admin, auditoria, ausencias, auth, catalogos, co
                                 reportes, reportes_programados, respuestas, teams, tickets)
 from app.api.v1.routers import aprobaciones, avisos, vinculos
 from app.api.v1.routers import cambios, seguridad, servicios
+from app.api.v1.routers import panel, problemas, proveedores, tiempo, visualizadores
 from app.application.errores import ErrorAplicacion
 from app.core.config import settings
 from app.infrastructure.db.session import engine
@@ -103,7 +104,8 @@ async def error_inesperado(request: Request, exc: Exception):
 
 
 for r in (auth, tickets, catalogos, reportes, notificaciones, auditoria, admin, teams, publico, ausencias, conocimiento, respuestas,
-          recurrentes, reportes_programados, inventario, aprobaciones, avisos, vinculos, servicios, cambios, seguridad):
+          recurrentes, reportes_programados, inventario, aprobaciones, avisos, vinculos, servicios, cambios, seguridad, problemas, panel,
+          tiempo, proveedores, visualizadores):
     app.include_router(r.router, prefix=settings.API_PREFIX)
 
 

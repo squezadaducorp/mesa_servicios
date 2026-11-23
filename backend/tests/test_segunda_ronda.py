@@ -70,21 +70,22 @@ def articulo(client, h, **extra) -> dict:
     cats = catalogo(client, h)["categorias"]
     body = {"titulo": "No puedo ingresar a Ecuapass con el token", "sintoma": "Ecuapass dice que el token no es válido",
             "solucion": "Desconecte el token, cierre el navegador y vuelva a conectarlo antes de abrir Ecuapass.",
-            "palabras_clave": "token, firma electrónica, ecuapass", "categoria_id": cats[0]["id"], "estado": "PUBLICADO", **extra}
+            "palabras_clave": "token, firma electrónica, ecuapass", "categoria_id": cats[0]["id"], "estado": "PUBLICADO", "visibilidad": "EXTERNO", **extra}
     r = client.post(f"{API}/conocimiento", json=body, headers=h)
     assert r.status_code == 201, r.text
     return r.json()
 
 
 def test_kb_sugerencias_y_ticket_evitado(client, como):
-    a = articulo(client, como("david.medina"))
+    a = articulo(client, como("supervisor.tecnico"))   # los externos los publica un supervisor (35)
     borrador = articulo(client, como("david.medina"), titulo="Borrador interno sobre token", estado="BORRADOR")
 
     h = como("maria.andrade")
     sug = client.post(f"{API}/conocimiento/sugerir", json={"texto": "el token de ecuapass no funciona"}, headers=h).json()
     assert [x["id"] for x in sug] == [a["id"]]
     assert client.get(f"{API}/conocimiento/{borrador['id']}", headers=h).status_code == 404   # el cliente no ve borradores
-    assert client.post(f"{API}/conocimiento", json={"titulo": "x" * 10, "solucion": "y" * 20}, headers=h).status_code == 403
+    assert client.post(f"{API}/conocimiento", json={"titulo": "x" * 10, "solucion": "y" * 20, "visibilidad": "EXTERNO"},
+                       headers=h).status_code == 403
 
     assert client.get(f"{API}/conocimiento/{a['id']}", headers=h).json()["vistas"] == 1
     assert client.post(f"{API}/conocimiento/{a['id']}/evitar-ticket", headers=h).status_code == 200

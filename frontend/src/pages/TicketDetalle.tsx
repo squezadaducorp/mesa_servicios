@@ -34,6 +34,11 @@ import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/for
 import TicketDialogos, { estadosDestino, type Dialogo } from "./TicketDialogos";
 import { AlertasTercera, PanelTercera } from "./tercera/TicketTercera";
 import PanelTareas from "./cuarta/PanelTareas";
+import TicketProblemas from "./ronda4b/TicketProblemas";
+import TiempoTrabajado from "./ronda4c/TiempoTrabajado";
+import {
+  BannerProveedor, BannerSeguir, CasosProveedorTicket, ChipComentarioVisualizador, ChipVisualizadores, DialogoEscalarProveedor, PanelVisualizadores,
+} from "./ronda4c/TicketRonda4c";
 import { AdjuntosDeComentario, ArchivosPorEnviar, imagenesDe, nombrarCaptura } from "../components/CapturasComentario";
 
 /** Encuesta de satisfacción: el solicitante califica (y así cierra) un ticket resuelto; luego se muestra la nota. */
@@ -107,6 +112,8 @@ const ACCION_HISTORIAL: Record<string, string> = {
   EXCEPCION_SLA: "Excepción de SLA",
   ENCUESTA: "Encuesta de satisfacción",
   COPIAS: "Actualizó las personas en copia",
+  VISUALIZADOR: "Visualizadores",
+  ESCALAMIENTO_PROVEEDOR: "Escaló a proveedor",
 };
 
 const ORIGEN_COPIA: Record<string, string> = {
@@ -142,6 +149,7 @@ export default function TicketDetalle() {
   const [dialogo, setDialogo] = useState<Dialogo>(null);
   const [estadoInicial, setEstadoInicial] = useState<string>();
   const [menu, setMenu] = useState<HTMLElement | null>(null);
+  const [escalarProv, setEscalarProv] = useState(false);
   const [texto, setTexto] = useState("");
   const [interno, setInterno] = useState(false);
   // Capturas de pantalla (Ctrl+V, arrastrar o elegir) y archivos que van con el comentario
@@ -289,7 +297,8 @@ export default function TicketDetalle() {
     setMenu(null);
   };
   const destinos = estadosDestino(t.estado).filter((e) => e !== "CANCELADO");
-  const siguiente = destinos.includes("EN_PROCESO") && t.estado !== "PENDIENTE_CLIENTE" ? "EN_PROCESO" : destinos.includes("RESUELTO") ? "RESUELTO" : undefined;
+  // Con un caso abierto en el proveedor, la salida es «Proveedor dio solución» (no «Iniciar atención»)
+  const siguiente = t.proveedor_caso ? undefined : destinos.includes("EN_PROCESO") && t.estado !== "PENDIENTE_CLIENTE" ? "EN_PROCESO" : destinos.includes("RESUELTO") ? "RESUELTO" : undefined;
   const pct = t.sla_consumido_pct;
 
   return (
@@ -318,6 +327,9 @@ export default function TicketDetalle() {
       )}
 
       <AlertasTercera t={t} onCambio={() => q.refetch()} />
+      <BannerProveedor t={t} onCambio={() => { q.refetch(); qc.invalidateQueries({ queryKey: ["tickets"] }); }} />
+      {t.es_visualizador && <BannerSeguir t={t} onCambio={actualizar} />}
+      {a.has("nota_interna") && <TicketProblemas ticketId={t.id} onCambio={() => q.refetch()} />}
 
       <Paper sx={{ p: { xs: 2, md: 3 }, mb: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
@@ -330,6 +342,7 @@ export default function TicketDetalle() {
               <PrioridadChip codigo={t.prioridad.codigo} nombre={t.prioridad.nombre} />
               <CumplimientoChip valor={t.cumplimiento_sla} />
               {t.reaperturas > 0 && <Chip size="small" variant="outlined" label={`${t.reaperturas} reapertura(s)`} />}
+              <ChipVisualizadores t={t} />
               {t.recurrente_id && (
                 <Chip size="small" icon={<EventRepeatIcon />} label="Recurrente" sx={{ bgcolor: "#FFF3D6", color: "#8A5A00", "& .MuiChip-icon": { color: "#8A5A00" } }} />
               )}
@@ -378,7 +391,8 @@ export default function TicketDetalle() {
                 Reabrir
               </Button>
             )}
-            {(a.has("editar") || a.has("escalar") || a.has("excepcion_sla") || a.has("eliminar") || a.has("cerrar")) && (
+            {!t.es_visualizador && a.has("seguir") && <BannerSeguir t={t} onCambio={actualizar} />}
+            {(a.has("editar") || a.has("escalar") || a.has("escalar_proveedor") || a.has("excepcion_sla") || a.has("eliminar") || a.has("cerrar")) && (
               <IconButton onClick={(e) => setMenu(e.currentTarget)} aria-label="Más acciones">
                 <MoreVertIcon />
               </IconButton>
@@ -386,6 +400,7 @@ export default function TicketDetalle() {
             <Menu anchorEl={menu} open={!!menu} onClose={() => setMenu(null)}>
               {a.has("editar") && <MenuItem onClick={() => abrir("editar")}>Editar</MenuItem>}
               {a.has("escalar") && <MenuItem onClick={() => abrir("escalar")}>Escalar</MenuItem>}
+              {a.has("escalar_proveedor") && <MenuItem onClick={() => { setMenu(null); setEscalarProv(true); }}>Escalar a proveedor</MenuItem>}
               {a.has("cerrar") && t.estado !== "RESUELTO" && <MenuItem onClick={() => abrir("cerrar")}>Cerrar directamente</MenuItem>}
               {a.has("cambiar_estado") && estadosDestino(t.estado).includes("CANCELADO") && (
                 <MenuItem onClick={() => abrir("estado", "CANCELADO")}>Cancelar ticket</MenuItem>
@@ -444,6 +459,7 @@ export default function TicketDetalle() {
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>
                             {c.usuario.nombre}
                           </Typography>
+                          {c.de_visualizador && <ChipComentarioVisualizador />}
                           {c.es_interno && <Chip size="small" icon={<LockIcon />} label="Nota interna" color="warning" variant="outlined" />}
                           {c.tipo === "ACTIVIDAD" && <Chip size="small" label={`Actividad${c.minutos_invertidos ? ` · ${duracion(c.minutos_invertidos)}` : ""}`} />}
                           <Typography variant="caption" sx={{ color: "text.secondary" }}>
@@ -638,7 +654,7 @@ export default function TicketDetalle() {
               )}
               {tab === 3 && (
                 <>
-                  {t.escalamientos.length === 0 && <Vacio texto="El ticket no ha sido escalado" />}
+                  {t.escalamientos.length === 0 && !t.proveedor_casos?.length && <Vacio texto="El ticket no ha sido escalado" />}
                   <List dense>
                     {t.escalamientos.map((e) => (
                       <ListItem key={e.id}>
@@ -652,6 +668,7 @@ export default function TicketDetalle() {
                       </ListItem>
                     ))}
                   </List>
+                  <CasosProveedorTicket casos={t.proveedor_casos} />
                 </>
               )}
             </Box>
@@ -695,6 +712,8 @@ export default function TicketDetalle() {
             </Typography>
           </Paper>
 
+          {a.has("nota_interna") && <TiempoTrabajado tipo="ticket" id={t.id} />}
+
           {t.servicio && <PanelTareas ticketId={t.id} s={t.servicio} onCambio={() => q.refetch()} />}
 
           <PanelTercera t={t} onCambio={() => q.refetch()} />
@@ -727,6 +746,8 @@ export default function TicketDetalle() {
               ))}
             </Paper>
           )}
+
+          <PanelVisualizadores t={t} onCambio={actualizar} />
 
           {(a.has("copias") || t.copias.length > 0) && (
             <Paper sx={{ p: 2.5 }}>
@@ -848,6 +869,10 @@ export default function TicketDetalle() {
           setMenuResp(null);
         }}
       />
+      {a.has("escalar_proveedor") && (
+        <DialogoEscalarProveedor t={t} abierto={escalarProv} onCerrar={() => setEscalarProv(false)}
+          onListo={() => { q.refetch(); qc.invalidateQueries({ queryKey: ["tickets"] }); }} />
+      )}
       <TicketDialogos ticket={t} abierto={dialogo} estadoInicial={estadoInicial} onCerrar={() => setDialogo(null)} ejecutar={ejecutar} />
     </>
   );

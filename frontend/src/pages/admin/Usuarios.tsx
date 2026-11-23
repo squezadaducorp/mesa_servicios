@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Alert, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, MenuItem, Paper, Stack, Table,
+  Alert, Button, Chip, Dialog, FormControlLabel, Switch, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, MenuItem, Paper, Stack, Table,
   TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Tooltip, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
@@ -59,6 +59,7 @@ export default function Usuarios() {
         supervisor_id: f.supervisor_id || null,
         origen_autenticacion: f.origen_autenticacion ?? "LOCAL",
         usuario_ad: f.usuario_ad || null,
+        equipo_ti: !!f.equipo_ti,
       };
       if (f.id) return { r: await patch<UsuarioAdmin>(`/admin/usuarios/${f.id}`, { ...datos, activo: f.activo }) };
       return { r: await post<{ usuario: UsuarioAdmin; clave_temporal: string | null }>("/admin/usuarios", { ...datos, correo: f.correo, clave: f.clave || null }) };
@@ -150,6 +151,7 @@ export default function Usuarios() {
                       <Chip size="small" variant="outlined" label={u.origen_autenticacion === "AD" ? "Active Directory" : u.origen_autenticacion === "ENTRA" ? "Microsoft 365" : "Local"} />
                     </TableCell>
                     <TableCell>
+                      {u.equipo_ti && <Chip size="small" label="Equipo de TI" sx={{ mr: 0.5, bgcolor: "#EDE7F6", color: "#5E35B1", fontWeight: 600 }} />}
                       {!u.activo ? <Chip size="small" label="Inactivo" /> : u.bloqueado ? <Chip size="small" color="error" label="Bloqueado" /> : <Chip size="small" color="success" label="Activo" />}
                       {(() => {
                         const a = ausenciaDeUsuario(u.id);
@@ -281,6 +283,10 @@ export default function Usuarios() {
                 <TextField label="Contraseña inicial (opcional)" type="password" value={form?.clave ?? ""} onChange={(e) => set("clave", e.target.value)} helperText="Si la deja vacía se genera una temporal; el usuario deberá cambiarla al ingresar." />
               )
             )}
+            <FormControlLabel
+              control={<Switch checked={!!form?.equipo_ti} onChange={(e) => set("equipo_ti", e.target.checked)} />}
+              label={<span><b>Equipo de TI</b> · ve los artículos internos y puede escribir en la Base de conocimiento</span>}
+            />
             {form?.id && <PermisoEnNombre usuarioId={form.id} />}
           </Stack>
         </DialogContent>

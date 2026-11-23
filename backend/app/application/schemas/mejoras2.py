@@ -20,8 +20,9 @@ class KbEntrada(BaseModel):
     categoria_id: int | None = None
     subcategoria_id: int | None = None
     estado: Literal["BORRADOR", "PUBLICADO", "ARCHIVADO"] = "BORRADOR"
-    visibilidad: Literal["TODOS", "MESA"] = "TODOS"
+    visibilidad: Literal["EXTERNO", "INTERNO"]   # obligatorio: lo elige quien escribe el artículo (35)
     ticket_origen_id: int | None = None
+    articulo_relacionado_id: int | None = None
 
 
 class KbResumen(Modelo):
@@ -52,6 +53,9 @@ class KbSalida(KbResumen):
     fecha_actualizacion: datetime | None
     fecha_creacion: datetime
     puede_editar: bool = False
+    puede_publicar_externo: bool = False
+    articulo_relacionado_id: int | None = None
+    articulo_relacionado: str | None = None
 
 
 class KbSugerirEntrada(BaseModel):

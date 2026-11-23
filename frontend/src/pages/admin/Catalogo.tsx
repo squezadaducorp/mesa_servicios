@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
+  Accordion, AccordionDetails, Autocomplete, AccordionSummary, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControlLabel, IconButton, MenuItem, Paper, Radio, Stack, Switch, Tab, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Tabs, TextField, Typography,
 } from "@mui/material";
@@ -32,6 +32,7 @@ type FormCat = {
   activo: boolean;
   responsables: { usuario_id: number; es_principal: boolean }[];
   correos_copia: string[];
+  visualizadores: number[];
   pide_equipo: boolean;
   restringida_en_nombre: boolean;
 };
@@ -127,10 +128,11 @@ export default function Catalogo() {
             activo: c.activo,
             responsables: c.responsables.map((r) => ({ usuario_id: r.usuario_id, es_principal: r.es_principal })),
             correos_copia: c.correos_copia ?? [],
+            visualizadores: c.visualizadores ?? [],
             pide_equipo: !!c.pide_equipo,
             restringida_en_nombre: !!c.restringida_en_nombre,
           }
-        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [], correos_copia: [], pide_equipo: false, restringida_en_nombre: false },
+        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [], correos_copia: [], visualizadores: [], pide_equipo: false, restringida_en_nombre: false },
     );
 
   const alternarResp = (id: number) =>
@@ -325,6 +327,17 @@ export default function Catalogo() {
                 valor={fc.correos_copia}
                 onCambio={(correos_copia) => setFc({ ...fc, correos_copia })}
                 ayuda="Estos correos quedan en copia de cada ticket nuevo de la categoría; luego se pueden quitar en el ticket."
+              />
+              <Autocomplete
+                multiple
+                options={candidatos.map((u) => u.id)}
+                getOptionLabel={(id) => candidatos.find((u) => u.id === id)?.nombre ?? `Usuario ${id}`}
+                value={fc.visualizadores}
+                onChange={(_, visualizadores) => setFc({ ...fc, visualizadores: visualizadores.slice(0, 10) })}
+                renderInput={(p) => (
+                  <TextField {...p} label="Visualizadores automáticos (opcional)"
+                    helperText="Siguen cada ticket nuevo de la categoría desde la Mesa (avisos de estado y cierre). Por ejemplo, el jefe del área." />
+                )}
               />
               <FormControlLabel control={<Switch checked={fc.pide_equipo} onChange={(e) => setFc({ ...fc, pide_equipo: e.target.checked })} />}
                 label="Pedir «Equipo afectado» al crear el ticket (para Sistemas, equipos, impresoras…)" />
