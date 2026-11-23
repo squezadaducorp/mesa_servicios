@@ -145,11 +145,6 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                  ("tiempo.horas_semana", "40"), ("proveedores.aviso_correo", f"admin@{DOMINIO}")):
         session.add(m.Configuracion(clave=k, valor=v))
     session.flush()
-    # Equipo de TI (35): roles de la mesa con gestión y responsables de alguna categoría
-    responsables = {r.usuario_id for r in session.query(m.CategoriaResponsable)}
-    responsables |= {c.supervisor_id for c in session.query(m.Categoria) if c.supervisor_id}
-    for u in session.query(m.Usuario):
-        u.equipo_ti = u.rol.codigo in ("SUPER_ADMIN", "ADMIN_MESA", "SUPERVISOR") or u.id in responsables
     session.commit()
 
 

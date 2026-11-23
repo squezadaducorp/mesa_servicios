@@ -30,9 +30,9 @@ ROLES_PUBLICAN_EXTERNO = {Rol.SUPERVISOR, Rol.ADMIN_MESA, Rol.SUPER_ADMIN}
 ENLACE_ARTICULO = re.compile(r"conocimiento\?articulo=(\d+)")
 
 
-def es_equipo_ti(u: m.Usuario) -> bool:
-    """Marca «Equipo de TI» (35): ve los artículos internos y, con kb.gestionar, escribe en la base de conocimiento."""
-    return bool(u.equipo_ti)
+def es_personal(u: m.Usuario) -> bool:
+    """Personal de Aducorp (35): todo rol salvo Cliente. Ve los artículos internos; la base de conocimiento es de toda la empresa."""
+    return u.rol.codigo != Rol.CLIENTE
 
 
 def exigir_sin_internos(session: Session, texto: str) -> None:
@@ -75,9 +75,9 @@ class ConocimientoService:
     def _visibles(self, u: m.Usuario, incluir_borradores: bool):
         A = m.KbArticulo
         stmt = select(A).where(A.eliminado == False)
-        if not es_equipo_ti(u):
+        if not es_personal(u):
             stmt = stmt.where(A.estado == "PUBLICADO", A.visibilidad == "EXTERNO")
-        elif not incluir_borradores:
+        elif not incluir_borradores or not u.tiene(Permiso.KB_GESTIONAR):   # los borradores solo los ve quien escribe
             stmt = stmt.where(A.estado == "PUBLICADO")
         return stmt
 
@@ -88,7 +88,7 @@ class ConocimientoService:
         return a
 
     def puede_editar(self, u: m.Usuario) -> bool:
-        return u.tiene(Permiso.KB_GESTIONAR) and es_equipo_ti(u)
+        return u.tiene(Permiso.KB_GESTIONAR) and es_personal(u)
 
     @staticmethod
     def puede_publicar_externo(u: m.Usuario) -> bool:
@@ -97,7 +97,7 @@ class ConocimientoService:
     def salida(self, a: m.KbArticulo, u: m.Usuario) -> dict:
         origen = self.session.get(m.Ticket, a.ticket_origen_id) if a.ticket_origen_id else None
         rel = self.session.get(m.KbArticulo, a.articulo_relacionado_id) if a.articulo_relacionado_id else None
-        if rel is not None and (rel.eliminado or (rel.visibilidad == "INTERNO" and not es_equipo_ti(u))):
+        if rel is not None and (rel.eliminado or (rel.visibilidad == "INTERNO" and not es_personal(u))):
             rel = None
         return {
             "articulo_relacionado_id": rel.id if rel else None, "articulo_relacionado": rel.titulo if rel else None,
@@ -117,7 +117,7 @@ class ConocimientoService:
             stmt = stmt.where(A.categoria_id == categoria_id)
         if estado:
             stmt = stmt.where(A.estado == estado)
-        elif not es_equipo_ti(u):
+        elif not es_personal(u) or not u.tiene(Permiso.KB_GESTIONAR):
             stmt = stmt.where(A.estado == "PUBLICADO")
         else:
             stmt = stmt.where(A.estado != "ARCHIVADO")

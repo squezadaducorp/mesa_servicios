@@ -256,13 +256,11 @@ def articulo(client, h, **extra):
     return client.post(f"{API}/conocimiento", json=body, headers=h)
 
 
-def test_articulos_internos_solo_para_el_equipo_de_ti(client, como):
+def test_articulos_internos_para_todo_el_personal(client, como):
     ha, hm, hs = como("admin"), como("maria.andrade"), como("supervisor.tecnico")
     t = crear_ticket(client, hm)
     analista, _ = responsable(client, ha, t)
     hr = como(analista)
-    assert client.get(f"{API}/auth/me", headers=hr).json()["equipo_ti"] is True
-    assert client.get(f"{API}/auth/me", headers=hm).json()["equipo_ti"] is False
 
     interno = articulo(client, hr)
     assert interno.status_code == 201, interno.text
@@ -290,8 +288,10 @@ def test_articulos_internos_solo_para_el_equipo_de_ti(client, como):
     assert client.post(f"{API}/tickets/{t['id']}/comentarios", json={"texto": texto}, headers=hr).status_code == 422
     assert client.post(f"{API}/tickets/{t['id']}/comentarios", json={"texto": texto, "es_interno": True}, headers=hr).status_code in (200, 201)
 
-    # Sin la marca «Equipo de TI» no ve internos ni escribe, aunque tenga kb.gestionar
-    uid = client.get(f"{API}/auth/me", headers=hr).json()["id"]
-    assert client.patch(f"{API}/admin/usuarios/{uid}", json={"equipo_ti": False}, headers=ha).json()["equipo_ti"] is False
-    assert articulo(client, hr).status_code == 403
-    assert client.get(f"{API}/conocimiento/{interno['id']}", headers=hr).status_code == 404
+    # Todo el personal de Aducorp (no solo TI) ve los internos publicados; escribe quien tenga kb.gestionar
+    hg = como("gerencia")
+    assert client.get(f"{API}/conocimiento/{interno['id']}", headers=hg).status_code == 200
+    assert articulo(client, hg).status_code == 403
+    borrador = articulo(client, hr, estado="BORRADOR", titulo="Borrador del procedimiento del token").json()
+    assert client.get(f"{API}/conocimiento/{borrador['id']}", headers=hg).status_code == 404   # los borradores, solo quien escribe
+    assert client.get(f"{API}/conocimiento/{borrador['id']}", headers=hr).status_code == 200

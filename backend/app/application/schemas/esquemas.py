@@ -65,7 +65,6 @@ class UsuarioSesion(UsuarioResumen):
     telefono: str | None = None
     permisos: list[str]
     debe_cambiar_clave: bool
-    equipo_ti: bool = False
 
 
 class TokenSalida(Modelo):
@@ -672,7 +671,6 @@ class UsuarioSalida(Modelo):
     activo: bool
     bloqueado: bool
     ultimo_login: datetime | None
-    equipo_ti: bool = False
 
 
 class UsuarioCrear(BaseModel):
@@ -686,7 +684,6 @@ class UsuarioCrear(BaseModel):
     origen_autenticacion: Literal["LOCAL", "AD", "ENTRA"] = "LOCAL"
     usuario_ad: str | None = None
     clave: str | None = Field(default=None, description="Si se omite, se genera una temporal")
-    equipo_ti: bool = False
 
 
 class UsuarioEditar(BaseModel):
@@ -699,7 +696,6 @@ class UsuarioEditar(BaseModel):
     activo: bool | None = None
     usuario_ad: str | None = None
     origen_autenticacion: Literal["LOCAL", "AD", "ENTRA"] | None = None
-    equipo_ti: bool | None = None
 
 
 class ClaveTemporalSalida(Modelo):
