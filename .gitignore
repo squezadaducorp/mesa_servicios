@@ -9,3 +9,4 @@ certs/
 *.tsbuildinfo
 teams/*.zip
 usuarios.csv
+.env.base
