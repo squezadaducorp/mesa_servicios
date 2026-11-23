@@ -203,7 +203,8 @@ def test_cambio_estandar_congelamiento_y_rechazo(client, como):
 # ============================================================ 28 dos pasos
 def politica(client, ha, **cambios) -> dict:
     base = {"obligatoria_admin": False, "obligatoria_analistas": False, "opcional_otros": True, "permitir_correo": True,
-            "solo_fuera_oficina": False, "redes_oficina": "", "dias_confianza": 30, "exentos": ["admin@aducorp.com.ec"]}
+            "solo_fuera_oficina": False, "redes_oficina": "", "dias_confianza": 30, "exentos": ["admin@aducorp.com.ec"],
+            "dias_gracia": 0}
     r = client.put(f"{API}/seguridad/politica", json={**base, **cambios}, headers=ha)
     assert r.status_code == 200, r.text
     return r.json()

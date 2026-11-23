@@ -1222,6 +1222,15 @@ class ProveedorCaso(Base):
     ticket: Mapped[Ticket] = relationship(lazy="joined")
 
 
+class UsuarioClavePrevia(Base):
+    """Contraseñas anteriores (hash bcrypt) para no repetirlas (ISO 27001 A.5.17, mejora 37)."""
+    __tablename__ = "usuario_claves_previas"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    clave_hash: Mapped[str] = mapped_column(String(100))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class DosfEquipo(Base):
     """Equipo de confianza: no pide el segundo paso durante N días (28)."""
     __tablename__ = "dosf_equipos"

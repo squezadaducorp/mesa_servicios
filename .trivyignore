@@ -1,0 +1,4 @@
+# Riesgos aceptados de Trivy (mejora 41). Una CVE por línea, con el motivo, quién lo aprobó y hasta cuándo.
+# Revisar en cada «Revisión semanal de vulnerabilidades»: si la fecha venció, corregir o renovar la aceptación.
+# Ejemplo:
+# CVE-0000-00000   # librería del sistema sin corrección publicada · aprobó S. Quezada · revisar 2026-12-31

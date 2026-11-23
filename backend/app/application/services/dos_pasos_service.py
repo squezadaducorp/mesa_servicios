@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import html
 import hmac
 import ipaddress
 import json
@@ -53,6 +54,7 @@ POLITICA = {
     "seguridad.2fa_redes_oficina": ("", "IP o redes de la oficina separadas por coma, p. ej. 186.46.10.20, 192.168.1.0/24"),
     "seguridad.2fa_dias_confianza": ("30", "Días que se recuerda un equipo de confianza (0 = no ofrecer)"),
     "seguridad.2fa_exentos": ("admin@aducorp.com.ec", "Cuentas de emergencia fuera de la política, separadas por coma"),
+    "seguridad.2fa_dias_gracia": ("7", "Días para configurar la verificación cuando pasa a ser obligatoria (0 = se exige en el siguiente ingreso)"),
 }
 
 
@@ -139,7 +141,12 @@ class DosPasosService:
             dias = max(0, min(int(v["seguridad.2fa_dias_confianza"] or 0), 365))
         except ValueError:
             dias = 30
+        try:
+            gracia = max(0, min(int(v["seguridad.2fa_dias_gracia"] or 0), 90))
+        except ValueError:
+            gracia = 7
         return {
+            "dias_gracia": gracia,
             "obligatoria_admin": _si(v["seguridad.2fa_admin"]),
             "obligatoria_analistas": _si(v["seguridad.2fa_analistas"]),
             "opcional_otros": _si(v["seguridad.2fa_opcional_otros"]),
@@ -169,6 +176,17 @@ class DosPasosService:
     def exigida(self, u: m.Usuario, pol: dict | None = None) -> bool:
         return self._exigida_por_rol(u, pol or self.politica())
 
+    def dias_restantes(self, u: m.Usuario, pol: dict | None = None) -> int | None:
+        """Días que le quedan para configurar la verificación obligatoria (None si no aplica o ya venció)."""
+        pol = pol or self.politica()
+        if u.dosf_metodo or not self._exigida_por_rol(u, pol) or not pol["dias_gracia"]:
+            return None
+        desde = u.dosf_exigido_desde or utcnow()
+        restante = desde + timedelta(days=pol["dias_gracia"]) - utcnow()
+        if restante.total_seconds() <= 0:
+            return None
+        return max(1, restante.days + (1 if restante.seconds else 0))
+
     @staticmethod
     def en_oficina(ip: str | None, redes: str) -> bool:
         if not ip or not redes.strip():
@@ -196,6 +214,8 @@ class DosPasosService:
             "seguridad.2fa_dias_confianza": str(int(datos["dias_confianza"])),
             "seguridad.2fa_exentos": ", ".join(c.strip().lower() for c in datos.get("exentos") or [] if c.strip()),
         }
+        if datos.get("dias_gracia") is not None:
+            valores["seguridad.2fa_dias_gracia"] = str(max(0, min(int(datos["dias_gracia"]), 90)))
         if valores["seguridad.2fa_solo_fuera_oficina"] == "si":
             for r in valores["seguridad.2fa_redes_oficina"].replace(";", ",").split(","):
                 try:
@@ -263,6 +283,8 @@ class DosPasosService:
             return None
         if not u.dosf_metodo:
             u.dosf_exigido_desde = u.dosf_exigido_desde or utcnow()
+            if self.dias_restantes(u, pol):   # aún en el plazo de gracia: entra y ve el aviso para configurarla
+                return None
         token, desafio = self._crear_desafio(u, "LOGIN" if u.dosf_metodo else "ACTIVAR")
         enviado = False
         if u.dosf_metodo == "CORREO" and self.correo_disponible(pol):
@@ -310,7 +332,7 @@ class DosPasosService:
             raise ReglaNegocio("Ya se enviaron varios códigos. Revise su bandeja (y la carpeta de correo no deseado).")
         codigo = f"{secrets.randbelow(1_000_000):06d}"
         d.codigo_hash, d.codigo_expira, d.envios = hash_token(codigo), utcnow() + timedelta(minutes=MINUTOS_DESAFIO), d.envios + 1
-        cuerpo = (f"<p>Hola {d.usuario.nombre}:</p><p>Su código para entrar a la Mesa de Servicios es</p>"
+        cuerpo = (f"<p>Hola {html.escape(d.usuario.nombre)}:</p><p>Su código para entrar a la Mesa de Servicios es</p>"
                   f"<p style=\"font-size:30px;font-weight:700;letter-spacing:8px;color:#10203C\">{codigo}</p>"
                   f"<p>Vence en {MINUTOS_DESAFIO} minutos. Si usted no está intentando ingresar, cambie su contraseña y avise a TI.</p>")
         try:

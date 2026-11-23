@@ -24,6 +24,8 @@ export interface UsuarioSesion extends UsuarioResumen {
   permisos: string[];
   debe_cambiar_clave: boolean;
   equipo_ti?: boolean;
+  /** Verificación en dos pasos obligatoria aún sin configurar: días que le quedan (mejora 37) */
+  dosf_dias_restantes?: number | null;
 }
 
 export interface TokenSalida {

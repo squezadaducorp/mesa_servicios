@@ -304,7 +304,7 @@ def test_cambiar_clave(client):
     r = client.post(f"{API}/auth/login", json={"correo": "luis.paredes@aducorp.com.ec", "clave": CLAVE}).json()
     h = {"Authorization": f"Bearer {r['access_token']}"}
     assert client.post(f"{API}/auth/cambiar-clave", json={"clave_actual": CLAVE, "clave_nueva": "corta"}, headers=h).status_code == 422
-    r2 = client.post(f"{API}/auth/cambiar-clave", json={"clave_actual": CLAVE, "clave_nueva": "Nueva#Clave2026"}, headers=h)
+    r2 = client.post(f"{API}/auth/cambiar-clave", json={"clave_actual": CLAVE, "clave_nueva": "Nueva#Llave2026"}, headers=h)
     assert r2.status_code == 200 and r2.json()["usuario"]["debe_cambiar_clave"] is False
     assert client.post(f"{API}/auth/refresh", json={"refresh_token": r["refresh_token"]}).status_code == 401
 

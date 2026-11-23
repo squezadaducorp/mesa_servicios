@@ -66,6 +66,7 @@ class UsuarioSesion(UsuarioResumen):
     permisos: list[str]
     debe_cambiar_clave: bool
     equipo_ti: bool = False
+    dosf_dias_restantes: int | None = None   # verificación en dos pasos obligatoria aún sin configurar (plazo de gracia)
 
 
 class TokenSalida(Modelo):

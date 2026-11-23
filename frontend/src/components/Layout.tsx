@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AppBar, Avatar, Badge, Box, Button, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText,
+  Alert, AppBar, Avatar, Badge, Box, Button, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText,
   ListSubheader, Menu, MenuItem, Popover, Toolbar, Tooltip, Typography, useMediaQuery, useTheme,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -374,6 +374,13 @@ export default function Layout() {
         )}
       </Box>
       <Box component="main" sx={{ flex: 1, minWidth: 0, p: { xs: 2, md: 3 }, mt: 8 }}>
+        {!!usuario?.dosf_dias_restantes && location.pathname !== "/seguridad" && (
+          <Alert severity="warning" sx={{ mb: 2 }}
+            action={<Button color="inherit" size="small" onClick={() => navigate("/seguridad")}>Configurar ahora</Button>}>
+            Su rol requiere verificación en dos pasos. Le {usuario.dosf_dias_restantes === 1 ? "queda 1 día" : `quedan ${usuario.dosf_dias_restantes} días`} para
+            configurarla con la app del celular; después no podrá entrar sin ella.
+          </Alert>
+        )}
         <BannerAvisosGenerales />
         <AvisosSuperiores gestor={gestor} />
         <Outlet />

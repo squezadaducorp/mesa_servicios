@@ -1,20 +1,50 @@
-# Actualizaciones semanales de dependencias y de imágenes base
+# Actualizaciones de dependencias (mejora 41 · ISO 27001 A.8.8)
+# - Parches y versiones menores: UN PR agrupado por ecosistema cada lunes (menos PR sueltos que revisar).
+# - Versiones mayores (React, MUI, FastAPI, Python, Node…): PR aparte, para probarlas en el PC antes de fusionar.
+# - Alertas de seguridad: Dependabot abre el PR enseguida (active «Dependabot security updates» en GitHub).
 version: 2
 updates:
   - package-ecosystem: pip
     directory: /backend
-    schedule: { interval: weekly }
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Guayaquil }
+    open-pull-requests-limit: 5
+    groups:
+      python-menores:
+        update-types: [minor, patch]
+      seguridad-python:
+        applies-to: security-updates
+        patterns: ["*"]
+
   - package-ecosystem: npm
     directory: /frontend
-    schedule: { interval: weekly }
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Guayaquil }
+    open-pull-requests-limit: 5
     groups:
-      mui: { patterns: ["@mui/*"] }
+      npm-menores:
+        update-types: [minor, patch]
+      mui:
+        patterns: ["@mui/*"]
+      seguridad-npm:
+        applies-to: security-updates
+        patterns: ["*"]
+
   - package-ecosystem: docker
     directory: /backend
-    schedule: { interval: weekly }
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Guayaquil }
+    ignore:   # la versión mayor de Python se cambia a mano (hay que probar pyodbc y el driver de SQL Server)
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
   - package-ecosystem: docker
     directory: /frontend
-    schedule: { interval: weekly }
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: America/Guayaquil }
+    ignore:   # Node y Nginx: solo parches automáticos; las versiones nuevas se prueban a mano
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    groups:
+      acciones:
+        patterns: ["*"]
