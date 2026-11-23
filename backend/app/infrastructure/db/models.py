@@ -98,6 +98,7 @@ class Usuario(Base):
     dosf_ultimo_paso: Mapped[int | None] = mapped_column(BigInteger)   # último periodo TOTP aceptado (no se reutiliza)
     dosf_exigido_desde: Mapped[datetime | None] = mapped_column(DateTime)
     equipo_ti: Mapped[bool] = mapped_column(Boolean, default=False)   # sin uso: la base de conocimiento es de todo el personal (35)
+    aviso_inactividad: Mapped[datetime | None] = mapped_column(DateTime)   # aviso de baja por inactividad ya enviado (38)
 
     rol: Mapped[Rol] = relationship(lazy="joined")
     area: Mapped[Area | None] = relationship(lazy="joined")
@@ -108,6 +109,44 @@ class Usuario(Base):
 
     def tiene(self, permiso: str) -> bool:
         return permiso in self.permisos
+
+
+class RevisionAcceso(Base):
+    """Campaña de revisión de accesos (38): cada jefe confirma los accesos de su gente y TI aprueba el acta."""
+    __tablename__ = "revisiones_acceso"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    periodo: Mapped[str] = mapped_column(String(10), unique=True)   # AAAA-MM del mes en que se abrió
+    estado: Mapped[str] = mapped_column(String(12), default="ABIERTA")   # ABIERTA | APROBADA
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_limite: Mapped[datetime] = mapped_column(DateTime)
+    creada_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))   # NULL = la abrió el worker
+    recordatorio: Mapped[bool] = mapped_column(Boolean, default=False)
+    aprobada_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_aprobacion: Mapped[datetime | None] = mapped_column(DateTime)
+    observacion: Mapped[str | None] = mapped_column(Unicode(1000))
+
+    aprobador: Mapped[Usuario | None] = relationship(foreign_keys=[aprobada_por], lazy="joined")
+
+
+class RevisionAccesoItem(Base):
+    __tablename__ = "revision_acceso_items"
+    __table_args__ = (UniqueConstraint("revision_id", "usuario_id", name="ux_revision_acceso_items"),)
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    revision_id: Mapped[int] = mapped_column(ForeignKey("revisiones_acceso.id"))
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    jefe_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))   # NULL = lo revisa TI
+    rol: Mapped[str] = mapped_column(Unicode(100))
+    ultimo_login: Mapped[datetime | None] = mapped_column(DateTime)
+    alertas: Mapped[str | None] = mapped_column(String(300))   # códigos separados por coma
+    decision: Mapped[str | None] = mapped_column(String(10))   # MANTENER | AJUSTAR | BAJA
+    comentario: Mapped[str | None] = mapped_column(Unicode(500))
+    decidido_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_decision: Mapped[datetime | None] = mapped_column(DateTime)
+    aplicado: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id], lazy="joined")
+    jefe: Mapped[Usuario | None] = relationship(foreign_keys=[jefe_id], lazy="joined")
+    decisor: Mapped[Usuario | None] = relationship(foreign_keys=[decidido_por], lazy="joined")
 
 
 class RefreshToken(Base):
@@ -163,6 +202,7 @@ class Categoria(Base):
     visualizadores: Mapped[str | None] = mapped_column(String(300))   # ids de usuarios que siguen cada ticket nuevo (34)
     pide_equipo: Mapped[bool] = mapped_column(Boolean, default=False)            # muestra «Equipo afectado» al crear el ticket
     restringida_en_nombre: Mapped[bool] = mapped_column(Boolean, default=False)  # no se puede pedir en nombre de otra persona
+    clasificacion: Mapped[str | None] = mapped_column(String(12))   # clasificación con la que nacen sus tickets (42); NULL = INTERNA
     color: Mapped[str | None] = mapped_column(CHAR(7))
     orden: Mapped[int] = mapped_column(Integer, default=0)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -307,6 +347,9 @@ class Ticket(Base):
     riesgo_ia: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     tiempo_estimado_min: Mapped[int | None] = mapped_column(Integer)   # control de tiempo (31)
     facturable: Mapped[bool] = mapped_column(Boolean, default=False)
+    clasificacion: Mapped[str] = mapped_column(String(12), default="INTERNA")   # PUBLICA | INTERNA | CONFIDENCIAL (42)
+    retencion_legal: Mapped[bool] = mapped_column(Boolean, default=False)       # no se depura (reclamo o auditoría SENAE)
+    fecha_depuracion: Mapped[datetime | None] = mapped_column(DateTime)         # contenido borrado por la política de retención
     version: Mapped[int] = mapped_column(Integer, default=1)
     eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
     eliminado_por: Mapped[int | None] = mapped_column(Integer)
@@ -1220,6 +1263,15 @@ class ProveedorCaso(Base):
     creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
     proveedor: Mapped[Proveedor] = relationship(lazy="joined")
     ticket: Mapped[Ticket] = relationship(lazy="joined")
+
+
+class UsuarioClavePrevia(Base):
+    """Contraseñas anteriores (hash bcrypt) para no repetirlas (ISO 27001 A.5.17, mejora 37)."""
+    __tablename__ = "usuario_claves_previas"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    clave_hash: Mapped[str] = mapped_column(String(100))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class DosfEquipo(Base):

@@ -1,7 +1,7 @@
 """Repositorios específicos del dominio."""
 from datetime import datetime
 
-from sqlalchemy import false, func, or_, select, text, update
+from sqlalchemy import and_, false, func, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from app.domain.enums import ESTADOS_ABIERTOS, Permiso, Rol as RolEnum
@@ -141,14 +141,15 @@ class TicketRepository(Repository[m.Ticket]):
         if Permiso.TICKET_VER_TODOS in permisos:
             return None
         condiciones = []
+        no_confidencial = m.Ticket.clasificacion != "CONFIDENCIAL"
         if Permiso.TICKET_VER_AREA in permisos:
             condiciones.append(m.Ticket.categoria_id.in_(select(m.Categoria.id).where(m.Categoria.supervisor_id == usuario.id)))
         if Permiso.TICKET_VER_ASIGNADOS in permisos:
             condiciones.append(m.Ticket.responsable_id == usuario.id)
             # tareas del catálogo de servicios repartidas a otros analistas (26)
             condiciones.append(m.Ticket.id.in_(select(m.TicketTarea.ticket_id).where(m.TicketTarea.responsable_id == usuario.id)))
-            if incluir_participados:
-                condiciones.append(m.Ticket.id.in_(self.ids_participados(usuario.id)))
+            if incluir_participados:   # (42) un ticket confidencial no lo ve quien ya no lo atiende
+                condiciones.append(and_(m.Ticket.id.in_(self.ids_participados(usuario.id)), no_confidencial))
         if Permiso.TICKET_VER_PROPIOS in permisos:
             condiciones.append(m.Ticket.solicitante_id == usuario.id)
         if incluir_participados:   # quien lo registró en nombre de otra persona lo ve en solo lectura
@@ -156,7 +157,8 @@ class TicketRepository(Repository[m.Ticket]):
             # quien tiene (o tuvo) que aprobarlo también lo abre, para decidir con toda la información
             condiciones.append(m.Ticket.id.in_(select(m.TicketAprobacion.ticket_id).where(m.TicketAprobacion.aprobador_id == usuario.id)))
             # visualizadores (34): lo siguen aunque su rol no les deje ver el ticket
-            condiciones.append(m.Ticket.id.in_(select(m.TicketVisualizador.ticket_id).where(m.TicketVisualizador.usuario_id == usuario.id)))
+            condiciones.append(and_(m.Ticket.id.in_(select(m.TicketVisualizador.ticket_id).where(m.TicketVisualizador.usuario_id == usuario.id)),
+                                    no_confidencial))
         return or_(*condiciones) if condiciones else false()
 
     def consulta_visible(self, usuario: m.Usuario, incluir_participados: bool = False):

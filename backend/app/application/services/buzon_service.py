@@ -54,6 +54,34 @@ def es_automatico(msg: dict) -> bool:
     return asunto.startswith(("respuesta automática", "automatic reply", "undeliverable", "no se puede entregar"))
 
 
+def _cabeceras(msg: dict, nombre: str) -> list[str]:
+    return [h.get("value") or "" for h in msg.get("internetMessageHeaders") or [] if (h.get("name") or "").lower() == nombre]
+
+
+def remitente_verificado(msg: dict, correo: str) -> bool:
+    """¿Exchange autenticó el remitente? (auditoría de seguridad 2026-11, hallazgo 2)
+
+    La dirección «From» se puede falsificar. Se acepta como auténtica solo si:
+    - el correo salió de nuestro propio tenant (X-MS-Exchange-Organization-AuthAs / CrossTenant-AuthAs = Internal;
+      Exchange borra esas cabeceras de los correos que llegan de afuera), o
+    - Authentication-Results trae dmarc=pass o compauth=pass para el mismo dominio del remitente.
+    """
+    if not settings.BUZON_VERIFICAR_REMITENTE:
+        return True
+    for cab in ("x-ms-exchange-organization-authas", "x-ms-exchange-crosstenant-authas"):
+        if any(v.strip().lower() == "internal" for v in _cabeceras(msg, cab)):
+            return True
+    dominio = correo.rsplit("@", 1)[-1].lower()
+    for valor in _cabeceras(msg, "authentication-results"):
+        v = valor.lower()
+        desde = re.search(r"header\.from=([^\s;]+)", v)
+        if desde and desde.group(1).strip(".") != dominio:
+            continue
+        if re.search(r"\bdmarc=pass\b", v) or re.search(r"\bcompauth=pass\b", v):
+            return True
+    return False
+
+
 def texto_de(msg: dict) -> str:
     """Solo la parte nueva del mensaje (uniqueBody) en texto plano, sin la cadena citada."""
     texto = ((msg.get("uniqueBody") or {}).get("content") or (msg.get("body") or {}).get("content") or "").strip()
@@ -157,11 +185,12 @@ class BuzonService:
         texto = texto_de(msg) or "(correo sin texto)"
         numero = PATRON_TICKET.search(msg.get("subject") or "")
         existente = self.session.scalar(select(m.Ticket).where(m.Ticket.numero == numero.group(0).upper(), m.Ticket.eliminado == False)) if numero else None
+        verificado = remitente_verificado(msg, correo)
         if existente is not None and Estado(existente.estado) not in (Estado.CERRADO, Estado.CANCELADO):
-            detalle = self._agregar_respuesta(existente, correo, nombre, texto, msg)
+            detalle = self._agregar_respuesta(existente, correo, nombre, texto, msg, verificado)
             return "ACTUALIZADO", existente, detalle
         relacionado = f"\n\nRelacionado con el ticket {existente.numero}, que ya estaba cerrado." if existente is not None else ""
-        t, detalle = self._crear_ticket(correo, nombre, asunto, texto + relacionado, msg)
+        t, detalle = self._crear_ticket(correo, nombre, asunto, texto + relacionado, msg, verificado)
         return "CREADO", t, detalle
 
     # -------------------------------------------------------------- tickets
@@ -189,16 +218,22 @@ class BuzonService:
     def _clasificar(self, asunto: str, texto: str) -> tuple[int, int, str | None]:
         return clasificar(self.tickets, asunto, texto)
 
-    def _crear_ticket(self, correo: str, nombre: str, asunto: str, texto: str, msg: dict) -> tuple[m.Ticket, str | None]:
-        solicitante = self._solicitante(correo, nombre)
+    def _crear_ticket(self, correo: str, nombre: str, asunto: str, texto: str, msg: dict,
+                      verificado: bool = True) -> tuple[m.Ticket, str | None]:
+        # Sin autenticación no se crea la cuenta ni se usa la de un empleado: queda a nombre del buzón
+        solicitante = self._solicitante(correo, nombre) if verificado else self._usuario_buzon()
         externo = solicitante.correo.lower() == self.buzon
         categoria_id, subcategoria_id, aviso = self._clasificar(asunto, texto)
-        descripcion = (f"Remitente: {nombre} <{correo}>\n\n{texto}" if externo else texto).ljust(10, ".")
+        marca = "" if verificado else " (remitente NO verificado)"
+        descripcion = (f"Remitente{marca}: {nombre} <{correo}>\n\n{texto}" if externo else texto).ljust(10, ".")
         dto = s.TicketCrear(asunto=asunto[:200].ljust(5, "."), descripcion=descripcion, categoria_id=categoria_id,
                             subcategoria_id=subcategoria_id, canal="CORREO", correo=correo)
         ctx = Contexto(usuario=solicitante, ip="buzon", equipo=f"Exchange Online · {self.buzon}")
         t = self.tickets.crear(dto, ctx)
         avisos = [aviso] if aviso else []
+        if not verificado:
+            avisos.append(f"El correo dice venir de {correo}, pero Exchange no pudo verificarlo (DMARC). No se envió acuse "
+                          "y el ticket no quedó a nombre de nadie: confirme con la persona por otro medio antes de actuar.")
         # Quienes venían en copia (CC) del correo original quedan en copia del ticket
         copias = self.tickets.agregar_copias(t, copias_de(msg, self.buzon), "CORREO")
         if copias:
@@ -208,13 +243,17 @@ class BuzonService:
             self.tickets._agregar_comentario(t, self._usuario_buzon(), "\n".join(avisos), True, "SISTEMA", None, utcnow())
         self.session.flush()
         self.session.refresh(t)
-        self.tickets.notif.correo_directo("ACUSE_CORREO", correo, nombre, t)
+        if verificado:   # nunca se responde a una dirección falsificada (evita usar el buzón para enviar correos a terceros)
+            self.tickets.notif.correo_directo("ACUSE_CORREO", correo, nombre, t)
         return t, "; ".join(avisos) or None
 
-    def _agregar_respuesta(self, t: m.Ticket, correo: str, nombre: str, texto: str, msg: dict) -> str | None:
+    def _agregar_respuesta(self, t: m.Ticket, correo: str, nombre: str, texto: str, msg: dict,
+                           verificado: bool = True) -> str | None:
         u = self.usuarios.por_correo(correo)
         autor = None
-        if u is not None and u.activo and "comentar" in self.tickets.acciones(u, t):
+        if not verificado:
+            pass                          # remitente sin autenticar: nunca comenta a nombre de nadie
+        elif u is not None and u.activo and "comentar" in self.tickets.acciones(u, t):
             autor = u
         elif correo == (t.correo or "").lower():
             autor = t.solicitante          # remitente externo del ticket original
@@ -229,7 +268,8 @@ class BuzonService:
             sistema = self._usuario_buzon()
             ctx = Contexto(usuario=sistema, ip="buzon", equipo=f"Exchange Online · {self.buzon}")
             en_copia = correo in self.tickets.copias(t)
-            relacion = "en copia del ticket" if en_copia else "no participa en el ticket"
+            relacion = "remitente NO verificado por Exchange" if not verificado else (
+                "en copia del ticket" if en_copia else "no participa en el ticket")
             self.tickets._agregar_comentario(t, sistema, f"Correo de {nombre} <{correo}> ({relacion}):\n\n{texto}",
                                              True, "COMENTARIO", None, ahora)
             self.tickets.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: correo de un tercero", f"{nombre}: {texto[:200]}", t)

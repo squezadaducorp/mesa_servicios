@@ -14,7 +14,10 @@ RUN sed -i 's#http://deb.debian.org#https://deb.debian.org#g' /etc/apt/sources.l
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+# pip y setuptools solo hacen falta para instalar: se quitan de la imagen final (traen copias propias de urllib3 y
+# msgpack que el escaneo de vulnerabilidades marca, y ninguna se usa en tiempo de ejecución)
+RUN pip install -r requirements.txt \
+ && pip uninstall -y pip setuptools wheel
 
 COPY app ./app
 COPY scripts ./scripts

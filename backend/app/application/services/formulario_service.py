@@ -17,7 +17,9 @@ import hashlib
 from dataclasses import dataclass
 import hmac
 import time
+from datetime import timedelta
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.application.errores import Contexto, ErrorAplicacion, ReglaNegocio
@@ -83,6 +85,15 @@ class FormularioService:
         self.tickets = TicketService(session)
         self.usuarios = UsuarioRepository(session)
 
+    def _recientes(self) -> int:
+        """Tickets creados por el formulario web en la última hora."""
+        cuenta = self.session.scalar(select(m.Usuario.id).where(m.Usuario.correo == settings.FORMULARIO_WEB_CORREO.lower()))
+        if cuenta is None:
+            return 0
+        desde = utcnow() - timedelta(hours=1)
+        return self.session.scalar(select(func.count(m.Ticket.id)).where(
+            m.Ticket.solicitante_id == cuenta, m.Ticket.canal == "WEB", m.Ticket.fecha_creacion >= desde)) or 0
+
     def formulario(self) -> dict:
         if not settings.FORMULARIO_WEB_ENABLED:
             raise FormularioDeshabilitado("El formulario público no está habilitado")
@@ -119,6 +130,9 @@ class FormularioService:
         correo = str(dto.correo).lower()
         if not limitador_ip.permitir(ip or "?") or not limitador_correo.permitir(correo):
             raise DemasiadasSolicitudes("Recibimos varias solicitudes en poco tiempo. Inténtelo de nuevo en una hora o escríbanos por correo.")
+        if self._recientes() >= settings.FORMULARIO_WEB_MAX_GLOBAL_HORA:
+            # Límite global (en la base, vale para todos los procesos): frena el uso del formulario para enviar correos masivos
+            raise DemasiadasSolicitudes("El formulario recibe demasiadas solicitudes en este momento. Inténtelo de nuevo en una hora o escríbanos por correo.")
 
         # Todos los archivos se validan antes de crear el ticket: si uno falla, no queda nada a medias.
         archivos = archivos or []
@@ -154,5 +168,8 @@ class FormularioService:
             self.tickets.guardar_adjunto(t, cuenta, a.nombre, a.tipo_mime, a.contenido, ctx)
         self.session.flush()
         self.session.refresh(t)
-        self.tickets.notif.correo_directo("ACUSE_WEB", correo, nombre, t, url=f"{settings.APP_URL.rstrip('/')}/solicitud")
+        # El acuse no repite el asunto ni el nombre escritos en el formulario: así nadie puede usar el buzón oficial para
+        # enviar a terceros un correo con un texto elegido por él (auditoría de seguridad 2026-11, hallazgo 1).
+        self.tickets.notif.correo_directo("ACUSE_WEB", correo, "", t, url=f"{settings.APP_URL.rstrip('/')}/solicitud",
+                                          asunto="Solicitud registrada en la Mesa de Servicios")
         return t

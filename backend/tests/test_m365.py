@@ -158,6 +158,10 @@ class GraphFalso:
 
 
 def mensaje(id_, remitente, asunto, texto, adjuntos=False, **extra):
+    # Por defecto el correo llega autenticado (como lo marca Exchange Online); las pruebas de suplantación lo quitan
+    extra.setdefault("internetMessageHeaders", [{"name": "Authentication-Results",
+                                                 "value": f"spf=pass smtp.mailfrom={remitente.split('@')[1]}; dmarc=pass action=none "
+                                                          f"header.from={remitente.split('@')[1]};compauth=pass reason=100"}])
     return {"id": id_, "internetMessageId": f"<{id_}@mail>", "subject": asunto, "receivedDateTime": "2026-10-19T15:00:00Z",
             "from": {"emailAddress": {"address": remitente, "name": remitente.split("@")[0].title()}},
             "uniqueBody": {"content": texto}, "hasAttachments": adjuntos, **extra}
@@ -230,6 +234,40 @@ def test_buzon_remitente_externo_recibe_respuestas_por_correo(client, como, m365
         resp = s.scalar(select(m.ColaCorreo).where(m.ColaCorreo.plantilla == "RESPUESTA_TICKET"))
         assert resp.para == "compras@importadora.com" and "póliza vigente" in resp.cuerpo_html
         assert not s.scalar(select(m.ColaCorreo).where(m.ColaCorreo.para == settings.BUZON_CORREO))
+
+
+def test_buzon_remitente_suplantado_no_habla_por_un_empleado(db, m365):
+    """Auditoría 2026-11 (hallazgo 2): un From falsificado (dmarc=fail) no crea cuentas, no comenta como el empleado ni recibe acuse."""
+    falso = [{"name": "Authentication-Results", "value": "spf=fail smtp.mailfrom=aducorp.com.ec; dmarc=fail action=none header.from=aducorp.com.ec;compauth=fail reason=000"}]
+    graph = GraphFalso([mensaje("s1", "nuevo.empleado@aducorp.com.ec", "Cambio de cuenta bancaria", "Por favor cambien la cuenta.",
+                                internetMessageHeaders=falso)])
+    with SessionLocal() as s:
+        assert BuzonService(s, graph).procesar()["creados"] == 1
+        t = s.scalar(select(m.Ticket).where(m.Ticket.canal == "CORREO").order_by(m.Ticket.id.desc()))
+        assert t.solicitante.correo == settings.BUZON_CORREO and "NO verificado" in t.descripcion
+        assert s.scalar(select(m.Usuario).where(m.Usuario.correo == "nuevo.empleado@aducorp.com.ec")) is None
+        assert not s.scalar(select(m.ColaCorreo).where(m.ColaCorreo.plantilla == "ACUSE_CORREO", m.ColaCorreo.ticket_id == t.id))
+        numero, responsable = t.numero, t.responsable.correo
+
+    # El atacante «responde» como el analista responsable: queda como nota interna del buzón, no como comentario suyo
+    graph2 = GraphFalso([mensaje("s2", responsable, f"RE: [{numero}] Respuesta", "Ya cambié la cuenta, confirmen.",
+                                 internetMessageHeaders=falso)])
+    with SessionLocal() as s:
+        assert BuzonService(s, graph2).procesar()["actualizados"] == 1
+        t = s.scalar(select(m.Ticket).where(m.Ticket.numero == numero))
+        coms = s.scalars(select(m.TicketComentario).where(m.TicketComentario.ticket_id == t.id)).all()
+        nota = next(c for c in coms if "Ya cambié la cuenta" in c.texto)
+        assert nota.es_interno and nota.usuario.correo == settings.BUZON_CORREO and "NO verificado" in nota.texto
+
+    # Correo interno del tenant (sin Authentication-Results) sí se acepta
+    interno = [{"name": "X-MS-Exchange-Organization-AuthAs", "value": "Internal"}]
+    graph3 = GraphFalso([mensaje("s3", responsable, f"RE: [{numero}] Respuesta", "Respuesta real del analista.",
+                                 internetMessageHeaders=interno)])
+    with SessionLocal() as s:
+        BuzonService(s, graph3).procesar()
+        t = s.scalar(select(m.Ticket).where(m.Ticket.numero == numero))
+        real = next(c for c in s.scalars(select(m.TicketComentario).where(m.TicketComentario.ticket_id == t.id)) if c.texto == "Respuesta real del analista.")
+        assert real.usuario.correo == responsable and not real.es_interno
 
 
 # ================================================================== Teams

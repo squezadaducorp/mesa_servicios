@@ -36,6 +36,7 @@ class PoliticaEntrada(BaseModel):
     redes_oficina: str | None = Field(None, max_length=900)
     dias_confianza: int = Field(30, ge=0, le=365)
     exentos: list[str] = Field(default_factory=list, max_length=20)
+    dias_gracia: int | None = Field(None, ge=0, le=90)
 
 
 @router.get("/mi-cuenta", summary="Estado de mi verificación en dos pasos")

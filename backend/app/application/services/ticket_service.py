@@ -110,11 +110,13 @@ class TicketService:
         if gestor and u.tiene(Permiso.TICKET_ESCALAR) and abierto and estado != Estado.POR_APROBAR \
                 and ProveedorService(self.session).caso_abierto(t.id) is None:
             a.append("escalar_proveedor")
+        if gestor or propio:
+            a.append("clasificar")   # (42) el solicitante solo puede subirla a Confidencial
         if visualizador:
             a.append("dejar_seguir")
-        elif not propio and t.responsable_id != u.id:
+        elif not propio and t.responsable_id != u.id and t.clasificacion != "CONFIDENCIAL":
             a.append("seguir")
-        if VisualizadorService.puede_gestionar(self, u, t):
+        if VisualizadorService.puede_gestionar(self, u, t) and t.clasificacion != "CONFIDENCIAL":
             a.append("visualizadores")
         if u.tiene(Permiso.SLA_MODIFICAR) and abierto:
             a.append("excepcion_sla")
@@ -233,6 +235,7 @@ class TicketService:
             prioridad_id=prioridad.id, estado=Estado.NUEVO, canal=canal or dto.canal, fecha_creacion=ahora, fecha_actualizacion=ahora,
             sla_respuesta_min=resp_min, sla_resolucion_min=res_min, equipo_id=equipo.id if equipo else None,
             recurrente_id=recurrente_id, creado_por_id=creado_por.id if creado_por else None, en_nombre_motivo=motivo,
+            clasificacion=categoria.clasificacion or "INTERNA",
         )
         self.sla.inicializar(t)
         self.repo.add(t)
@@ -903,7 +906,7 @@ class TicketService:
 def a_listado(t: m.Ticket, sla: SlaService | None = None, ahora: datetime | None = None) -> dict:
     v = sla.proximo_vencimiento(t, ahora or utcnow()) if sla else None
     return {
-        "vence_tipo": v[0] if v else None, "vence_en_min": v[2] if v else None,
+        "vence_tipo": v[0] if v else None, "vence_en_min": v[2] if v else None, "clasificacion": t.clasificacion or "INTERNA",
         "id": t.id, "numero": t.numero, "asunto": t.asunto, "fecha_creacion": t.fecha_creacion,
         "solicitante_nombre": t.solicitante_nombre, "cliente": t.cliente.razon_social if t.cliente else None,
         "categoria": t.categoria.nombre, "subcategoria": t.subcategoria.nombre, "prioridad": t.prioridad.nombre,
@@ -986,6 +989,9 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "proveedor_caso": prov.caso_salida(caso) if caso else None,
         "proveedor_casos": [prov.caso_salida(c) for c in casos] if lectura else [],
         "facturable": bool(t.facturable),
+        "clasificacion": t.clasificacion or "INTERNA",
+        "retencion_legal": bool(t.retencion_legal),
+        "fecha_depuracion": t.fecha_depuracion,
         **_extras_tercera_ronda(svc, t, u, lectura),
     }
 

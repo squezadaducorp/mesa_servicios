@@ -207,11 +207,19 @@ function Politica() {
           <TextField size="small" type="number" value={p.dias_confianza} onChange={(e) => setP({ ...p, dias_confianza: Number(e.target.value) })}
             sx={{ width: 90 }} slotProps={{ htmlInput: { min: 0, max: 365, "aria-label": "Días de confianza" } }} />
         </Stack>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 1 }}>
+          <Box>
+            <Typography variant="body2">Días para configurarla cuando pasa a ser obligatoria</Typography>
+            <Typography variant="caption" color="text.secondary">Mientras tanto la persona entra y ve un aviso; 0 = se exige en el siguiente ingreso</Typography>
+          </Box>
+          <TextField size="small" type="number" value={p.dias_gracia ?? 7} onChange={(e) => setP({ ...p, dias_gracia: Number(e.target.value) })}
+            sx={{ width: 90 }} slotProps={{ htmlInput: { min: 0, max: 90, "aria-label": "Días de gracia" } }} />
+        </Stack>
         <TextField fullWidth size="small" label="Cuentas de emergencia fuera de la política" value={exentos} onChange={(e) => setExentos(e.target.value)}
           helperText="Correos separados por coma" sx={{ mt: 1 }} />
         <Alert severity="warning" sx={{ mt: 2 }}>
-          La cuenta de emergencia «admin» queda fuera de la política, con clave guardada en el servidor. Si alguien pierde el celular, use
-          «Restablecer» abajo.
+          La cuenta de emergencia «admin» queda fuera de la política: úsela solo en emergencias. Cada ingreso con ella envía un aviso
+          a los correos de «seguridad.correos_alerta» (Configuración). Si alguien pierde el celular, use «Restablecer» abajo.
         </Alert>
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
         <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>

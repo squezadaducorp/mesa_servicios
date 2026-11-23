@@ -1,4 +1,5 @@
 # Integración continua: pruebas, auditoría de dependencias y prueba del stack completo con Docker Compose
+# (el escaneo de imágenes y de secretos está en seguridad.yml)
 name: CI
 
 on:
@@ -85,6 +86,12 @@ jobs:
           B=http://localhost:8080/api/v1
           T=$(curl -sf -X POST $B/auth/login -H 'Content-Type: application/json' \
                 -d '{"correo":"admin@aducorp.com.ec","clave":"Aducorp2026!"}' | jq -r .access_token)
+          test -n "$T" && test "$T" != null
+          # La cuenta inicial nace con contraseña temporal: la API solo permite cambiarla (auditoría 2026-11)
+          test "$(curl -s -o /dev/null -w '%{http_code}' "$B/tickets?tamano=1" -H "Authorization: Bearer $T")" = 403
+          NUEVA="Ci-$(openssl rand -hex 6)#Xy9"
+          T=$(curl -sf -X POST $B/auth/cambiar-clave -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
+                -d "{\"clave_actual\":\"Aducorp2026!\",\"clave_nueva\":\"$NUEVA\"}" | jq -r .access_token)
           test -n "$T" && test "$T" != null
           N=$(curl -sf "$B/tickets?tamano=1" -H "Authorization: Bearer $T" | jq .total)
           echo "Tickets de demostración: $N"; test "$N" -ge 600

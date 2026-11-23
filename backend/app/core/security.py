@@ -28,7 +28,32 @@ def verificar_clave(clave: str, clave_hash: str | None) -> bool:
         return False
 
 
-def validar_politica_clave(clave: str) -> list[str]:
+# Palabras que hacen una contraseña fácil de adivinar aunque cumpla la complejidad (mejora 37, A.5.17).
+# Se revisan sin consultar servicios externos.
+PALABRAS_OBVIAS = (
+    "aducorp", "aduana", "ecuapass", "senae", "password", "passw0rd", "contrasena", "contraseña", "clave", "qwerty", "asdf",
+    "123456", "654321", "abc123", "abcdef", "admin", "bienvenid", "welcome", "ecuador", "guayaquil", "quito", "tababela",
+    "mesa", "soporte", "cambiar", "temporal", "invierno", "verano", "enero", "febrero", "diciembre", "iloveyou", "teamo",
+)
+
+
+def _sin_tildes(texto: str) -> str:
+    import unicodedata
+
+    return "".join(c for c in unicodedata.normalize("NFKD", texto.lower()) if not unicodedata.combining(c))
+
+
+def clave_obvia(clave: str, personales: tuple[str, ...] = ()) -> bool:
+    """¿Contiene el nombre de la empresa, una palabra típica, una secuencia o datos de la persona (correo, nombre)?"""
+    plano = _sin_tildes(clave)
+    simple = plano.translate(str.maketrans("@4310$5!7", "aaeiosslt"))   # Aduc0rp → aducorp, P@ssw0rd → password
+    for palabra in PALABRAS_OBVIAS + tuple(_sin_tildes(p) for p in personales if p and len(p) >= 4):
+        if palabra in plano or palabra in simple:
+            return True
+    return len(set(plano)) <= 3   # «Aaaaaaaa1!»
+
+
+def validar_politica_clave(clave: str, personales: tuple[str, ...] = ()) -> list[str]:
     errores = []
     if len(clave) < settings.CLAVE_MIN_LONGITUD:
         errores.append(f"Debe tener al menos {settings.CLAVE_MIN_LONGITUD} caracteres")
@@ -40,7 +65,17 @@ def validar_politica_clave(clave: str) -> list[str]:
         errores.append("Debe incluir un número")
     if not re.search(r"[^A-Za-z0-9]", clave):
         errores.append("Debe incluir un símbolo")
+    if clave_obvia(clave, personales):
+        errores.append("Es fácil de adivinar: evite el nombre de la empresa, su nombre o correo, palabras como «clave» o secuencias como 123456")
     return errores
+
+
+def datos_personales(nombre: str | None, correo: str | None) -> tuple[str, ...]:
+    """Partes del nombre y del correo que no deben aparecer en la contraseña."""
+    partes = [p for p in (nombre or "").replace(".", " ").split() if len(p) >= 4]
+    local = (correo or "").split("@")[0]
+    partes += [p for p in local.replace("_", ".").replace("-", ".").split(".") if len(p) >= 4]
+    return tuple(partes)
 
 
 def crear_access_token(usuario_id: int, rol: str, nombre: str) -> tuple[str, int]:

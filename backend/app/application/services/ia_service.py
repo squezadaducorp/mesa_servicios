@@ -104,7 +104,7 @@ class IaService:
 
     # ------------------------------------------------------------ respuesta
     def respuesta_sugerida(self, t: m.Ticket, usuario_id: int | None) -> tuple[str, str]:
-        if self._llm:
+        if self._llm and t.clasificacion != "CONFIDENCIAL":   # (42) lo confidencial nunca sale a un servicio externo
             try:
                 texto = self._llm.respuesta(self._contexto(t))
                 self._guardar("RESPUESTA", {"texto": texto}, None, "LLM", t.id, usuario_id)
@@ -122,7 +122,7 @@ class IaService:
     def resumen(self, t: m.Ticket, usuario_id: int | None = None) -> tuple[str, str]:
         comentarios = TicketRepository(self.session).comentarios(t.id, incluir_internos=True)
         texto, proveedor = None, "LOCAL"
-        if self._llm:
+        if self._llm and t.clasificacion != "CONFIDENCIAL":
             try:
                 texto, proveedor = self._llm.resumen(self._contexto(t, comentarios)), "LLM"
             except Exception:

@@ -1,0 +1,18 @@
+# Configuración de gitleaks (mejora 41): reglas por defecto + excepciones de valores de ejemplo que no son secretos.
+title = "Mesa de Servicios ADUCORP"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Valores de ejemplo y datos de prueba"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)backend/tests/''',
+  '''(^|/)frontend/package-lock\.json$''',
+  '''(^|/)docs/''',
+]
+regexes = [
+  '''Aducorp2026!''',
+  '''cambie-esto''',
+]

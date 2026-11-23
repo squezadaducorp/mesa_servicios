@@ -258,6 +258,7 @@ export interface PoliticaDosPasos {
   dias_confianza: number;
   exentos: string[];
   correo_activo?: boolean;
+  dias_gracia?: number;
 }
 
 export interface EstadoUsuarioDosPasos {

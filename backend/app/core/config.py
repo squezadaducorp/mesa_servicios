@@ -65,12 +65,16 @@ class Settings(BaseSettings):
     BUZON_CORREO: str = "soporte@aducorp.com.ec"
     BUZON_DOMINIOS_INTERNOS: list[str] = Field(default_factory=lambda: ["aducorp.com.ec"])
     BUZON_LOTE: int = 25
+    # Solo se confía en el remitente («From») si Exchange lo autenticó: correo interno del tenant, dmarc=pass o compauth=pass.
+    # Si no, el correo se trata como de un externo (sin cuenta, sin hablar a nombre de un empleado y sin acuse).
+    BUZON_VERIFICAR_REMITENTE: bool = True
     EMAIL_TRANSPORTE: str = "smtp"          # smtp | graph (envía desde BUZON_CORREO)
 
     # Formulario público (/solicitud): personas sin cuenta registran tickets
     FORMULARIO_WEB_ENABLED: bool = True
     FORMULARIO_WEB_CORREO: str = "formulario-web@aducorp.com.ec"   # cuenta de sistema que figura como solicitante
     FORMULARIO_WEB_MAX_POR_HORA: int = 5    # solicitudes por IP y por correo en una hora (por proceso)
+    FORMULARIO_WEB_MAX_GLOBAL_HORA: int = 30  # solicitudes en total por hora, contadas en la base (todos los procesos)
     FORMULARIO_WEB_ADJUNTOS_MAX: int = 3    # archivos por solicitud (0 = sin adjuntos)
     FORMULARIO_WEB_ADJUNTOS_MAX_MB: int = 5  # por archivo; nunca más que ADJUNTOS_MAX_MB
     FORMULARIO_WEB_ADJUNTOS_EXTENSIONES: str = "pdf,jpg,jpeg,png,doc,docx,xls,xlsx"  # se cruza con ADJUNTOS_EXTENSIONES

@@ -35,6 +35,7 @@ type FormCat = {
   visualizadores: number[];
   pide_equipo: boolean;
   restringida_en_nombre: boolean;
+  clasificacion: "PUBLICA" | "INTERNA" | "CONFIDENCIAL";
 };
 
 export default function Catalogo() {
@@ -131,8 +132,9 @@ export default function Catalogo() {
             visualizadores: c.visualizadores ?? [],
             pide_equipo: !!c.pide_equipo,
             restringida_en_nombre: !!c.restringida_en_nombre,
+            clasificacion: c.clasificacion ?? "INTERNA",
           }
-        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [], correos_copia: [], visualizadores: [], pide_equipo: false, restringida_en_nombre: false },
+        : { codigo: "", nombre: "", descripcion: "", palabras_clave: "", color: "#1367AC", orden: (categorias.data?.length ?? 0) + 1, modo_asignacion: "PRINCIPAL", supervisor_id: "", activo: true, responsables: [], correos_copia: [], visualizadores: [], pide_equipo: false, restringida_en_nombre: false, clasificacion: "INTERNA" },
     );
 
   const alternarResp = (id: number) =>
@@ -343,6 +345,13 @@ export default function Catalogo() {
                 label="Pedir «Equipo afectado» al crear el ticket (para Sistemas, equipos, impresoras…)" />
               <FormControlLabel control={<Switch checked={fc.restringida_en_nombre} onChange={(e) => setFc({ ...fc, restringida_en_nombre: e.target.checked })} />}
                 label="Restringida: no se puede pedir en nombre de otra persona (accesos, contraseñas, equipo nuevo)" />
+              <TextField select label="Clasificación de sus tickets" value={fc.clasificacion}
+                onChange={(e) => setFc({ ...fc, clasificacion: e.target.value as FormCat["clasificacion"] })}
+                helperText="Confidencial: solo lo ven el solicitante, el responsable, el supervisor y TI; los correos no llevan el contenido. Úsela para Talento Humano, nómina o legal.">
+                <MenuItem value="PUBLICA">Pública</MenuItem>
+                <MenuItem value="INTERNA">Interna (por defecto)</MenuItem>
+                <MenuItem value="CONFIDENCIAL">Confidencial</MenuItem>
+              </TextField>
               <FormControlLabel control={<Switch checked={fc.activo} onChange={(e) => setFc({ ...fc, activo: e.target.checked })} />} label="Activa" />
             </Stack>
           </DialogContent>

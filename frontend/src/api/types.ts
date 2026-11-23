@@ -23,6 +23,8 @@ export interface UsuarioSesion extends UsuarioResumen {
   telefono?: string | null;
   permisos: string[];
   debe_cambiar_clave: boolean;
+  /** Verificación en dos pasos obligatoria aún sin configurar: días que le quedan (mejora 37) */
+  dosf_dias_restantes?: number | null;
 }
 
 export interface TokenSalida {
@@ -85,6 +87,7 @@ export interface Categoria {
   visualizadores?: number[];
   pide_equipo?: boolean;
   restringida_en_nombre?: boolean;
+  clasificacion?: import("./cumplimiento").Clasificacion | null;
 }
 
 export interface Cliente {
@@ -245,7 +248,7 @@ export interface Escalamiento {
 export type AccionTicket =
   | "editar" | "asignar" | "cambiar_estado" | "escalar" | "cerrar" | "reabrir" | "comentar"
   | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia" | "calificar" | "vincular"
-  | "escalar_proveedor" | "seguir" | "dejar_seguir" | "visualizadores";
+  | "escalar_proveedor" | "seguir" | "dejar_seguir" | "visualizadores" | "clasificar";
 
 export interface CopiaTicket {
   correo: string;
@@ -258,6 +261,9 @@ export interface TicketDetalle extends ExtrasTercera {
   proveedor_caso: import("./ronda4c").CasoProveedor | null;
   proveedor_casos: import("./ronda4c").CasoProveedor[];
   facturable: boolean;
+  clasificacion?: import("./cumplimiento").Clasificacion;
+  retencion_legal?: boolean;
+  fecha_depuracion?: string | null;
   id: number;
   numero: string;
   asunto: string;
