@@ -46,7 +46,7 @@ def test_catalogo_alta_de_usuario_pide_aprobacion_y_reparte_tareas(client, como)
 
     body = {"respuestas": {"nombres": "Andrés Sebastián Villacís Haro", "cedula": "1716458823", "fecha_ingreso": "2026-12-01",
                            "area": area_id("Operaciones Aduaneras"), "cargo": "Asistente de liquidación",
-                           "jefe": usuario_id("gerencia"), "sucursal": "Guayaquil · Puerto Marítimo"},
+                           "jefe": usuario_id("gerencia"), "sucursal": "Tababela"},
             "opciones": ["correo", "portatil", "ecuapass"], "observaciones": "Reemplaza a Daniela Cedeño."}
     falta = client.post(f"{API}/servicios/{alta['id']}/solicitar", json={**body, "respuestas": {**body["respuestas"], "cedula": "123"}}, headers=hm)
     assert falta.status_code == 422 and "Cédula" in falta.json()["detail"]
