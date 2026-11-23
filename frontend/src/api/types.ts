@@ -23,7 +23,6 @@ export interface UsuarioSesion extends UsuarioResumen {
   telefono?: string | null;
   permisos: string[];
   debe_cambiar_clave: boolean;
-  equipo_ti?: boolean;
 }
 
 export interface TokenSalida {
@@ -391,7 +390,6 @@ export interface UsuarioAdmin {
   activo: boolean;
   bloqueado: boolean;
   ultimo_login: string | null;
-  equipo_ti: boolean;
 }
 
 export interface Rol {

@@ -97,7 +97,7 @@ class Usuario(Base):
     dosf_fecha: Mapped[datetime | None] = mapped_column(DateTime)
     dosf_ultimo_paso: Mapped[int | None] = mapped_column(BigInteger)   # último periodo TOTP aceptado (no se reutiliza)
     dosf_exigido_desde: Mapped[datetime | None] = mapped_column(DateTime)
-    equipo_ti: Mapped[bool] = mapped_column(Boolean, default=False)   # ve artículos internos y escribe en la base de conocimiento (35)
+    equipo_ti: Mapped[bool] = mapped_column(Boolean, default=False)   # sin uso: la base de conocimiento es de todo el personal (35)
 
     rol: Mapped[Rol] = relationship(lazy="joined")
     area: Mapped[Area | None] = relationship(lazy="joined")
@@ -648,7 +648,7 @@ class KbArticulo(Base):
     categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categorias.id"))
     subcategoria_id: Mapped[int | None] = mapped_column(ForeignKey("subcategorias.id"))
     estado: Mapped[str] = mapped_column(String(10), default="BORRADOR")        # BORRADOR | PUBLICADO | ARCHIVADO
-    visibilidad: Mapped[str] = mapped_column(String(10), default="EXTERNO")   # EXTERNO (todos) | INTERNO (solo equipo de TI)
+    visibilidad: Mapped[str] = mapped_column(String(10), default="EXTERNO")   # EXTERNO (también clientes y solicitantes de afuera) | INTERNO (todo el personal de Aducorp)
     articulo_relacionado_id: Mapped[int | None] = mapped_column(ForeignKey("kb_articulos.id"))   # versión externa/interna vinculada
     ticket_origen_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
     vistas: Mapped[int] = mapped_column(Integer, default=0)
