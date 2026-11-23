@@ -20,14 +20,14 @@ PERMISOS_POR_ROL = {
                    "ticket.editar", "ticket.asignar", "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir",
                    "ticket.comentar", "ticket.adjuntar", "reporte.ver", "dashboard.ver", "datos.exportar", "ia.usar",
                    "kb.gestionar", "respuestas.gestionar", "recurrentes.gestionar", "reportes.programar", "inventario.ver",
-                   "inventario.gestionar", "aprobaciones.gestionar", "avisos.gestionar"],
+                   "inventario.gestionar", "aprobaciones.gestionar", "avisos.gestionar", "servicios.gestionar", "cambios.gestionar"],
     "SUPERVISOR": ["ticket.ver_area", "ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.asignar",
                    "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar",
                    "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver", "avisos.gestionar"],
     "ANALISTA": ["ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.escalar", "ticket.cambiar_estado",
                  "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar", "kb.gestionar", "inventario.ver", "ticket.asignar"],
     "CLIENTE": ["ticket.ver_propios", "ticket.crear", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar"],
-    "GERENCIA": ["ticket.ver_todos", "reporte.ver", "dashboard.ver", "datos.exportar", "inventario.ver"],
+    "GERENCIA": ["ticket.ver_todos", "reporte.ver", "dashboard.ver", "datos.exportar", "inventario.ver", "cambios.ver"],
 }
 TODOS_PERMISOS = sorted({p for ps in PERMISOS_POR_ROL.values() for p in ps} | {
     "sistema.administrar", "usuario.administrar", "rol.administrar", "categoria.administrar", "registro.eliminar", "auditoria.ver"})
@@ -93,6 +93,7 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
         for sub in cat["subs"]:
             session.add(m.Subcategoria(categoria_id=c.id, nombre=sub, palabras_clave=sub.lower(),
                                        respuesta_plantilla="Estimado/a {solicitante}: recibimos su solicitud {numero}. {responsable} la está revisando."))
+    sembrar_cuarta_ronda(session, analistas)
     session.add(m.Cliente(ruc="0992345678001", razon_social="Importadora Andina del Pacífico S.A.", es_vip=True))
     session.add(m.Cliente(ruc="1791234567001", razon_social="Comercial Quitumbe Cía. Ltda."))
     session.add(m.Cliente(razon_social="Aducorp CIA LTDA", nombre_comercial="ADUCORP", dominios=DOMINIO))
@@ -120,7 +121,8 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                            ("APROBACION_RESULTADO", "[{numero}] Su solicitud fue {resultado}"),
                            ("TICKET_NUEVO_RESPONSABLE", "[{numero}] Ahora lo atiende {responsable}"),
                            ("TICKETS_UNIDOS", "[{numero}] Su solicitud se atiende junto con otras"),
-                           ("SEGUIMIENTO_ENLACE", "[{numero}] Enlace para ver el estado de su solicitud")):
+                           ("SEGUIMIENTO_ENLACE", "[{numero}] Enlace para ver el estado de su solicitud"),
+                           ("TAREA_ASIGNADA", "[{numero}] Tarea para usted: {tarea}")):
         session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} {restante} "
                                       "{ausente} {reemplazo} {creado_por} {motivo} {resultado} {pedido_por} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a> "
                                       "<a href='{url_aprobar}'>aprobar</a> <a href='{url_seguimiento}'>seguimiento</a></p>"))
@@ -131,9 +133,37 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                  ("seguridad.inactividad_min", "30"), ("sla.avisar_por", "tiempo"), ("sla.aviso_previo_1_min", "120"),
                  ("sla.aviso_previo_2_min", "30"), ("sla.aviso_respuesta_min", "60"), ("sla.resumen_diario_hora", "08:30"),
                  ("encuesta.activa", "si"), ("encuesta.aviso_nota_max", "2"), ("seguimiento.activo", "si"),
-                 ("seguimiento.dias_vigencia", "30"), ("seguimiento.permitir_responder", "si")):
+                 ("seguimiento.dias_vigencia", "30"), ("seguimiento.permitir_responder", "si"),
+                 ("cambios.jefe_ti", f"admin@{DOMINIO}"), ("cambios.gerencia", f"gerencia@{DOMINIO}"),
+                 ("cambios.congelar_cierre_mes", "si")):
         session.add(m.Configuracion(clave=k, valor=v))
     session.commit()
+
+
+def sembrar_cuarta_ronda(session: Session, analistas: dict) -> None:
+    """Categoría «Servicios de TI» y los servicios iniciales del catálogo (mejora 26)."""
+    import json
+
+    from app.domain.servicios_base import CATEGORIA, SERVICIOS, normalizado
+
+    cat = m.Categoria(codigo=CATEGORIA["codigo"], nombre=CATEGORIA["nombre"], orden=10, palabras_clave=CATEGORIA["palabras"],
+                      modo_asignacion="PRINCIPAL")
+    session.add(cat)
+    session.flush()
+    primero = next(iter(analistas.values()))
+    session.add(m.CategoriaResponsable(categoria_id=cat.id, usuario_id=primero.id, es_principal=True))
+    subs = {}
+    for n in CATEGORIA["subcategorias"]:
+        subs[n] = m.Subcategoria(categoria_id=cat.id, nombre=n, palabras_clave=n.lower())
+        session.add(subs[n])
+    session.flush()
+    for i, x in enumerate(SERVICIOS, 1):
+        campos, opciones = normalizado(x)
+        session.add(m.ServicioCatalogo(nombre=x["nombre"], descripcion=x["descripcion"], icono=x["icono"], grupo=x["grupo"],
+                                       categoria_id=cat.id, subcategoria_id=subs[x["sub"]].id, plazo_horas=x["plazo_horas"],
+                                       plazo_texto=x.get("plazo_texto"), requiere_aprobacion=x["requiere_aprobacion"], lo_pide=x.get("lo_pide"),
+                                       titulo_campos=x.get("titulo_campos"), titulo_opciones=x.get("titulo_opciones"), aviso=x.get("aviso"),
+                                       campos=json.dumps(campos, ensure_ascii=False), opciones=json.dumps(opciones, ensure_ascii=False), orden=i))
 
 
 if __name__ == "__main__":

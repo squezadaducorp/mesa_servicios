@@ -122,9 +122,17 @@ class AprobacionService:
         return u, None
 
     # ============================================================ al crear
-    def iniciar(self, svc, t: m.Ticket, ctx: Contexto, ahora: datetime) -> bool:
-        """Aplica la regla al ticket recién creado. Devuelve True si quedó «Por aprobar» (no se asigna todavía)."""
+    def iniciar(self, svc, t: m.Ticket, ctx: Contexto, ahora: datetime, forzada: tuple[str, int | None] | None = None) -> bool:
+        """Aplica la regla al ticket recién creado. Devuelve True si quedó «Por aprobar» (no se asigna todavía).
+
+        ``forzada`` = (tipo, usuario_id): aprobación que pide un servicio del catálogo aunque la categoría no tenga regla
+        (p. ej. el jefe directo de quien ingresa, elegido en el formulario). Una regla de la categoría siempre gana.
+        """
         regla = self.regla_para(t.categoria_id, t.subcategoria_id)
+        if regla is None and forzada:
+            # Regla en memoria (no se guarda): un solo nivel, respeta el modo ausente y la auto-aprobación
+            regla = m.ReglaAprobacion(nivel1_tipo=forzada[0], nivel1_usuario_id=forzada[1], usar_reemplazo=True, auto_si_aprobador=True,
+                                      recordar_horas=4)
         if regla is None:
             return False
         return self._siguiente_nivel(svc, t, regla, 1, ctx, ahora)
@@ -220,6 +228,8 @@ class AprobacionService:
 
     def _liberar(self, svc, t: m.Ticket, u: m.Usuario | None, ctx: Contexto, ahora: datetime) -> None:
         """Aprobado en todos los niveles: pasa a Nuevo (el SLA se reanuda) y se asigna como cualquier ticket."""
+        from app.application.services.catalogo_servicio_service import CatalogoServicioService
+
         svc._aplicar_estado(t, Estado.POR_APROBAR, Estado.NUEVO, u, ctx, ahora)
         responsable = t.responsable or svc.ia.sugerir_responsable(t.categoria)
         if responsable:
@@ -227,6 +237,7 @@ class AprobacionService:
         else:
             svc.notif.notificar([svc._supervisor(t), *coordinadores(self.session)], "TICKET_SIN_ASIGNAR", f"{t.numero} pendiente de asignación",
                                 f"«{t.asunto}» fue aprobado y no tiene responsable.", t, "AVISO")
+        CatalogoServicioService(self.session).avisar_tareas(t)   # solicitudes del catálogo: cada responsable recibe su tarea
 
     def _resultado(self, svc, t: m.Ticket, aprobador: m.Usuario, resultado: str, comentario: str | None) -> None:
         personas = [t.solicitante, t.creado_por]

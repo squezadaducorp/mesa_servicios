@@ -33,6 +33,7 @@ import { Cargando, ErrorCarga, Vacio } from "../components/Comunes";
 import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/formato";
 import TicketDialogos, { estadosDestino, type Dialogo } from "./TicketDialogos";
 import { AlertasTercera, PanelTercera } from "./tercera/TicketTercera";
+import PanelTareas from "./cuarta/PanelTareas";
 import { AdjuntosDeComentario, ArchivosPorEnviar, imagenesDe, nombrarCaptura } from "../components/CapturasComentario";
 
 /** Encuesta de satisfacción: el solicitante califica (y así cierra) un ticket resuelto; luego se muestra la nota. */
@@ -693,6 +694,8 @@ export default function TicketDetalle() {
               {t.sla_minutos_extension > 0 && ` Incluye extensión de ${duracion(t.sla_minutos_extension)}.`}
             </Typography>
           </Paper>
+
+          {t.servicio && <PanelTareas ticketId={t.id} s={t.servicio} onCambio={() => q.refetch()} />}
 
           <PanelTercera t={t} onCambio={() => q.refetch()} />
 

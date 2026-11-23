@@ -2,11 +2,29 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useQueryClient } from "@tanstack/react-query";
 import { actividad, post, renovar, sesion } from "../api/client";
 import type { TokenSalida, UsuarioSesion } from "../api/types";
+import type { SegundoPaso } from "../api/cuarta";
+
+const claveEquipo = (correo: string) => `aducorp.equipo.${correo.trim().toLowerCase()}`;
+
+/** Recuerda el equipo de confianza de la verificación en dos pasos (por cuenta). */
+export const equipoConfianza = {
+  leer(correo: string): string | null {
+    try { return localStorage.getItem(claveEquipo(correo)); } catch { return null; }
+  },
+  guardar(correo: string, token?: string | null) {
+    try { if (token) localStorage.setItem(claveEquipo(correo), token); } catch { /* sin almacenamiento */ }
+  },
+  olvidar(correo: string) {
+    try { localStorage.removeItem(claveEquipo(correo)); } catch { /* sin almacenamiento */ }
+  },
+};
+
+export type ResultadoLogin = { usuario: UsuarioSesion; segundo_paso?: undefined } | { usuario?: undefined; segundo_paso: SegundoPaso };
 
 interface Auth {
   usuario: UsuarioSesion | null;
   cargando: boolean;
-  login: (correo: string, clave: string) => Promise<UsuarioSesion>;
+  login: (correo: string, clave: string) => Promise<ResultadoLogin>;
   logout: (motivo?: string) => Promise<void>;
   /** Minutos sin actividad antes de cerrar la sesión (0 = sin límite). */
   inactividadMin: number;
@@ -65,9 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (correo: string, clave: string) => {
-      const t = await post<TokenSalida>("/auth/login", { correo, clave });
-      aplicarToken(t);
-      return t.usuario;
+      const r = await post<TokenSalida | { segundo_paso: SegundoPaso }>("/auth/login", { correo, clave, equipo_token: equipoConfianza.leer(correo) });
+      if ("segundo_paso" in r) return { segundo_paso: r.segundo_paso };
+      aplicarToken(r);
+      return { usuario: r.usuario };
     },
     [aplicarToken],
   );

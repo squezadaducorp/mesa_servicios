@@ -4,13 +4,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Alert, Box, Button, Divider, IconButton, InputAdornment, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import { useAuth } from "../auth/AuthContext";
+import { equipoConfianza, useAuth } from "../auth/AuthContext";
+import type { SegundoPaso } from "../api/cuarta";
+import type { TokenSalida } from "../api/types";
+import LoginSegundoPaso from "./LoginSegundoPaso";
+import ShieldIcon from "@mui/icons-material/Shield";
 import { get, urlApi } from "../api/client";
 import { mensajeError } from "../components/Aviso";
 import { marca } from "../theme";
 
 export default function Login() {
-  const { login, usuario, motivoCierre } = useAuth();
+  const { login, usuario, motivoCierre, aplicarToken } = useAuth();
+  const [paso, setPaso] = useState<SegundoPaso | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const [correo, setCorreo] = useState("");
@@ -32,13 +37,23 @@ export default function Login() {
 
   if (usuario) return <Navigate to={usuario.debe_cambiar_clave ? "/cambiar-clave" : destino} replace state={{ desde: destino }} />;
 
+  const terminarSegundoPaso = (t: TokenSalida) => {
+    equipoConfianza.guardar(correo.trim(), t.equipo_token);
+    aplicarToken(t);
+    navigate(t.usuario.debe_cambiar_clave ? "/cambiar-clave" : destino, { replace: true, state: { desde: destino } });
+  };
+
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     setEnviando(true);
     try {
-      const u = await login(correo.trim(), clave);
-      navigate(u.debe_cambiar_clave ? "/cambiar-clave" : destino, { replace: true, state: { desde: destino } });
+      const r = await login(correo.trim(), clave);
+      if (r.segundo_paso) {
+        setPaso(r.segundo_paso);
+        return;
+      }
+      navigate(r.usuario.debe_cambiar_clave ? "/cambiar-clave" : destino, { replace: true, state: { desde: destino } });
     } catch (err) {
       setError(mensajeError(err));
     } finally {
@@ -64,15 +79,31 @@ export default function Login() {
             Mesa de Servicios
           </Typography>
           <Typography sx={{ color: marca.celeste, fontSize: 18, maxWidth: 460 }}>
-            Gestión de requerimientos aduaneros con control de SLA, escalamiento automático e indicadores en tiempo real.
+            {paso ? "ADUCORP · Agencia de Aduanas" : "Gestión de requerimientos aduaneros con control de SLA, escalamiento automático e indicadores en tiempo real."}
           </Typography>
+          {paso && (
+            <Box sx={{ mt: 4, p: 3, borderRadius: 3, bgcolor: "rgba(255,255,255,.07)", maxWidth: 520 }}>
+              <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 1 }}>
+                <ShieldIcon sx={{ color: "#F2C14E" }} />
+                <Typography sx={{ fontWeight: 700, color: "#fff" }}>¿Por qué un segundo paso?</Typography>
+              </Stack>
+              <Typography variant="body2" sx={{ color: "#C9D6E8" }}>
+                Aunque alguien obtenga su contraseña, no podrá entrar sin el código de su celular. Protege los datos de clientes, DAI y accesos a
+                ECUAPASS que viven en la Mesa.
+              </Typography>
+            </Box>
+          )}
         </Box>
         <Typography variant="caption" sx={{ color: "#8FA6C5" }}>
           © {new Date().getFullYear()} ADUCORP · Agencia de Aduanas · Ecuador
         </Typography>
       </Box>
       <Box sx={{ display: "grid", placeItems: "center", p: 2, bgcolor: "background.default" }}>
-        <Paper sx={{ p: { xs: 3, sm: 5 }, width: "100%", maxWidth: 440 }}>
+        <Paper sx={{ p: { xs: 3, sm: 5 }, width: "100%", maxWidth: paso ? 560 : 440 }}>
+          {paso ? (
+            <LoginSegundoPaso paso={paso} correo={correo.trim()} onListo={terminarSegundoPaso} onVolver={() => { setPaso(null); setClave(""); }} />
+          ) : (
+          <>
           <Box component="img" src="/logo-aducorp.png" alt="ADUCORP" sx={{ height: 56, mb: 3, display: "block", mx: "auto" }} />
           <Typography variant="h5" sx={{ textAlign: "center", mb: 0.5 }}>
             Iniciar sesión
@@ -146,6 +177,8 @@ export default function Login() {
               Registre su solicitud aquí
             </Link>
           </Typography>
+          </>
+          )}
         </Paper>
       </Box>
     </Box>

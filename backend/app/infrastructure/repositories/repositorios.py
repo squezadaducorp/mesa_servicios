@@ -145,6 +145,8 @@ class TicketRepository(Repository[m.Ticket]):
             condiciones.append(m.Ticket.categoria_id.in_(select(m.Categoria.id).where(m.Categoria.supervisor_id == usuario.id)))
         if Permiso.TICKET_VER_ASIGNADOS in permisos:
             condiciones.append(m.Ticket.responsable_id == usuario.id)
+            # tareas del catálogo de servicios repartidas a otros analistas (26)
+            condiciones.append(m.Ticket.id.in_(select(m.TicketTarea.ticket_id).where(m.TicketTarea.responsable_id == usuario.id)))
             if incluir_participados:
                 condiciones.append(m.Ticket.id.in_(self.ids_participados(usuario.id)))
         if Permiso.TICKET_VER_PROPIOS in permisos:

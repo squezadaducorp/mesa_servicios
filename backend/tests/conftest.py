@@ -8,7 +8,7 @@ os.environ["AI_PROVIDER"] = "local"
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app.api.v1.routers.auth import limitador_login  # noqa: E402
+from app.api.v1.routers.auth import limitador_2fa, limitador_login  # noqa: E402
 from app.application.services import sla_service  # noqa: E402
 from app.infrastructure.db.semilla import sembrar  # noqa: E402
 from app.infrastructure.db.session import Base, SessionLocal, engine  # noqa: E402
@@ -24,6 +24,7 @@ def db():
     Base.metadata.create_all(engine)
     sla_service.invalidar_calendario()
     limitador_login.reiniciar()
+    limitador_2fa.reiniciar()
     with SessionLocal() as s:
         sembrar(s)
     yield

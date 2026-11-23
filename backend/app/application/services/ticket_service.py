@@ -93,12 +93,14 @@ class TicketService:
             a.append("reabrir")
         if propio and estado in (Estado.RESUELTO, Estado.CERRADO) and EncuestaService(self.session).puede_calificar(u, t):
             a.append("calificar")
-        if u.tiene(Permiso.TICKET_COMENTAR) and (gestor or propio):
+        tarea = not gestor and not propio and self._tiene_tarea(u, t)   # analista con una tarea del catálogo en este ticket
+        if u.tiene(Permiso.TICKET_COMENTAR) and (gestor or propio or tarea):
             a.append("comentar")
-            if gestor:
+            if gestor or tarea:
                 a.append("nota_interna")
+            if gestor:
                 a.append("copias")
-        if u.tiene(Permiso.TICKET_ADJUNTAR) and (gestor or propio):
+        if u.tiene(Permiso.TICKET_ADJUNTAR) and (gestor or propio or tarea):
             a.append("adjuntar")
         if u.tiene(Permiso.SLA_MODIFICAR) and abierto:
             a.append("excepcion_sla")
@@ -111,6 +113,10 @@ class TicketService:
         if gestor and u.tiene(Permiso.TICKET_EDITAR):
             a.append("vincular")
         return a
+
+    def _tiene_tarea(self, u: m.Usuario, t: m.Ticket) -> bool:
+        return self.session.scalar(select(m.TicketTarea.id).where(m.TicketTarea.ticket_id == t.id,
+                                                                  m.TicketTarea.responsable_id == u.id).limit(1)) is not None
 
     def cliente_por_correo(self, *correos: str | None) -> int | None:
         """Cliente cuya empresa usa el dominio del correo (p. ej. @aducorp.com.ec → Aducorp CIA LTDA). Ignora las cuentas técnicas."""
@@ -154,7 +160,8 @@ class TicketService:
 
     # ================================================================== crear
     def crear(self, dto: s.TicketCrear, ctx: Contexto, *, sistema: bool = False, canal: str | None = None,
-              recurrente_id: int | None = None) -> m.Ticket:
+              recurrente_id: int | None = None, aprobacion: tuple[str, int | None] | None = None,
+              resolucion_min: int | None = None, al_crear=None) -> m.Ticket:
         """Registra un ticket. ``sistema`` lo usa el worker (tickets recurrentes): omite los permisos del usuario."""
         u: m.Usuario | None = ctx.usuario
         if not sistema and not u.tiene(Permiso.TICKET_CREAR):
@@ -201,6 +208,8 @@ class TicketService:
         cliente_id = dto.cliente_id or self.cliente_por_correo(str(dto.correo or ""), solicitante.correo)
         ahora = utcnow()
         resp_min, res_min = self.sla.minutos_sla(categoria.id, prioridad)
+        if resolucion_min:   # plazo comprometido del servicio del catálogo
+            res_min = max(resolucion_min, resp_min)
         t = m.Ticket(
             numero=self.repo.siguiente_numero(datetime.now(ZoneInfo(settings.ZONA_HORARIA)).year),
             asunto=dto.asunto.strip(), descripcion=dto.descripcion.strip(),
@@ -238,7 +247,9 @@ class TicketService:
             from app.application.services.aviso_service import AvisoService
 
             AvisoService(self.session).vincular_ticket(dto.aviso_id, t, solicitante)
-        if not sistema and AprobacionService(self.session).iniciar(self, t, ctx, ahora):
+        if al_crear is not None:   # p. ej. el catálogo guarda el formulario y las tareas antes de asignar
+            al_crear(t)
+        if not sistema and AprobacionService(self.session).iniciar(self, t, ctx, ahora, aprobacion):
             pass   # queda «Por aprobar»: se asigna cuando el jefe lo apruebe
         elif responsable:
             self._asignar(t, responsable, u if dto.responsable_id else None, "MANUAL" if dto.responsable_id else "AUTOMATICA",
@@ -870,7 +881,7 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
     gestor = svc.es_gestor(u, t) or u.tiene(Permiso.TICKET_VER_TODOS)
     # Quien fue responsable antes conserva la lectura completa (historial, notas internas), pero no las acciones.
     participante = not gestor and svc.repo.participo(u.id, t.id)
-    lectura = gestor or participante
+    lectura = gestor or participante or svc._tiene_tarea(u, t)   # quien tiene una tarea del catálogo ve las notas internas
     resumen = lambda x: {"id": x.id, "nombre": x.nombre, "correo": x.correo, "cargo": x.cargo} if x else None  # noqa: E731
     comentarios = svc.repo.comentarios(t.id, incluir_internos=lectura)
     visibles = {c.id for c in comentarios}
@@ -931,6 +942,7 @@ def _extras_tercera_ronda(svc: TicketService, t: m.Ticket, u: m.Usuario, lectura
     """Aprobaciones (21), tickets vinculados (22), avisos generales (24) y enlace de seguimiento (20)."""
     from app.application.services.aviso_service import AvisoService
     from app.application.services.seguimiento_service import SeguimientoService
+    from app.application.services.catalogo_servicio_service import CatalogoServicioService
     from app.application.services.vinculo_service import VinculoService
 
     aprob = AprobacionService(svc.session)
@@ -945,6 +957,7 @@ def _extras_tercera_ronda(svc: TicketService, t: m.Ticket, u: m.Usuario, lectura
         "duplicado_de": vinculos.duplicado_de(t),
         "avisos": AvisoService(svc.session).de_ticket(t.id),
         "seguimiento_url": SeguimientoService(svc.session).url(t) if lectura else None,
+        "servicio": CatalogoServicioService(svc.session).de_ticket(t, u, svc.es_gestor(u, t)),
     }
 
 

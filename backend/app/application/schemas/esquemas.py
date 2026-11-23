@@ -38,6 +38,7 @@ class Mensaje(Modelo):
 class LoginEntrada(BaseModel):
     correo: str = Field(examples=["admin@aducorp.com.ec"], description="Correo o usuario de dominio")
     clave: str = Field(examples=["Aducorp2026!"])
+    equipo_token: str | None = Field(None, max_length=200, description="Equipo de confianza (verificación en dos pasos)")
 
 
 class RefreshEntrada(BaseModel):
@@ -73,6 +74,23 @@ class TokenSalida(Modelo):
     expires_in: int
     inactividad_min: int = 0
     usuario: UsuarioSesion
+    equipo_token: str | None = None          # «Confiar en este equipo» (verificación en dos pasos)
+    codigos_respaldo: list[str] | None = None   # al activar la verificación durante el inicio de sesión
+
+
+class SegundoPaso(BaseModel):
+    desafio: str
+    modo: str                   # VERIFICAR | ACTIVAR
+    metodo: str | None = None   # APP | CORREO
+    nombre: str
+    correo_mascara: str
+    puede_correo: bool
+    codigo_enviado: bool = False
+    dias_confianza: int = 30
+
+
+class SegundoPasoSalida(BaseModel):
+    segundo_paso: SegundoPaso
 
 
 # ------------------------------------------------------------- catálogos
@@ -596,6 +614,7 @@ class TicketDetalle(Modelo):
     duplicado_de: dict | None = Field(default=None, description="Ticket principal si este se unió como duplicado")
     avisos: list[dict] = Field(default_factory=list, description="Avisos generales a los que pertenece")
     seguimiento_url: str | None = Field(default=None, description="Enlace de seguimiento sin cuenta que recibe el solicitante")
+    servicio: dict | None = Field(default=None, description="Formulario del catálogo de servicios y sus tareas")
 
 
 class FiltroTickets(BaseModel):

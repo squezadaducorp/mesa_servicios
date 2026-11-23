@@ -22,4 +22,7 @@ export const P = {
   INVENTARIO: "inventario.gestionar",
   APROBACIONES: "aprobaciones.gestionar",
   AVISOS: "avisos.gestionar",
+  SERVICIOS: "servicios.gestionar",
+  CAMBIOS: "cambios.gestionar",
+  CAMBIOS_VER: "cambios.ver",
 } as const;

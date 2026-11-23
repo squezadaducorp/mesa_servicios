@@ -30,6 +30,13 @@ const Aprobaciones = lazy(() => import("./pages/tercera/Aprobaciones"));
 const ReglasAprobacion = lazy(() => import("./pages/tercera/ReglasAprobacion"));
 const AvisosGenerales = lazy(() => import("./pages/tercera/AvisosGenerales"));
 const SeguimientoPublico = lazy(() => import("./pages/tercera/SeguimientoPublico"));
+const CatalogoServicios = lazy(() => import("./pages/cuarta/Catalogo"));
+const ServicioFormulario = lazy(() => import("./pages/cuarta/ServicioFormulario"));
+const AdminServicios = lazy(() => import("./pages/cuarta/AdminServicios"));
+const Cambios = lazy(() => import("./pages/cuarta/Cambios"));
+const CambioNuevo = lazy(() => import("./pages/cuarta/CambioNuevo"));
+const CambioDetalle = lazy(() => import("./pages/cuarta/CambioDetalle"));
+const Seguridad = lazy(() => import("./pages/cuarta/Seguridad"));
 const SolicitudPublica = lazy(() => import("./pages/SolicitudPublica"));
 const EncuestaPublica = lazy(() => import("./pages/EncuestaPublica"));
 
@@ -89,6 +96,14 @@ export default function App() {
           <Route path="aprobaciones" element={<Aprobaciones />} />
           <Route path="avisos" element={<Requiere permisos={[P.AVISOS]}><AvisosGenerales /></Requiere>} />
           <Route path="admin/aprobaciones" element={<Requiere permisos={[P.APROBACIONES]}><ReglasAprobacion /></Requiere>} />
+          <Route path="catalogo" element={<CatalogoServicios />} />
+          <Route path="catalogo/:id" element={<ServicioFormulario />} />
+          <Route path="cambios" element={<Cambios />} />
+          <Route path="cambios/nuevo" element={<CambioNuevo />} />
+          <Route path="cambios/:id" element={<CambioDetalle />} />
+          <Route path="cambios/:id/editar" element={<CambioNuevo />} />
+          <Route path="seguridad" element={<Seguridad />} />
+          <Route path="admin/servicios" element={<Requiere permisos={[P.SERVICIOS]}><AdminServicios /></Requiere>} />
           <Route path="cambiar-clave" element={<CambiarClave />} />
           <Route path="admin/usuarios" element={<Requiere permisos={[P.USUARIOS]}><Usuarios /></Requiere>} />
           <Route path="admin/roles" element={<Requiere permisos={[P.ROLES]}><Roles /></Requiere>} />

@@ -43,7 +43,7 @@ class AuthService:
         self.auditoria = AuditoriaService(session)
 
     # ---------------------------------------------------------------- login
-    def login(self, identificador: str, clave: str, ctx: Contexto) -> dict:
+    def login(self, identificador: str, clave: str, ctx: Contexto, equipo_token: str | None = None) -> dict:
         ahora = utcnow()
         identificador = identificador.strip()
         if settings.AUTH_PROVIDER == "entra" and identificador.lower() not in {c.lower() for c in settings.ENTRA_CUENTAS_EMERGENCIA}:
@@ -83,9 +83,17 @@ class AuthService:
 
         usuario.intentos_fallidos = 0
         usuario.bloqueado_hasta = None
-        usuario.ultimo_login = ahora
-        self.auditoria.registrar(ctx, AccionAuditoria.LOGIN, "sesion", usuario=usuario)
-        return self._emitir(usuario, ctx, familia=secrets.token_hex(16))
+        from app.application.services.dos_pasos_service import DosPasosService
+
+        paso = DosPasosService(self.session).segundo_paso(usuario, ctx, equipo_token)
+        if paso is not None:   # contraseña correcta: falta el código del celular, del correo o de respaldo
+            return {"segundo_paso": paso}
+        return self.completar_login(usuario, ctx)
+
+    def completar_login(self, usuario: m.Usuario, ctx: Contexto, detalle: dict | None = None, **extra) -> dict:
+        usuario.ultimo_login = utcnow()
+        self.auditoria.registrar(ctx, AccionAuditoria.LOGIN, "sesion", usuario=usuario, detalle=detalle)
+        return {**self._emitir(usuario, ctx, familia=secrets.token_hex(16)), **extra}
 
     def _politica_bloqueo(self) -> tuple[int, int]:
         """Intentos y minutos de bloqueo definidos en Configuración; si no son válidos, los del .env."""
