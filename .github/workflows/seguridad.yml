@@ -50,7 +50,7 @@ jobs:
       - name: Construir la imagen igual que en producción
         run: docker build -t ${{ matrix.imagen }}:escaneo ${{ matrix.contexto }}
       - name: Informe completo (todas las severidades)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
         with:
           image-ref: ${{ matrix.imagen }}:escaneo
           format: table
@@ -59,7 +59,7 @@ jobs:
           exit-code: "0"
           output: trivy-${{ matrix.imagen }}.txt
       - name: Lista de componentes (SBOM CycloneDX)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
         with:
           image-ref: ${{ matrix.imagen }}:escaneo
           format: cyclonedx
@@ -78,7 +78,7 @@ jobs:
             sbom-${{ matrix.imagen }}.cdx.json
           retention-days: 90
       - name: Bloquear si hay vulnerabilidades CRÍTICAS o ALTAS con corrección disponible
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
         with:
           image-ref: ${{ matrix.imagen }}:escaneo
           format: table
@@ -97,7 +97,7 @@ jobs:
       - name: Imagen usada en docker-compose.yml
         id: img
         run: echo "ref=$(grep -m1 -oE 'mcr.microsoft.com/mssql/server:[^"[:space:]]+' docker-compose.yml)" >> "$GITHUB_OUTPUT"
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
         with:
           image-ref: ${{ steps.img.outputs.ref }}
           format: table
