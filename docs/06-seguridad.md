@@ -64,6 +64,22 @@ de estos controles están en `backend/tests/test_seguridad.py` (10 casos) y `bac
   reduce el riesgo de XSS. Si la política interna lo exige, el refresh puede moverse a una cookie
   `HttpOnly; Secure; SameSite=Strict` sin cambiar el resto del diseño.
 
+### 3.1 Refuerzos de noviembre de 2026 (auditoría y ISO 27001 A.5.17, A.8.5)
+
+| Control | Detalle | Dónde se ajusta |
+|---|---|---|
+| Verificación en dos pasos obligatoria | Administradores y Supervisores; plazo de gracia con aviso en pantalla y luego se exige al entrar | *Administración › Seguridad* (`seguridad.2fa_admin`, `seguridad.2fa_dias_gracia`) |
+| Historial de contraseñas | No se repiten las últimas N (incluida la actual); tabla `usuario_claves_previas` con hash bcrypt | `seguridad.claves_previas` (5) |
+| Contraseñas obvias | Se rechazan si contienen el nombre de la empresa, palabras típicas, secuencias o el nombre/correo de la persona (`core/security.py`, sin consultar internet) | — |
+| Aviso de bloqueo | Correo a la persona con IP, navegador y hora de desbloqueo; auditoría `CUENTA_BLOQUEADA` | `seguridad.aviso_bloqueo` |
+| Cuenta de emergencia | Cada ingreso con una cuenta exenta genera `LOGIN_EMERGENCIA` y un correo | `seguridad.correos_alerta` |
+| Contraseña temporal | Mientras `debe_cambiar_clave` esté activo, la API solo acepta `/auth/me`, `/auth/cambiar-clave` y `/auth/logout` | — |
+| Login sin pistas | Si el correo no existe se compara contra un hash ficticio: la respuesta tarda lo mismo | — |
+| Buzón | Solo se cree en el «From» si Exchange lo autenticó (`X-MS-Exchange-Organization-AuthAs: Internal`, `dmarc=pass` o `compauth=pass` del mismo dominio). Si no: ticket a nombre del buzón, nota interna, sin acuse y sin crear cuentas | `BUZON_VERIFICAR_REMITENTE` |
+| Formulario público | El acuse usa texto fijo (no repite asunto ni nombre) y hay un tope global por hora contado en la base | `FORMULARIO_WEB_MAX_GLOBAL_HORA` (30) |
+| Documentación de la API | Apagada por defecto en Docker Compose | `DOCS_ENABLED` |
+| Escaneo continuo | `.github/workflows/seguridad.yml`: gitleaks, Trivy (imágenes api/web, bloquea CRÍTICA/ALTA con corrección), SBOM CycloneDX; riesgos aceptados en `.trivyignore` | GitHub Actions |
+
 ## 4. Integración con Active Directory
 
 > Para Microsoft Entra ID (SSO con MFA y roles por grupos) vea [10-microsoft-365.md](10-microsoft-365.md). Allí el flujo es OIDC con PKCE, el `id_token` se valida contra las claves del tenant y no se guardan contraseñas en la Mesa.
