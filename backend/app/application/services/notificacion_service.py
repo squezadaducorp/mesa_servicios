@@ -35,6 +35,11 @@ def fecha_local(d) -> str:
     return d.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(settings.ZONA_HORARIA)).strftime("%d/%m/%Y %H:%M")
 
 
+# Variables de las plantillas que llevan texto escrito por personas: no van en correos de tickets confidenciales (42)
+CONTENIDO_CONFIDENCIAL = {"asunto", "comentario", "solucion", "detalle", "descripcion", "motivo", "novedad",
+                          "titulo_problema", "problema"}
+
+
 def cuentas_sistema() -> set[str]:
     """Direcciones de cuentas técnicas que figuran como solicitante pero no deben recibir correos."""
     return {settings.BUZON_CORREO.lower(), settings.FORMULARIO_WEB_CORREO.lower()}
@@ -131,6 +136,9 @@ class NotificacionService:
     def _encolar(self, plantilla: m.PlantillaCorreo, codigo: str, para: str, nombre: str, ticket: m.Ticket, extra: dict,
                  cc: list[str] | None = None) -> None:
         ctx = self.contexto_ticket(ticket, destinatario=nombre, **extra)
+        if getattr(ticket, "clasificacion", None) == "CONFIDENCIAL":   # (42) solo el número y el enlace, nunca el contenido
+            for k in CONTENIDO_CONFIDENCIAL & ctx.keys():
+                ctx[k] = "Ticket confidencial" if k == "asunto" else "(Contenido confidencial: ábralo en la Mesa de Servicios)"
         asunto, cuerpo = plantilla.asunto, plantilla.cuerpo_html
         for k, v in ctx.items():
             seguro = v if k.startswith("url") else html.escape(v)

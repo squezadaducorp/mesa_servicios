@@ -38,6 +38,7 @@ import BugReportIcon from "@mui/icons-material/BugReport";
 import InsightsIcon from "@mui/icons-material/Insights";
 import AvTimerIcon from "@mui/icons-material/AvTimer";
 import HandshakeIcon from "@mui/icons-material/Handshake";
+import FactCheckIcon from "@mui/icons-material/FactCheckOutlined";
 import CronometroBarra from "../pages/ronda4c/CronometroBarra";
 import { BannerAvisosGenerales } from "./AvisosGenerales";
 import { AvisosSuperiores, DialogoAusencia } from "./Disponibilidad";
@@ -90,6 +91,7 @@ const ADMIN: ItemNav[] = [
   { a: "/admin/aprobaciones", texto: "Reglas de aprobación", icono: <RuleIcon />, permisos: [P.APROBACIONES] },
   { a: "/admin/sla", texto: "SLA y calendario", icono: <TimerIcon />, permisos: [P.SLA] },
   { a: "/admin/auditoria", texto: "Auditoría", icono: <HistoryIcon />, permisos: [P.AUDITORIA] },
+  { a: "/cumplimiento", texto: "Seguridad y cumplimiento", icono: <FactCheckIcon />, permisos: [P.USUARIOS] },
   { a: "/admin/configuracion", texto: "Configuración", icono: <SettingsIcon />, permisos: [P.SISTEMA] },
 ];
 
@@ -208,7 +210,16 @@ export default function Layout() {
     principal.splice(principal.findIndex((i) => i.a === "/tickets/nuevo") + 1 || 3, 0,
       { a: "/aprobaciones", texto: "Por aprobar", icono: <HowToRegIcon />, insignia: aprobaciones.data.pendientes });
   }
-  const admin = visibles(ADMIN);
+  // Revisión de accesos (38): el jefe que tiene gente por revisar ve el acceso en el menú con su insignia
+  const accesos = useQuery({
+    queryKey: ["accesos", "pendientes"],
+    queryFn: () => get<{ revision_id: number | null; pendientes: number }>("/accesos/pendientes"),
+    refetchInterval: 300_000,
+  });
+  if (accesos.data?.revision_id && !puede(P.USUARIOS)) {
+    principal.push({ a: "/cumplimiento", texto: "Revisión de accesos", icono: <FactCheckIcon />, insignia: accesos.data.pendientes });
+  }
+  const admin = visibles(ADMIN).map((i) => (i.a === "/cumplimiento" ? { ...i, insignia: accesos.data?.pendientes } : i));
   // Quien no administra el inventario solo ve los equipos asignados a él
   const mesa = visibles(EQUIPO_MESA).map((i) => (i.a === "/inventario" && !puede(P.INVENTARIO) ? { ...i, texto: "Mis equipos" } : i));
 

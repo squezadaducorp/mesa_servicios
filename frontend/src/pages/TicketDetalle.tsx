@@ -36,6 +36,7 @@ import { AlertasTercera, PanelTercera } from "./tercera/TicketTercera";
 import PanelTareas from "./cuarta/PanelTareas";
 import TicketProblemas from "./ronda4b/TicketProblemas";
 import TiempoTrabajado from "./ronda4c/TiempoTrabajado";
+import { ChipClasificacion } from "../components/ClasificacionTicket";
 import {
   BannerProveedor, BannerSeguir, CasosProveedorTicket, ChipComentarioVisualizador, ChipVisualizadores, DialogoEscalarProveedor, PanelVisualizadores,
 } from "./ronda4c/TicketRonda4c";
@@ -343,6 +344,7 @@ export default function TicketDetalle() {
               <CumplimientoChip valor={t.cumplimiento_sla} />
               {t.reaperturas > 0 && <Chip size="small" variant="outlined" label={`${t.reaperturas} reapertura(s)`} />}
               <ChipVisualizadores t={t} />
+              <ChipClasificacion t={t} />
               {t.recurrente_id && (
                 <Chip size="small" icon={<EventRepeatIcon />} label="Recurrente" sx={{ bgcolor: "#FFF3D6", color: "#8A5A00", "& .MuiChip-icon": { color: "#8A5A00" } }} />
               )}

@@ -152,6 +152,7 @@ class CategoriaSalida(Modelo):
     subcategorias: list[SubcategoriaSalida]
     pide_equipo: bool = False             # el formulario pide «Equipo afectado»
     restringida_en_nombre: bool = False   # no se puede pedir en nombre de otra persona
+    clasificacion: str | None = None      # con qué clasificación nacen sus tickets (42)
 
 
 class CategoriaEntrada(BaseModel):
@@ -169,6 +170,7 @@ class CategoriaEntrada(BaseModel):
     visualizadores: list[int] | None = Field(default=None, max_length=10, description="Usuarios que siguen cada ticket nuevo (34)")
     pide_equipo: bool = False
     restringida_en_nombre: bool = False
+    clasificacion: Literal["PUBLICA", "INTERNA", "CONFIDENCIAL"] | None = None
 
     @field_validator("correos_copia")
     @classmethod
@@ -462,6 +464,7 @@ class TicketListado(Modelo):
     cumplimiento_sla: str
     vence_tipo: str | None = Field(default=None, description="RESPUESTA o RESOLUCION: el próximo plazo del ticket abierto")
     vence_en_min: int | None = Field(default=None, description="Minutos laborables que faltan (negativo si ya venció)")
+    clasificacion: str = "INTERNA"
 
 
 class EncuestaSalida(Modelo):
@@ -608,6 +611,9 @@ class TicketDetalle(Modelo):
     encuesta: EncuestaSalida | None = Field(default=None, description="Calificación del solicitante, si ya respondió")
     creado_por: UsuarioResumen | None = Field(default=None, description="Quien lo registró en nombre del solicitante")
     en_nombre_motivo: str | None = None
+    clasificacion: str = "INTERNA"
+    retencion_legal: bool = False
+    fecha_depuracion: datetime | None = None
     solo_lectura_creador: bool = Field(default=False, description="Lo registró en nombre de otra persona: solo puede consultarlo")
     equipo: EquipoTicket | None = None
     recurrente_id: int | None = None

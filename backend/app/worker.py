@@ -237,10 +237,24 @@ def ciclo_entra() -> dict:
         return EntraService(session).sincronizar_grupos()
 
 
+def ciclo_cumplimiento() -> dict:
+    """ISO 27001: revisión trimestral de accesos, bajas por inactividad (38) y aviso mensual de depuración (42)."""
+    from app.application.services.retencion_service import RetencionService
+    from app.application.services.revision_acceso_service import RevisionAccesoService
+
+    with SessionLocal() as session:
+        if not tomar_bloqueo(session, "cumplimiento", settings.WORKER_INTERVALO_SEG * 3):
+            return {"omitido": "otro worker tiene el bloqueo"}
+        r = RevisionAccesoService(session).procesar(utcnow())
+        r["retencion"] = RetencionService(session).procesar(utcnow())
+        session.commit()
+        return r
+
+
 def ejecutar_ciclo() -> None:
     for nombre, fn in (("ausencias", ciclo_ausencias), ("sla", ciclo_sla), ("resumen", ciclo_resumen_diario),
                        ("cierre", ciclo_cierre_automatico), ("recurrentes", ciclo_recurrentes), ("reportes", ciclo_reportes),
-                       ("aprobaciones", ciclo_aprobaciones),
+                       ("aprobaciones", ciclo_aprobaciones), ("cumplimiento", ciclo_cumplimiento),
                        ("buzon", ciclo_buzon), ("correo", ciclo_correos),
                        ("teams", ciclo_teams), ("entra", ciclo_entra)):
         try:

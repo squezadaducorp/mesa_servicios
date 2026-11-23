@@ -43,7 +43,7 @@ def categoria_salida(c: m.Categoria) -> dict:
         "subcategorias": [x for x in c.subcategorias if not x.eliminado],
         "correos_copia": separar(c.correos_copia),
         "visualizadores": [int(x) for x in (c.visualizadores or "").split(",") if x.strip().isdigit()],
-        "pide_equipo": bool(c.pide_equipo), "restringida_en_nombre": bool(c.restringida_en_nombre),
+        "pide_equipo": bool(c.pide_equipo), "restringida_en_nombre": bool(c.restringida_en_nombre), "clasificacion": c.clasificacion,
     }
 
 
@@ -175,6 +175,8 @@ class AdminService:
         for k in ("codigo", "nombre", "descripcion", "palabras_clave", "color", "orden", "modo_asignacion", "supervisor_id", "activo",
                   "pide_equipo", "restringida_en_nombre"):
             setattr(c, k, getattr(dto, k))
+        if dto.clasificacion is not None:   # None = no se toca (pantallas que no muestran el campo)
+            c.clasificacion = None if dto.clasificacion == "INTERNA" else dto.clasificacion
         c.correos_copia = unir(dto.correos_copia)
         if dto.visualizadores is not None:   # None = no se tocan (pantallas que no muestran el campo)
             validos = {u.id for u in self.session.scalars(select(m.Usuario).where(m.Usuario.id.in_(dto.visualizadores or [0])))}

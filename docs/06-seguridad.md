@@ -160,6 +160,19 @@ Indicadores, dashboard y exportaciones aplican el mismo alcance.
 Las notas internas nunca se muestran al solicitante, y un cliente interno no puede ver, comentar ni
 adjuntar en tickets de otra persona.
 
+### 5.1 Revisión de accesos y cuentas sin uso (ISO 27001 A.5.15, A.5.18, A.8.2)
+
+- **Revisión trimestral:** el worker la abre el día 1 de los meses de `accesos.meses_revision` (marzo, junio, septiembre y diciembre).
+  Guarda una foto de cada cuenta activa con su rol, último ingreso y alertas: más de 60 días sin entrar, nunca entró, rol de
+  administración, sin verificación en dos pasos, supervisor sin personal o sin jefe registrado.
+- Cada **jefe directo** (`usuarios.supervisor_id`) recibe un correo y marca *Mantener*, *Ajustar* o *Dar de baja* en
+  *Seguridad y cumplimiento*. Las cuentas sin jefe las revisa TI. Tres días antes del plazo (`accesos.dias_plazo`, 15) se recuerda.
+- TI **aprueba el acta**: las bajas se aplican (la cuenta se desactiva y se cierran sus sesiones; nunca se borra) y el PDF va a
+  `accesos.informe_correo` (squezada@aducorp.com.ec).
+- **Cuentas sin uso:** a los `accesos.dias_inactividad` días (90) sin entrar, la cuenta se desactiva. La persona y su jefe reciben
+  un aviso `accesos.dias_aviso_baja` días antes (7); basta con entrar para conservarla. Quedan fuera las cuentas técnicas,
+  la cuenta de emergencia, `accesos.excluidos` y quien tiene vacaciones o permiso registrado.
+
 ## 6. Auditoría
 
 * **Eventos registrados:** login, login fallido, logout, refresh reutilizado, creación y edición de
@@ -192,6 +205,23 @@ adjuntar en tickets de otra persona.
    ejecuta en el navegador.
 6. **Antivirus (recomendado):** monte el volumen de adjuntos en un servidor con antivirus de
    escaneo en acceso, o agregue un contenedor ClamAV. El punto de integración es `AlmacenamientoLocal.guardar`.
+
+### 7.1 Clasificación y retención (ISO 27001 A.5.12, A.5.13, A.8.10, A.5.33)
+
+| Clasificación | Quién lo ve | Correos |
+|---|---|---|
+| Pública | Igual que Interna; se puede compartir con clientes y proveedores | Normales |
+| Interna (por defecto) | Según el rol (sección 5) | Normales |
+| Confidencial | Solicitante, responsable, supervisor del área, quien debe aprobarlo y TI. No lo ven los visualizadores ni quien lo atendió antes | Solo el número y el enlace; el asunto va como «Ticket confidencial» |
+
+- La categoría define con qué clasificación nacen sus tickets (por ejemplo, Talento Humano como Confidencial).
+- El solicitante puede subirla a Confidencial; bajarla lo hace solo quien atiende el ticket y pide motivo. Todo cambio queda
+  en el historial del ticket y en Auditoría (`CLASIFICACION_CAMBIADA`).
+- Un ticket confidencial no sirve de base para un artículo de conocimiento y nunca se envía a la IA externa (`AI_PROVIDER=llm`).
+- **Retención:** los tickets se conservan `retencion.tickets_anios` años (5) desde su cierre. El día 1 de cada mes se avisa a TI
+  si hay tickets vencidos; TI los revisa y escribe DEPURAR para borrar su texto y adjuntos (quedan número, fechas y métricas).
+  Nada se borra solo. Un ticket con **retención legal** (reclamo, auditoría de SENAE) nunca se depura.
+- La anonimización de ex-empleados está pendiente de la opinión de Legal.
 
 ## 8. Transporte y cabeceras
 

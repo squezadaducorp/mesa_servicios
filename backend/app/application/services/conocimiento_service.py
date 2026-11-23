@@ -260,6 +260,8 @@ class ConocimientoService:
         t = TicketService(self.session).obtener(ticket_id, ctx.usuario)
         if t.estado not in ("RESUELTO", "CERRADO"):
             raise ReglaNegocio("Solo se pueden usar tickets resueltos o cerrados")
+        if t.clasificacion == "CONFIDENCIAL":   # (42) lo confidencial no alimenta la base de conocimiento
+            raise ReglaNegocio("Un ticket confidencial no se puede usar para un artículo de la base de conocimiento")
         respuestas = [c for c in self.session.scalars(
             select(m.TicketComentario).where(m.TicketComentario.ticket_id == t.id, m.TicketComentario.es_interno == False,
                                              m.TicketComentario.usuario_id != t.solicitante_id)
