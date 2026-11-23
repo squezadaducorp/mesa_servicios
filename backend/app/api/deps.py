@@ -46,8 +46,12 @@ def equipo_cliente(request: Request) -> str | None:
     return (f"{equipo} · {ua}" if equipo else ua)[:300] or None
 
 
+# Con una contraseña temporal pendiente de cambio solo se permiten estas rutas (auditoría 2026-11, hallazgo 5)
+RUTAS_CON_CLAVE_TEMPORAL = ("/auth/me", "/auth/cambiar-clave", "/auth/logout")
+
+
 def usuario_actual(
-    credenciales: HTTPAuthorizationCredentials | None = Depends(bearer), session: Session = DbSession
+    request: Request, credenciales: HTTPAuthorizationCredentials | None = Depends(bearer), session: Session = DbSession
 ) -> m.Usuario:
     if credenciales is None:
         raise NoAutorizado("Se requiere autenticación")
@@ -59,6 +63,8 @@ def usuario_actual(
         raise NoAutorizado("Usuario inactivo")
     if usuario.bloqueado_hasta and usuario.bloqueado_hasta > utcnow():
         raise NoAutorizado("Cuenta bloqueada")
+    if usuario.debe_cambiar_clave and not request.url.path.rstrip("/").endswith(RUTAS_CON_CLAVE_TEMPORAL):
+        raise Prohibido("Debe cambiar su contraseña temporal antes de continuar")
     return usuario
 
 
