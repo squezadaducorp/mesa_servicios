@@ -264,8 +264,14 @@ class PanelService:
         return datos
 
     def extras(self, p: Periodo, areas: list[int] | None, ahora: datetime) -> dict:
-        """Secciones de proveedores y horas de trabajo (mejoras 31 y 33). Vacías si esas mejoras no están instaladas."""
-        return {"proveedores": [], "horas_area": [], "horas_total": None}
+        """Secciones de proveedores (33) y horas de trabajo por área solicitante (31)."""
+        from app.application.services.proveedor_service import ProveedorService
+        from app.application.services.tiempo_service import TiempoService
+
+        ini, fin = limites_dia_utc(p.desde, p.hasta)
+        horas, total = TiempoService(self.session).horas_por_area(ini, fin)
+        return {"proveedores": ProveedorService(self.session).del_mes(ini, fin), "horas_area": horas,
+                "horas_total": total if total else None}
 
     # ============================================================ PDF
     def resumen_texto(self, d: dict, comentario: str | None) -> str:
@@ -452,7 +458,22 @@ class PanelService:
 
     def pdf_extras(self, d: dict, secciones: list[str], st: dict, ancho: float) -> list:
         """Proveedores y horas por área (mejoras 31 y 33)."""
-        return []
+        e: list = []
+        if "proveedores" in secciones and d.get("proveedores"):
+            e.append(Paragraph("Proveedores", st["h"]))
+            filas = [["Proveedor", "Servicio", "Casos", "Fuera de plazo", "Solución promedio", "Multas"]]
+            for x in d["proveedores"]:
+                m_ = x["solucion_promedio_min"]
+                filas.append([x["nombre"], Paragraph(html.escape(x["servicio"]), st["c"]), str(x["casos"]), str(x["fuera"]),
+                              "-" if m_ is None else (f"{m_ // 60} h {m_ % 60:02d} min" if m_ >= 60 else f"{m_} min"),
+                              f"USD {coma(x['multas'], 2)}" if x["multas"] else "-"])
+            e.append(self._tabla(filas, [ancho * 0.2, ancho * 0.3, ancho * 0.1, ancho * 0.13, ancho * 0.15, ancho * 0.12], st))
+            e.append(Spacer(1, 10))
+        if "horas" in secciones and d.get("horas_total"):
+            e.append(Paragraph(f"Horas de trabajo de TI por área solicitante · {coma(d['horas_total'] / 60, 0)} h registradas", st["h"]))
+            e.append(self._tabla([["Área", "Horas", "%"]] + [[x["nombre"], coma(x["minutos"] / 60), f"{x['pct']} %"] for x in d["horas_area"]],
+                                 [ancho * 0.6, ancho * 0.2, ancho * 0.2], st))
+        return e
 
     @staticmethod
     def _pct(v) -> str:

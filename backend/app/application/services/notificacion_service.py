@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 TZ_LABEL = "hora Ecuador"
 # Plantillas que no llevan el botón de seguimiento (ya tienen su propio enlace o no son del solicitante)
-SIN_SEGUIMIENTO = {"SEGUIMIENTO_ENLACE", "RESPUESTA_COPIA", "TICKETS_UNIDOS"}
+SIN_SEGUIMIENTO = {"SEGUIMIENTO_ENLACE", "RESPUESTA_COPIA", "TICKETS_UNIDOS", "PROVEEDOR_CASO"}
 BOTON_SEGUIMIENTO = (
     '<div style="text-align:center;margin:22px 0 8px"><a href="{url_seguimiento}" style="background:#1367AC;color:#fff;'
     'padding:11px 22px;border-radius:6px;text-decoration:none;font-weight:600">Ver el estado de mi solicitud</a>'

@@ -66,6 +66,9 @@ def ciclo_sla() -> dict:
         if not tomar_bloqueo(session, "motor_sla", settings.WORKER_INTERVALO_SEG * 3):
             return {"omitido": "otro worker tiene el bloqueo"}
         stats = SlaService(session).evaluar_tickets_abiertos()
+        from app.application.services.proveedor_service import ProveedorService
+
+        stats["proveedores"] = ProveedorService(session).procesar()   # plazo del proveedor y contratos por vencer (33)
         # Riesgo de incumplimiento (IA local) para tickets abiertos
         ia = IaService(session)
         abiertos = session.scalars(select(m.Ticket).where(m.Ticket.eliminado == False,

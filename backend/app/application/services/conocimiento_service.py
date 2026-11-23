@@ -26,6 +26,23 @@ def es_mesa(u: m.Usuario) -> bool:
     return u.rol.codigo in ROLES_MESA
 
 
+ROLES_PUBLICAN_EXTERNO = {Rol.SUPERVISOR, Rol.ADMIN_MESA, Rol.SUPER_ADMIN}
+ENLACE_ARTICULO = re.compile(r"conocimiento\?articulo=(\d+)")
+
+
+def es_equipo_ti(u: m.Usuario) -> bool:
+    """Marca «Equipo de TI» (35): ve los artículos internos y, con kb.gestionar, escribe en la base de conocimiento."""
+    return bool(u.equipo_ti)
+
+
+def exigir_sin_internos(session: Session, texto: str) -> None:
+    """Una respuesta al solicitante nunca lleva el enlace de un artículo interno."""
+    for aid in dict.fromkeys(int(x) for x in ENLACE_ARTICULO.findall(texto or "")):
+        a = session.get(m.KbArticulo, aid)
+        if a is not None and a.visibilidad == "INTERNO":
+            raise ReglaNegocio(f"La respuesta enlaza el artículo interno «{a.titulo}». Envíe una versión externa o quite el enlace.")
+
+
 def palabras(texto: str | None) -> set[str]:
     return {p for p in normalizar(texto or "").split() if len(p) > 2 and p not in PALABRAS_VACIAS}
 
@@ -58,8 +75,8 @@ class ConocimientoService:
     def _visibles(self, u: m.Usuario, incluir_borradores: bool):
         A = m.KbArticulo
         stmt = select(A).where(A.eliminado == False)
-        if not es_mesa(u):
-            stmt = stmt.where(A.estado == "PUBLICADO", A.visibilidad == "TODOS")
+        if not es_equipo_ti(u):
+            stmt = stmt.where(A.estado == "PUBLICADO", A.visibilidad == "EXTERNO")
         elif not incluir_borradores:
             stmt = stmt.where(A.estado == "PUBLICADO")
         return stmt
@@ -71,11 +88,20 @@ class ConocimientoService:
         return a
 
     def puede_editar(self, u: m.Usuario) -> bool:
-        return u.tiene(Permiso.KB_GESTIONAR)
+        return u.tiene(Permiso.KB_GESTIONAR) and es_equipo_ti(u)
+
+    @staticmethod
+    def puede_publicar_externo(u: m.Usuario) -> bool:
+        return u.rol.codigo in ROLES_PUBLICAN_EXTERNO
 
     def salida(self, a: m.KbArticulo, u: m.Usuario) -> dict:
         origen = self.session.get(m.Ticket, a.ticket_origen_id) if a.ticket_origen_id else None
+        rel = self.session.get(m.KbArticulo, a.articulo_relacionado_id) if a.articulo_relacionado_id else None
+        if rel is not None and (rel.eliminado or (rel.visibilidad == "INTERNO" and not es_equipo_ti(u))):
+            rel = None
         return {
+            "articulo_relacionado_id": rel.id if rel else None, "articulo_relacionado": rel.titulo if rel else None,
+            "puede_publicar_externo": self.puede_publicar_externo(u),
             **resumen(a), "sintoma": a.sintoma, "solucion": a.solucion, "nota": a.nota, "palabras_clave": a.palabras_clave,
             "subcategoria_id": a.subcategoria_id, "ticket_origen_id": a.ticket_origen_id,
             "ticket_origen_numero": origen.numero if origen else None, "util_si": a.util_si, "util_no": a.util_no,
@@ -91,7 +117,7 @@ class ConocimientoService:
             stmt = stmt.where(A.categoria_id == categoria_id)
         if estado:
             stmt = stmt.where(A.estado == estado)
-        elif not es_mesa(u):
+        elif not es_equipo_ti(u):
             stmt = stmt.where(A.estado == "PUBLICADO")
         else:
             stmt = stmt.where(A.estado != "ARCHIVADO")
@@ -185,12 +211,18 @@ class ConocimientoService:
                 raise ReglaNegocio("La subcategoría no pertenece a la categoría")
         if dto.ticket_origen_id and self.session.get(m.Ticket, dto.ticket_origen_id) is None:
             raise ReglaNegocio("Ticket de origen no válido")
+        if dto.articulo_relacionado_id:
+            rel = self.session.get(m.KbArticulo, dto.articulo_relacionado_id)
+            if rel is None or rel.eliminado:
+                raise ReglaNegocio("Artículo relacionado no válido")
 
     def guardar(self, dto: s.KbEntrada, ctx: Contexto, articulo_id: int | None = None) -> m.KbArticulo:
         u = ctx.usuario
         if not self.puede_editar(u):
             raise Prohibido("No tiene permiso para editar la base de conocimiento")
         self._validar(dto)
+        if dto.estado == "PUBLICADO" and dto.visibilidad == "EXTERNO" and not self.puede_publicar_externo(u):
+            raise Prohibido("Los artículos externos los publica un supervisor. Guárdelo como borrador para que lo revise.")
         ahora = utcnow()
         if articulo_id is None:
             a = m.KbArticulo(creado_por=u.id, fecha_creacion=ahora)
@@ -204,6 +236,10 @@ class ConocimientoService:
             setattr(a, k, v.strip() if isinstance(v, str) else v)
         a.actualizado_por, a.fecha_actualizacion = u.id, ahora
         self.session.flush()
+        if a.articulo_relacionado_id and a.articulo_relacionado_id != a.id:
+            rel = self.session.get(m.KbArticulo, a.articulo_relacionado_id)
+            if rel.articulo_relacionado_id is None:   # el vínculo queda en los dos sentidos
+                rel.articulo_relacionado_id = a.id
         self.auditoria.registrar(ctx, AccionAuditoria.KB_MODIFICADO, "kb_articulo", a.id, {"titulo": a.titulo, "estado": a.estado})
         self.session.refresh(a)
         return a

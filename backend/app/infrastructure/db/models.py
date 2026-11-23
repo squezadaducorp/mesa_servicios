@@ -97,6 +97,7 @@ class Usuario(Base):
     dosf_fecha: Mapped[datetime | None] = mapped_column(DateTime)
     dosf_ultimo_paso: Mapped[int | None] = mapped_column(BigInteger)   # último periodo TOTP aceptado (no se reutiliza)
     dosf_exigido_desde: Mapped[datetime | None] = mapped_column(DateTime)
+    equipo_ti: Mapped[bool] = mapped_column(Boolean, default=False)   # ve artículos internos y escribe en la base de conocimiento (35)
 
     rol: Mapped[Rol] = relationship(lazy="joined")
     area: Mapped[Area | None] = relationship(lazy="joined")
@@ -159,6 +160,7 @@ class Categoria(Base):
     supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
     modo_asignacion: Mapped[str] = mapped_column(String(15), default="PRINCIPAL")
     correos_copia: Mapped[str | None] = mapped_column(Unicode(500))   # se copian a cada ticket nuevo de la categoría
+    visualizadores: Mapped[str | None] = mapped_column(String(300))   # ids de usuarios que siguen cada ticket nuevo (34)
     pide_equipo: Mapped[bool] = mapped_column(Boolean, default=False)            # muestra «Equipo afectado» al crear el ticket
     restringida_en_nombre: Mapped[bool] = mapped_column(Boolean, default=False)  # no se puede pedir en nombre de otra persona
     color: Mapped[str | None] = mapped_column(CHAR(7))
@@ -303,6 +305,8 @@ class Ticket(Base):
     en_nombre_motivo: Mapped[str | None] = mapped_column(Unicode(300))
     resumen_ia: Mapped[str | None] = mapped_column(Unicode(1000))
     riesgo_ia: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    tiempo_estimado_min: Mapped[int | None] = mapped_column(Integer)   # control de tiempo (31)
+    facturable: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
     eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
     eliminado_por: Mapped[int | None] = mapped_column(Integer)
@@ -644,7 +648,8 @@ class KbArticulo(Base):
     categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categorias.id"))
     subcategoria_id: Mapped[int | None] = mapped_column(ForeignKey("subcategorias.id"))
     estado: Mapped[str] = mapped_column(String(10), default="BORRADOR")        # BORRADOR | PUBLICADO | ARCHIVADO
-    visibilidad: Mapped[str] = mapped_column(String(10), default="TODOS")     # TODOS | MESA
+    visibilidad: Mapped[str] = mapped_column(String(10), default="EXTERNO")   # EXTERNO (todos) | INTERNO (solo equipo de TI)
+    articulo_relacionado_id: Mapped[int | None] = mapped_column(ForeignKey("kb_articulos.id"))   # versión externa/interna vinculada
     ticket_origen_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
     vistas: Mapped[int] = mapped_column(Integer, default=0)
     util_si: Mapped[int] = mapped_column(Integer, default=0)
@@ -1132,6 +1137,89 @@ class PanelEnvio(Base):
     es_prueba: Mapped[bool] = mapped_column(Boolean, default=False)
     correo_id: Mapped[int | None] = mapped_column(BigId)
     enviado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+
+
+class TicketVisualizador(Base):
+    """Personas de la Mesa que siguen un ticket sin atenderlo (34): lo ven, comentan en público y reciben avisos."""
+    __tablename__ = "ticket_visualizadores"
+    __table_args__ = (UniqueConstraint("ticket_id", "usuario_id", name="uq_ticket_visualizadores"),)
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    avisos_correo: Mapped[str] = mapped_column(String(10), default="ESTADO")   # TODO | ESTADO | NINGUNO
+    origen: Mapped[str] = mapped_column(String(10), default="MANUAL")          # MANUAL | SEGUIR | CATEGORIA
+    agregado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id], lazy="joined")
+    agregador: Mapped[Usuario | None] = relationship(foreign_keys=[agregado_por], lazy="joined")
+
+
+class TiempoRegistro(Base):
+    """Tiempo trabajado (31): cronómetro o registro a mano sobre un ticket, un problema o un cambio."""
+    __tablename__ = "tiempo_registros"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    ticket_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
+    problema_id: Mapped[int | None] = mapped_column(ForeignKey("problemas.id"))
+    cambio_id: Mapped[int | None] = mapped_column(ForeignKey("cambios.id"))
+    actividad: Mapped[str] = mapped_column(Unicode(200))
+    estado: Mapped[str] = mapped_column(String(10), default="CORRIENDO")   # CORRIENDO | PAUSADO | GUARDADO
+    segundos: Mapped[int] = mapped_column(Integer, default=0)              # acumulado de los tramos cerrados
+    corriendo_desde: Mapped[datetime | None] = mapped_column(DateTime)
+    manual: Mapped[bool] = mapped_column(Boolean, default=False)
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)      # cuándo se hizo el trabajo
+    fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime)
+    usuario: Mapped[Usuario] = relationship(lazy="joined")
+
+
+class Proveedor(Base):
+    """Proveedor externo con su contrato de servicio (33)."""
+    __tablename__ = "proveedores"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nombre: Mapped[str] = mapped_column(Unicode(120))
+    servicio: Mapped[str] = mapped_column(Unicode(150))
+    telefono: Mapped[str | None] = mapped_column(Unicode(60))
+    correo: Mapped[str | None] = mapped_column(Unicode(150))
+    correos_copia: Mapped[str | None] = mapped_column(Unicode(500))
+    portal: Mapped[str | None] = mapped_column(Unicode(200))
+    contacto: Mapped[str | None] = mapped_column(Unicode(150))          # ejecutivo de cuenta y su teléfono
+    contrato_numero: Mapped[str | None] = mapped_column(Unicode(60))
+    contrato_vence: Mapped[date | None] = mapped_column(Date)
+    contrato_detalle: Mapped[str | None] = mapped_column(Unicode(300))  # «20 Mbps simétrico», archivo, etc.
+    atencion_24x7: Mapped[bool] = mapped_column(Boolean, default=False)
+    plazo_horas: Mapped[int] = mapped_column(Integer, default=8)        # plazo de solución pactado
+    valor_mensual: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    multa_pct_hora: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))   # % de la mensualidad por cada hora fuera de plazo
+    subcategorias: Mapped[str | None] = mapped_column(String(300))     # ids de subcategorías que se escalan a este proveedor
+    notas: Mapped[str | None] = mapped_column(Unicode(1000))
+    aviso_vencimiento: Mapped[date | None] = mapped_column(Date)       # vencimiento ya avisado (no se repite)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class ProveedorCaso(Base):
+    """Ticket escalado a un proveedor: n.º de caso, plazo del contrato y si lo cumplió."""
+    __tablename__ = "proveedor_casos"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    proveedor_id: Mapped[int] = mapped_column(ForeignKey("proveedores.id"))
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    numero_caso: Mapped[str | None] = mapped_column(Unicode(60))
+    reporte: Mapped[str] = mapped_column(Unicode(2000))
+    medio: Mapped[str | None] = mapped_column(Unicode(100))
+    contacto: Mapped[str | None] = mapped_column(Unicode(150))
+    estado: Mapped[str] = mapped_column(String(10), default="ABIERTO")   # ABIERTO | RESUELTO
+    fecha_reporte: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    vence: Mapped[datetime] = mapped_column(DateTime)
+    fecha_solucion: Mapped[datetime | None] = mapped_column(DateTime)
+    minutos_solucion: Mapped[int | None] = mapped_column(Integer)
+    cumplido: Mapped[bool | None] = mapped_column(Boolean)
+    solucion: Mapped[str | None] = mapped_column(Unicode(1000))
+    aviso_enviado: Mapped[bool] = mapped_column(Boolean, default=False)
+    correo_enviado: Mapped[bool] = mapped_column(Boolean, default=False)
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    proveedor: Mapped[Proveedor] = relationship(lazy="joined")
+    ticket: Mapped[Ticket] = relationship(lazy="joined")
 
 
 class DosfEquipo(Base):

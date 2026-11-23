@@ -21,11 +21,11 @@ PERMISOS_POR_ROL = {
                    "ticket.comentar", "ticket.adjuntar", "reporte.ver", "dashboard.ver", "datos.exportar", "ia.usar",
                    "kb.gestionar", "respuestas.gestionar", "recurrentes.gestionar", "reportes.programar", "inventario.ver",
                    "inventario.gestionar", "aprobaciones.gestionar", "avisos.gestionar", "servicios.gestionar", "cambios.gestionar",
-                   "problemas.gestionar", "panel.ver"],
+                   "problemas.gestionar", "panel.ver", "tiempo.reporte", "proveedores.gestionar"],
     "SUPERVISOR": ["ticket.ver_area", "ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.asignar",
                    "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar",
                    "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver", "avisos.gestionar",
-                   "problemas.gestionar"],
+                   "problemas.gestionar", "tiempo.reporte", "proveedores.gestionar"],
     "ANALISTA": ["ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.escalar", "ticket.cambiar_estado",
                  "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar", "kb.gestionar", "inventario.ver", "ticket.asignar"],
     "CLIENTE": ["ticket.ver_propios", "ticket.crear", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar"],
@@ -125,7 +125,10 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                            ("TICKETS_UNIDOS", "[{numero}] Su solicitud se atiende junto con otras"),
                            ("SEGUIMIENTO_ENLACE", "[{numero}] Enlace para ver el estado de su solicitud"),
                            ("TAREA_ASIGNADA", "[{numero}] Tarea para usted: {tarea}"),
-                           ("PROBLEMA_RESUELTO", "[{numero}] Se corrigió la causa de su incidente")):
+                           ("PROBLEMA_RESUELTO", "[{numero}] Se corrigió la causa de su incidente"),
+                           ("TICKET_VISUALIZADOR", "[{numero}] Novedad en un ticket que sigue"),
+                           ("PROVEEDOR_CASO", "[{numero}] Reporte de falla · {proveedor}"),
+                           ("PROVEEDOR_PLAZO", "[{numero}] Plazo de {proveedor}")):
         session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} {restante} "
                                       "{ausente} {reemplazo} {creado_por} {motivo} {resultado} {pedido_por} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a> "
                                       "<a href='{url_aprobar}'>aprobar</a> <a href='{url_seguimiento}'>seguimiento</a></p>"))
@@ -138,8 +141,15 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                  ("encuesta.activa", "si"), ("encuesta.aviso_nota_max", "2"), ("seguimiento.activo", "si"),
                  ("seguimiento.dias_vigencia", "30"), ("seguimiento.permitir_responder", "si"),
                  ("cambios.jefe_ti", f"admin@{DOMINIO}"), ("cambios.gerencia", f"gerencia@{DOMINIO}"),
-                 ("cambios.congelar_cierre_mes", "si"), ("problemas.patron_minimo", "5"), ("problemas.patron_dias", "7")):
+                 ("cambios.congelar_cierre_mes", "si"), ("problemas.patron_minimo", "5"), ("problemas.patron_dias", "7"),
+                 ("tiempo.horas_semana", "40"), ("proveedores.aviso_correo", f"admin@{DOMINIO}")):
         session.add(m.Configuracion(clave=k, valor=v))
+    session.flush()
+    # Equipo de TI (35): roles de la mesa con gestión y responsables de alguna categoría
+    responsables = {r.usuario_id for r in session.query(m.CategoriaResponsable)}
+    responsables |= {c.supervisor_id for c in session.query(m.Categoria) if c.supervisor_id}
+    for u in session.query(m.Usuario):
+        u.equipo_ti = u.rol.codigo in ("SUPER_ADMIN", "ADMIN_MESA", "SUPERVISOR") or u.id in responsables
     session.commit()
 
 

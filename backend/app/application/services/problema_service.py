@@ -227,6 +227,7 @@ class ProblemaService:
         a.titulo = f"{p.titulo} (error conocido {p.numero})"[:200]
         a.sintoma = (p.descripcion or p.titulo)[:1000]
         a.solucion = p.solucion_temporal or ""
+        a.visibilidad = "EXTERNO"   # la solución temporal es para los solicitantes; el análisis técnico queda en el problema
         a.nota = "Solución temporal mientras TI corrige la causa de fondo." + (f" Corrección prevista con {p.cambio.numero}." if p.cambio else "")
         a.palabras_clave = p.palabras_clave
         a.categoria_id, a.subcategoria_id = p.categoria_id, p.subcategoria_id

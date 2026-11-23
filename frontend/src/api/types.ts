@@ -23,6 +23,7 @@ export interface UsuarioSesion extends UsuarioResumen {
   telefono?: string | null;
   permisos: string[];
   debe_cambiar_clave: boolean;
+  equipo_ti?: boolean;
 }
 
 export interface TokenSalida {
@@ -206,6 +207,7 @@ export interface Comentario {
   minutos_invertidos: number | null;
   fecha: string;
   copia_a: string[];
+  de_visualizador?: boolean;
   /** Capturas y archivos enviados con este comentario */
   adjuntos?: Adjunto[];
 }
@@ -242,7 +244,8 @@ export interface Escalamiento {
 
 export type AccionTicket =
   | "editar" | "asignar" | "cambiar_estado" | "escalar" | "cerrar" | "reabrir" | "comentar"
-  | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia" | "calificar" | "vincular";
+  | "nota_interna" | "copias" | "adjuntar" | "excepcion_sla" | "eliminar" | "ia" | "calificar" | "vincular"
+  | "escalar_proveedor" | "seguir" | "dejar_seguir" | "visualizadores";
 
 export interface CopiaTicket {
   correo: string;
@@ -250,6 +253,11 @@ export interface CopiaTicket {
 }
 
 export interface TicketDetalle extends ExtrasTercera {
+  visualizadores: import("./ronda4c").Visualizador[];
+  es_visualizador: boolean;
+  proveedor_caso: import("./ronda4c").CasoProveedor | null;
+  proveedor_casos: import("./ronda4c").CasoProveedor[];
+  facturable: boolean;
   id: number;
   numero: string;
   asunto: string;
@@ -320,6 +328,7 @@ export interface FiltroTickets {
   hasta?: string;
   solo_mios?: boolean;
   participe?: boolean;
+  siguiendo?: boolean;
   vence?: "HOY" | "VENCIDOS";
   orden?: "fecha_desc" | "fecha_asc" | "sla_desc" | "prioridad" | "vence";
 }
@@ -381,6 +390,7 @@ export interface UsuarioAdmin {
   activo: boolean;
   bloqueado: boolean;
   ultimo_login: string | null;
+  equipo_ti: boolean;
 }
 
 export interface Rol {
@@ -568,7 +578,7 @@ export interface KbResumen {
   categoria: string | null;
   subcategoria: string | null;
   estado: "BORRADOR" | "PUBLICADO" | "ARCHIVADO";
-  visibilidad: "TODOS" | "MESA";
+  visibilidad: "EXTERNO" | "INTERNO";
   vistas: number;
   util_pct: number | null;
   tickets_evitados: number;
@@ -589,6 +599,9 @@ export interface KbArticulo extends KbResumen {
   fecha_actualizacion: string | null;
   fecha_creacion: string;
   puede_editar: boolean;
+  puede_publicar_externo?: boolean;
+  articulo_relacionado_id?: number | null;
+  articulo_relacionado?: string | null;
 }
 
 export interface RespuestaRapida {

@@ -30,7 +30,7 @@ def usuario_salida(u: m.Usuario) -> dict:
         "id": u.id, "nombre": u.nombre, "correo": u.correo, "usuario_ad": u.usuario_ad, "origen_autenticacion": u.origen_autenticacion,
         "cargo": u.cargo, "telefono": u.telefono, "area_id": u.area_id, "rol_id": u.rol_id, "rol": u.rol.codigo,
         "supervisor_id": u.supervisor_id, "activo": u.activo, "bloqueado": bool(u.bloqueado_hasta and u.bloqueado_hasta > utcnow()),
-        "ultimo_login": u.ultimo_login,
+        "ultimo_login": u.ultimo_login, "equipo_ti": bool(u.equipo_ti),
     }
 
 
@@ -42,6 +42,7 @@ def categoria_salida(c: m.Categoria) -> dict:
         "responsables": [{"usuario_id": r.usuario_id, "nombre": r.usuario.nombre, "es_principal": r.es_principal} for r in c.responsables],
         "subcategorias": [x for x in c.subcategorias if not x.eliminado],
         "correos_copia": separar(c.correos_copia),
+        "visualizadores": [int(x) for x in (c.visualizadores or "").split(",") if x.strip().isdigit()],
         "pide_equipo": bool(c.pide_equipo), "restringida_en_nombre": bool(c.restringida_en_nombre),
     }
 
@@ -87,7 +88,7 @@ class AdminService:
         u = self.usuarios.add(m.Usuario(
             nombre=dto.nombre, correo=str(dto.correo).lower(), rol_id=rol.id, cargo=dto.cargo, telefono=dto.telefono, area_id=dto.area_id,
             supervisor_id=dto.supervisor_id, origen_autenticacion=dto.origen_autenticacion, usuario_ad=dto.usuario_ad,
-            clave_hash=clave_hash, debe_cambiar_clave=dto.origen_autenticacion == "LOCAL", fecha_creacion=utcnow(),
+            clave_hash=clave_hash, debe_cambiar_clave=dto.origen_autenticacion == "LOCAL", fecha_creacion=utcnow(), equipo_ti=dto.equipo_ti,
         ))
         self.session.refresh(u)
         self.auditoria.registrar(ctx, AccionAuditoria.USUARIO_MODIFICADO, "usuario", u.id, {"operacion": "crear", "correo": u.correo, "rol": rol.codigo})
@@ -175,6 +176,9 @@ class AdminService:
                   "pide_equipo", "restringida_en_nombre"):
             setattr(c, k, getattr(dto, k))
         c.correos_copia = unir(dto.correos_copia)
+        if dto.visualizadores is not None:   # None = no se tocan (pantallas que no muestran el campo)
+            validos = {u.id for u in self.session.scalars(select(m.Usuario).where(m.Usuario.id.in_(dto.visualizadores or [0])))}
+            c.visualizadores = ",".join(str(x) for x in dict.fromkeys(dto.visualizadores) if x in validos) or None
         self.session.flush()
         c.responsables = [m.CategoriaResponsable(categoria_id=c.id, usuario_id=r.usuario_id, es_principal=r.es_principal) for r in dto.responsables]
         self.session.flush()

@@ -155,6 +155,8 @@ class TicketRepository(Repository[m.Ticket]):
             condiciones.append(m.Ticket.creado_por_id == usuario.id)
             # quien tiene (o tuvo) que aprobarlo también lo abre, para decidir con toda la información
             condiciones.append(m.Ticket.id.in_(select(m.TicketAprobacion.ticket_id).where(m.TicketAprobacion.aprobador_id == usuario.id)))
+            # visualizadores (34): lo siguen aunque su rol no les deje ver el ticket
+            condiciones.append(m.Ticket.id.in_(select(m.TicketVisualizador.ticket_id).where(m.TicketVisualizador.usuario_id == usuario.id)))
         return or_(*condiciones) if condiciones else false()
 
     def consulta_visible(self, usuario: m.Usuario, incluir_participados: bool = False):

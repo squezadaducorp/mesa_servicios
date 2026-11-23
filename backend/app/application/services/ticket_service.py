@@ -17,7 +17,11 @@ from app.application.services.encuesta_service import a_salida as encuesta_salid
 from app.application.services.ia_service import IaService
 from app.application.services.inventario_service import InventarioService
 from app.application.services.notificacion_service import NotificacionService, cuentas_sistema
+from app.application.services.conocimiento_service import exigir_sin_internos
+from app.application.services.proveedor_service import ProveedorService
 from app.application.services.sla_service import SlaService
+from app.application.services.tiempo_service import TiempoService
+from app.application.services.visualizador_service import VisualizadorService
 from app.core.config import settings
 from app.core.security import utcnow
 from app.domain.archivos import contenido_valido
@@ -94,14 +98,24 @@ class TicketService:
         if propio and estado in (Estado.RESUELTO, Estado.CERRADO) and EncuestaService(self.session).puede_calificar(u, t):
             a.append("calificar")
         tarea = not gestor and not propio and self._tiene_tarea(u, t)   # analista con una tarea del catálogo en este ticket
-        if u.tiene(Permiso.TICKET_COMENTAR) and (gestor or propio or tarea):
+        visualizador = VisualizadorService(self.session).es_visualizador(u, t)   # (34) comenta en público y nada más
+        if u.tiene(Permiso.TICKET_COMENTAR) and (gestor or propio or tarea or visualizador):
             a.append("comentar")
             if gestor or tarea:
                 a.append("nota_interna")
             if gestor:
                 a.append("copias")
-        if u.tiene(Permiso.TICKET_ADJUNTAR) and (gestor or propio or tarea):
+        if u.tiene(Permiso.TICKET_ADJUNTAR) and (gestor or propio or tarea or visualizador):
             a.append("adjuntar")
+        if gestor and u.tiene(Permiso.TICKET_ESCALAR) and abierto and estado != Estado.POR_APROBAR \
+                and ProveedorService(self.session).caso_abierto(t.id) is None:
+            a.append("escalar_proveedor")
+        if visualizador:
+            a.append("dejar_seguir")
+        elif not propio and t.responsable_id != u.id:
+            a.append("seguir")
+        if VisualizadorService.puede_gestionar(self, u, t):
+            a.append("visualizadores")
         if u.tiene(Permiso.SLA_MODIFICAR) and abierto:
             a.append("excepcion_sla")
         if u.tiene(Permiso.REGISTRO_ELIMINAR):
@@ -225,6 +239,7 @@ class TicketService:
         self.session.refresh(t)
         self._hist(t, u, "CREACION", None, None, t.numero, ahora=ahora)
         self._precargar_copias(t, categoria, ahora)
+        VisualizadorService(self.session).precargar(self, t, categoria, ahora)
         self.auditoria.registrar(ctx, AccionAuditoria.TICKET_CREADO, "ticket", t.id, {"numero": t.numero, "categoria": categoria.nombre})
         if creado_por:
             self._hist(t, u, "EN_NOMBRE", "solicitante", None, solicitante.nombre,
@@ -528,8 +543,13 @@ class TicketService:
         if reapertura:
             self.sla.reabrir(t, ahora)
             t.reaperturas += 1
-        elif actual in ESTADOS_PAUSA_SLA and destino not in ESTADOS_PAUSA_SLA:
+        elif t.sla_pausa_desde is not None and destino not in ESTADOS_PAUSA_SLA:
+            # sale de un estado en pausa o de un escalamiento a proveedor (33), que también pausa nuestro SLA
             self.sla.reanudar(t, ahora)
+        if actual == Estado.ESCALADO and destino != Estado.ESCALADO:
+            ProveedorService(self.session).cerrar_abiertos(t, ahora)
+        if destino in (Estado.PENDIENTE_CLIENTE, Estado.RESUELTO, Estado.CERRADO, Estado.CANCELADO):
+            TiempoService(self.session).pausar_ticket(t.id, ahora)   # (31) el cronómetro se detiene solo
         if cuenta_como_primera_respuesta(destino) and not reapertura:
             self.sla.registrar_primera_respuesta(t, ahora)
         if destino == Estado.RESUELTO:
@@ -566,6 +586,11 @@ class TicketService:
         elif reapertura:
             self.notif.notificar([t.responsable, self._supervisor(t)], "TICKET_REABIERTO", f"{t.numero} reabierto",
                                  f"«{t.asunto}» fue reabierto ({t.reaperturas} reapertura(s)).", t, "AVISO")
+        nombre = self.session.get(m.EstadoTicket, str(destino))
+        nombre = nombre.nombre if nombre else str(destino)
+        VisualizadorService(self.session).avisar(
+            t, u.id if u else None, "CIERRE" if destino in (Estado.CERRADO, Estado.RESUELTO) else "ESTADO",
+            f"{t.numero} pasó a «{nombre}»", f"«{t.asunto}» ahora está {nombre.lower()}.")
 
     def exigir_sin_bloqueos(self, t: m.Ticket) -> None:
         """Un ticket «Bloqueado por» otro no se resuelve hasta que el otro esté resuelto, cerrado o cancelado."""
@@ -650,6 +675,8 @@ class TicketService:
         texto = dto.texto.strip() or (f"Adjuntó {len(archivos)} archivo{'s' if len(archivos) != 1 else ''}" if archivos else "")
         if not texto:
             raise ReglaNegocio("Escriba un comentario")
+        if not dto.es_interno:
+            exigir_sin_internos(self.session, texto)
         ahora = utcnow()
         c = self._agregar_comentario(t, u, texto, dto.es_interno, dto.tipo, dto.minutos_invertidos, ahora)
         for nombre, tipo_mime, contenido in archivos:
@@ -658,6 +685,15 @@ class TicketService:
         if archivos:
             self.session.flush()
         es_solicitante = t.solicitante_id == u.id and not self.es_gestor(u, t)
+        visualizadores = VisualizadorService(self.session)
+        if not dto.es_interno:
+            visualizadores.avisar(t, u.id, "RESPUESTA", f"{t.numero}: {u.nombre} respondió", f"{u.nombre}: {texto[:200]}")
+        if not es_solicitante and not self.es_gestor(u, t) and not dto.es_interno and visualizadores.es_visualizador(u, t):
+            # Comentario de un visualizador: lo leen el responsable y el solicitante
+            self.notif.notificar([t.responsable, t.solicitante], "COMENTARIO", f"{t.numero}: comentario de {u.nombre}",
+                                 f"{u.nombre} (visualizador): {texto[:200]}", t)
+            t.fecha_actualizacion = ahora
+            return c
         if es_solicitante:
             # Respuesta del cliente: el SLA se reanuda automáticamente
             if t.estado == Estado.PENDIENTE_CLIENTE:
@@ -784,7 +820,7 @@ class TicketService:
 
     # =============================================================== consulta
     def consulta(self, u: m.Usuario, f: s.FiltroTickets):
-        stmt = self.repo.consulta_visible(u, incluir_participados=f.participe)
+        stmt = self.repo.consulta_visible(u, incluir_participados=f.participe or f.siguiendo)
         T = m.Ticket
         if f.texto:
             patron = f"%{f.texto.strip()}%"
@@ -823,6 +859,8 @@ class TicketService:
             stmt = stmt.where(or_(T.responsable_id == u.id, T.solicitante_id == u.id))
         if f.participe:
             stmt = stmt.where(or_(T.responsable_id == u.id, T.creado_por_id == u.id, T.id.in_(self.repo.ids_participados(u.id))))
+        if f.siguiendo:
+            stmt = stmt.where(T.id.in_(select(m.TicketVisualizador.ticket_id).where(m.TicketVisualizador.usuario_id == u.id)))
         orden = {
             "fecha_desc": (T.fecha_creacion.desc(), T.id.desc()),
             "fecha_asc": (T.fecha_creacion.asc(), T.id.asc()),
@@ -888,7 +926,15 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
     adjuntos = svc.repo.adjuntos(t.id)
     archivo = lambda a: {"id": a.id, "nombre_original": a.nombre_original, "tipo_mime": a.tipo_mime,  # noqa: E731
                          "tamano_bytes": a.tamano_bytes, "usuario": resumen(a.usuario), "fecha": a.fecha, "comentario_id": a.comentario_id}
-    historial = svc.repo.historial(t.id) if lectura else [h for h in svc.repo.historial(t.id) if h.accion in ("CREACION", "CAMBIO_ESTADO", "CIERRE", "REAPERTURA")]
+    historial = svc.repo.historial(t.id) if lectura else [h for h in svc.repo.historial(t.id) if h.accion in (
+        "CREACION", "CAMBIO_ESTADO", "CIERRE", "REAPERTURA", "VISUALIZADOR", "ESCALAMIENTO_PROVEEDOR")]
+    vis = VisualizadorService(svc.session)
+    gestiona_vis = VisualizadorService.puede_gestionar(svc, u, t)
+    visualizadores = vis.salida(t, u, gestiona_vis)
+    ids_vis = {v["usuario_id"] for v in visualizadores} - {t.solicitante_id, t.responsable_id}
+    prov = ProveedorService(svc.session)
+    casos = prov._casos(ticket_id=t.id)
+    caso = next((c for c in casos if c.estado == "ABIERTO"), None)
     return {
         **{k: getattr(t, k) for k in (
             "id", "numero", "asunto", "descripcion", "fecha_creacion", "solicitante_nombre", "solicitante_cargo", "correo", "telefono",
@@ -910,6 +956,7 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "riesgo_ia": float(t.riesgo_ia) if t.riesgo_ia is not None and gestor else None,
         "comentarios": [
             {"id": c.id, "usuario": resumen(c.usuario), "texto": c.texto, "es_interno": c.es_interno, "tipo": c.tipo,
+             "de_visualizador": c.usuario_id in ids_vis,
              "minutos_invertidos": c.minutos_invertidos, "fecha": c.fecha, "copia_a": separar(c.copia_a) if lectura else [],
              "adjuntos": [archivo(a) for a in adjuntos if a.comentario_id == c.id]}
             for c in comentarios
@@ -934,6 +981,11 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
         "equipo": InventarioService(svc.session).para_ticket(t),
         "recurrente_id": t.recurrente_id,
         "kb_vistos": ConocimientoService(svc.session).vistos(t.id) if lectura else [],
+        "visualizadores": visualizadores,
+        "es_visualizador": u.id in {v["usuario_id"] for v in visualizadores},
+        "proveedor_caso": prov.caso_salida(caso) if caso else None,
+        "proveedor_casos": [prov.caso_salida(c) for c in casos] if lectura else [],
+        "facturable": bool(t.facturable),
         **_extras_tercera_ronda(svc, t, u, lectura),
     }
 

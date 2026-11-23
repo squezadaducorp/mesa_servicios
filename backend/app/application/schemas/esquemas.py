@@ -65,6 +65,7 @@ class UsuarioSesion(UsuarioResumen):
     telefono: str | None = None
     permisos: list[str]
     debe_cambiar_clave: bool
+    equipo_ti: bool = False
 
 
 class TokenSalida(Modelo):
@@ -165,6 +166,7 @@ class CategoriaEntrada(BaseModel):
     activo: bool = True
     responsables: list[ResponsableEntrada] = []
     correos_copia: list[str] = Field(default=[], description="Se agregan en copia a cada ticket nuevo de la categoría")
+    visualizadores: list[int] | None = Field(default=None, max_length=10, description="Usuarios que siguen cada ticket nuevo (34)")
     pide_equipo: bool = False
     restringida_en_nombre: bool = False
 
@@ -176,6 +178,7 @@ class CategoriaEntrada(BaseModel):
 
 class CategoriaAdminSalida(CategoriaSalida):
     correos_copia: list[str] = []
+    visualizadores: list[int] = []
 
 
 class ResponsableEntrada(BaseModel):
@@ -402,6 +405,7 @@ class ComentarioSalida(Modelo):
     minutos_invertidos: int | None
     fecha: datetime
     copia_a: list[str] = Field(default=[], description="Correos que recibieron esta respuesta en copia")
+    de_visualizador: bool = False
     adjuntos: list["AdjuntoSalida"] = Field(default=[], description="Capturas y archivos enviados con este comentario")
 
 
@@ -615,6 +619,11 @@ class TicketDetalle(Modelo):
     avisos: list[dict] = Field(default_factory=list, description="Avisos generales a los que pertenece")
     seguimiento_url: str | None = Field(default=None, description="Enlace de seguimiento sin cuenta que recibe el solicitante")
     servicio: dict | None = Field(default=None, description="Formulario del catálogo de servicios y sus tareas")
+    visualizadores: list[dict] = Field(default_factory=list, description="Personas que siguen el ticket desde la Mesa (34)")
+    es_visualizador: bool = False
+    proveedor_caso: dict | None = Field(default=None, description="Caso abierto con un proveedor externo (33)")
+    proveedor_casos: list[dict] = Field(default_factory=list)
+    facturable: bool = False
 
 
 class FiltroTickets(BaseModel):
@@ -630,6 +639,7 @@ class FiltroTickets(BaseModel):
     hasta: date | None = None
     solo_mios: bool = False
     participe: bool = False
+    siguiendo: bool = False
     vence: Literal["HOY", "VENCIDOS"] | None = None
     orden: Literal["fecha_desc", "fecha_asc", "sla_desc", "prioridad", "vence"] = "fecha_desc"
 
@@ -662,6 +672,7 @@ class UsuarioSalida(Modelo):
     activo: bool
     bloqueado: bool
     ultimo_login: datetime | None
+    equipo_ti: bool = False
 
 
 class UsuarioCrear(BaseModel):
@@ -675,6 +686,7 @@ class UsuarioCrear(BaseModel):
     origen_autenticacion: Literal["LOCAL", "AD", "ENTRA"] = "LOCAL"
     usuario_ad: str | None = None
     clave: str | None = Field(default=None, description="Si se omite, se genera una temporal")
+    equipo_ti: bool = False
 
 
 class UsuarioEditar(BaseModel):
@@ -687,6 +699,7 @@ class UsuarioEditar(BaseModel):
     activo: bool | None = None
     usuario_ad: str | None = None
     origen_autenticacion: Literal["LOCAL", "AD", "ENTRA"] | None = None
+    equipo_ti: bool | None = None
 
 
 class ClaveTemporalSalida(Modelo):
