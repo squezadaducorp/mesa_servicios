@@ -16,6 +16,7 @@ import FolderSharedIcon from "@mui/icons-material/FolderShared";
 import AlternateEmailIcon from "@mui/icons-material/AlternateEmail";
 import VpnLockIcon from "@mui/icons-material/VpnLock";
 import RoomServiceIcon from "@mui/icons-material/RoomServiceOutlined";
+import SettingsIcon from "@mui/icons-material/SettingsOutlined";
 import { Stack } from "../../components/Pila";
 import { get } from "../../api/client";
 import type { CatalogoRespuesta, Servicio } from "../../api/cuarta";
@@ -82,7 +83,14 @@ export default function Catalogo() {
 
   return (
     <Box>
-      <Typography variant="h5">Catálogo de servicios</Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ gap: 2, flexWrap: "wrap" }}>
+        <Typography variant="h5">Catálogo de servicios</Typography>
+        {puede(P.SERVICIOS) && (
+          <Button variant="contained" startIcon={<SettingsIcon />} component={RouterLink} to="/admin/servicios">
+            Administrar servicios
+          </Button>
+        )}
+      </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 3 }}>
         Elija lo que necesita. Cada servicio trae su propio formulario, así TI recibe todo lo necesario desde el primer momento.
       </Typography>
@@ -134,7 +142,10 @@ export default function Catalogo() {
           <Stack direction="row" sx={{ gap: 1.5 }}>
             <InfoIcon color="primary" />
             <Typography variant="body2">
-              Los servicios los define TI en <b>Administración › Catálogo de servicios</b>: campos del formulario, quién aprueba, tareas que se
+              Los servicios los define TI en{" "}
+              {puede(P.SERVICIOS)
+                ? <Link component={RouterLink} to="/admin/servicios" sx={{ fontWeight: 700 }}>Administración › Catálogo de servicios</Link>
+                : <b>Administración › Catálogo de servicios</b>}: campos del formulario, quién aprueba, tareas que se
               generan y tiempo comprometido.
             </Typography>
           </Stack>
