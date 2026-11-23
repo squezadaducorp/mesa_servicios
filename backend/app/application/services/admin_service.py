@@ -30,7 +30,7 @@ def usuario_salida(u: m.Usuario) -> dict:
         "id": u.id, "nombre": u.nombre, "correo": u.correo, "usuario_ad": u.usuario_ad, "origen_autenticacion": u.origen_autenticacion,
         "cargo": u.cargo, "telefono": u.telefono, "area_id": u.area_id, "rol_id": u.rol_id, "rol": u.rol.codigo,
         "supervisor_id": u.supervisor_id, "activo": u.activo, "bloqueado": bool(u.bloqueado_hasta and u.bloqueado_hasta > utcnow()),
-        "ultimo_login": u.ultimo_login, "equipo_ti": bool(u.equipo_ti),
+        "ultimo_login": u.ultimo_login,
     }
 
 
@@ -88,7 +88,7 @@ class AdminService:
         u = self.usuarios.add(m.Usuario(
             nombre=dto.nombre, correo=str(dto.correo).lower(), rol_id=rol.id, cargo=dto.cargo, telefono=dto.telefono, area_id=dto.area_id,
             supervisor_id=dto.supervisor_id, origen_autenticacion=dto.origen_autenticacion, usuario_ad=dto.usuario_ad,
-            clave_hash=clave_hash, debe_cambiar_clave=dto.origen_autenticacion == "LOCAL", fecha_creacion=utcnow(), equipo_ti=dto.equipo_ti,
+            clave_hash=clave_hash, debe_cambiar_clave=dto.origen_autenticacion == "LOCAL", fecha_creacion=utcnow(),
         ))
         self.session.refresh(u)
         self.auditoria.registrar(ctx, AccionAuditoria.USUARIO_MODIFICADO, "usuario", u.id, {"operacion": "crear", "correo": u.correo, "rol": rol.codigo})
