@@ -7,7 +7,7 @@ COPY . .
 RUN npm run build
 
 # Servidor estático + proxy a la API (usuario sin privilegios, puertos 8080/8443)
-FROM nginxinc/nginx-unprivileged:1.28-alpine
+FROM nginxinc/nginx-unprivileged:1.30-alpine
 # Parches de seguridad de Alpine publicados después de la imagen base (zlib, tiff, pcre2…)
 USER root
 RUN apk upgrade --no-cache
