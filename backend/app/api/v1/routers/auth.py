@@ -3,7 +3,9 @@ from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from typing import Literal
+
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, contexto, contexto_anonimo
@@ -12,6 +14,7 @@ from app.core.config import settings
 from app.core.limite import Limitador
 from app.application.schemas import esquemas as s
 from app.application.services.auth_service import AuthService, usuario_sesion
+from app.application.services.dos_pasos_service import DosPasosService
 from app.application.services.entra_service import EntraService
 from app.infrastructure.m365.credenciales import ErrorM365
 
@@ -19,17 +22,71 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 COOKIE_ENTRA = "aducorp_entra"
 limitador_login = Limitador(settings.LOGIN_MAX_POR_MINUTO, 60)
+limitador_2fa = Limitador(settings.LOGIN_MAX_POR_MINUTO * 2, 60)   # cada desafío además admite solo 5 intentos
 
 
 class DemasiadosIntentos(ErrorAplicacion):
     codigo_http = 429
 
 
-@router.post("/login", response_model=s.TokenSalida, summary="Iniciar sesión (local o Active Directory)")
+@router.post("/login", response_model=s.TokenSalida | s.SegundoPasoSalida,
+             summary="Iniciar sesión (local o Active Directory). Si la cuenta usa verificación en dos pasos devuelve `segundo_paso`")
 def login(dto: s.LoginEntrada, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
     if not limitador_login.permitir(ctx.ip or "?"):
         raise DemasiadosIntentos("Demasiados intentos de inicio de sesión. Espere un minuto.")
-    return AuthService(session).login(dto.correo, dto.clave, ctx)
+    return AuthService(session).login(dto.correo, dto.clave, ctx, dto.equipo_token)
+
+
+# ------------------------------------------------- verificación en dos pasos (28)
+class DesafioEntrada(BaseModel):
+    desafio: str = Field(max_length=200)
+
+
+class CodigoEntrada(DesafioEntrada):
+    codigo: str = Field(max_length=20)
+    confiar: bool = False
+    metodo: Literal["APP", "CORREO"] = "APP"
+
+
+class ActivarEntrada(DesafioEntrada):
+    metodo: Literal["APP", "CORREO"] = "APP"
+
+
+def _limite(ctx: Contexto) -> None:
+    if not limitador_2fa.permitir(ctx.ip or "?"):
+        raise DemasiadosIntentos("Demasiados intentos. Espere un minuto.")
+
+
+@router.post("/2fa/verificar", response_model=s.TokenSalida, summary="Segundo paso: código de la app, del correo o de respaldo")
+def verificar_2fa(dto: CodigoEntrada, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
+    _limite(ctx)
+    u, equipo, medio = DosPasosService(session).verificar(dto.desafio, dto.codigo, dto.confiar, ctx)
+    return AuthService(session).completar_login(u, ctx, {"segundo_paso": medio}, equipo_token=equipo)
+
+
+@router.post("/2fa/enviar-codigo", summary="Enviar un código de 6 dígitos al correo (si el envío de correos está activo)")
+def enviar_codigo_2fa(dto: DesafioEntrada, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
+    _limite(ctx)
+    r = DosPasosService(session).enviar_codigo(dto.desafio)
+    session.commit()
+    return r
+
+
+@router.post("/2fa/activar/iniciar", summary="Primer ingreso con la verificación obligatoria: QR o código por correo")
+def activar_iniciar(dto: ActivarEntrada, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
+    svc = DosPasosService(session)
+    d = svc.desafio(dto.desafio, "ACTIVAR")
+    return svc.iniciar_activacion(d.usuario, dto.metodo, d)
+
+
+@router.post("/2fa/activar/confirmar", response_model=s.TokenSalida, summary="Confirma el primer código y entra; devuelve los códigos de respaldo")
+def activar_confirmar(dto: CodigoEntrada, ctx: Contexto = Depends(contexto_anonimo), session: Session = DbSession):
+    _limite(ctx)
+    svc = DosPasosService(session)
+    d = svc.desafio(dto.desafio, "ACTIVAR")
+    codigos = svc.confirmar_activacion(d.usuario, dto.metodo, dto.codigo, ctx, d)
+    equipo = svc._confiar(d.usuario, ctx) if dto.confiar else None
+    return AuthService(session).completar_login(d.usuario, ctx, {"segundo_paso": "ACTIVADO"}, equipo_token=equipo, codigos_respaldo=codigos)
 
 
 @router.post("/refresh", response_model=s.TokenSalida, summary="Renovar el access token (rota el refresh token)")

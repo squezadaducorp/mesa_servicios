@@ -31,6 +31,9 @@ import ComputerIcon from "@mui/icons-material/Computer";
 import HowToRegIcon from "@mui/icons-material/HowToReg";
 import RuleIcon from "@mui/icons-material/Rule";
 import CampaignIcon from "@mui/icons-material/Campaign";
+import StorefrontIcon from "@mui/icons-material/Storefront";
+import PublishedWithChangesIcon from "@mui/icons-material/PublishedWithChanges";
+import SecurityIcon from "@mui/icons-material/Security";
 import { BannerAvisosGenerales } from "./AvisosGenerales";
 import { AvisosSuperiores, DialogoAusencia } from "./Disponibilidad";
 import { useAuth } from "../auth/AuthContext";
@@ -56,6 +59,8 @@ const PRINCIPAL: ItemNav[] = [
   { a: "/reportes", texto: "Indicadores", icono: <AssessmentIcon />, permisos: [P.REPORTE] },
   { a: "/tickets", texto: "Tickets", icono: <ConfirmationNumberIcon /> },
   { a: "/tickets/nuevo", texto: "Nuevo ticket", icono: <AddCircleIcon />, permisos: [P.CREAR] },
+  { a: "/catalogo", texto: "Catálogo de servicios", icono: <StorefrontIcon /> },
+  { a: "/cambios", texto: "Cambios", icono: <PublishedWithChangesIcon /> },
   { a: "/conocimiento", texto: "Base de conocimiento", icono: <MenuBookIcon /> },
   { a: "/notificaciones", texto: "Notificaciones", icono: <NotificationsIcon /> },
 ];
@@ -72,6 +77,7 @@ const ADMIN: ItemNav[] = [
   { a: "/admin/usuarios", texto: "Usuarios", icono: <PeopleIcon />, permisos: [P.USUARIOS] },
   { a: "/admin/roles", texto: "Roles y permisos", icono: <AdminPanelSettingsIcon />, permisos: [P.ROLES] },
   { a: "/admin/catalogo", texto: "Categorías y clientes", icono: <CategoryIcon />, permisos: [P.CATALOGO] },
+  { a: "/admin/servicios", texto: "Catálogo de servicios", icono: <StorefrontIcon />, permisos: [P.SERVICIOS] },
   { a: "/admin/aprobaciones", texto: "Reglas de aprobación", icono: <RuleIcon />, permisos: [P.APROBACIONES] },
   { a: "/admin/sla", texto: "SLA y calendario", icono: <TimerIcon />, permisos: [P.SLA] },
   { a: "/admin/auditoria", texto: "Auditoría", icono: <HistoryIcon />, permisos: [P.AUDITORIA] },
@@ -319,6 +325,17 @@ export default function Layout() {
                 <KeyIcon fontSize="small" />
               </ListItemIcon>
               Cambiar contraseña
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setMenuUsuario(null);
+                navigate("/seguridad");
+              }}
+            >
+              <ListItemIcon>
+                <SecurityIcon fontSize="small" />
+              </ListItemIcon>
+              Seguridad de la cuenta
             </MenuItem>
             <MenuItem
               onClick={async () => {

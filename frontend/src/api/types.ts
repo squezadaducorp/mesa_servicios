@@ -31,6 +31,10 @@ export interface TokenSalida {
   expires_in: number;
   inactividad_min?: number;
   usuario: UsuarioSesion;
+  /** Equipo de confianza (verificación en dos pasos): se envía en los próximos inicios de sesión. */
+  equipo_token?: string | null;
+  /** Solo al activar la verificación desde el inicio de sesión. */
+  codigos_respaldo?: string[] | null;
 }
 
 export interface Item {

@@ -153,7 +153,7 @@ async function ejecutar(method: string, path: string, init: { body?: unknown; fo
     body = JSON.stringify(init.body);
   }
   const r = await fetch(`${BASE}${path}${construirQuery(init.query)}`, { method, headers, body });
-  if (r.status === 401 && reintento && !path.startsWith("/auth/login")) {
+  if (r.status === 401 && reintento && !path.startsWith("/auth/login") && !path.startsWith("/auth/2fa/")) {
     const t = await renovar();
     if (t) return ejecutar(method, path, init, false);
     sesion.limpiar();

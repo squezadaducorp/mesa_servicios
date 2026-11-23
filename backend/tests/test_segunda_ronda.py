@@ -14,6 +14,14 @@ from tests.conftest import API
 from tests.test_api import catalogo, crear_ticket, ids
 
 
+
+def hoy_ecuador() -> date:
+    """La vigencia se compara con la fecha de Ecuador: entre las 19:00 y la medianoche local, date.today() en UTC ya es mañana."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.core.config import settings
+    return datetime.now(ZoneInfo(settings.ZONA_HORARIA)).date()
+
 def usuario_id(correo_local: str) -> int:
     with SessionLocal() as s:
         return s.scalar(select(m.Usuario.id).where(m.Usuario.correo == f"{correo_local}@aducorp.com.ec"))
@@ -258,7 +266,7 @@ def test_en_nombre_requiere_permiso_y_queda_registrado(client, como):
     assert client.post(f"{API}/tickets", json=body, headers=hm).status_code == 403
 
     # El administrador lo activa solo para el área Comercial y hasta una fecha
-    hasta = (date.today() + timedelta(days=30)).isoformat()
+    hasta = (hoy_ecuador() + timedelta(days=30)).isoformat()
     r = client.put(f"{API}/admin/usuarios/{maria}/en-nombre", json={"activa": True, "areas": [area_id("Legal")], "hasta": hasta}, headers=ha)
     assert r.status_code == 200 and r.json()["activa"]
     assert client.post(f"{API}/tickets", json=body, headers=hm).status_code == 403   # Luis es de Comercial, no de Legal
@@ -288,7 +296,7 @@ def test_en_nombre_requiere_permiso_y_queda_registrado(client, como):
 
     # Vencida la autorización deja de funcionar
     with SessionLocal() as s:
-        s.get(m.UsuarioDelegacion, maria).hasta = date.today() - timedelta(days=1)
+        s.get(m.UsuarioDelegacion, maria).hasta = hoy_ecuador() - timedelta(days=1)
         s.commit()
     assert client.get(f"{API}/tickets/en-nombre/personas", headers=hm).json() == []
     assert client.put(f"{API}/admin/usuarios/{maria}/en-nombre", json={"activa": False}, headers=ha).json()["activa"] is False

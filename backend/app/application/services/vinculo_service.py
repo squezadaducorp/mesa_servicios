@@ -136,6 +136,8 @@ class VinculoService:
         t = svc.obtener(ticket_id, u)
         if "vincular" not in svc.acciones(u, t) or Estado(t.estado) in TERMINADOS:
             return []
+        if t.canal == "CATALOGO":   # formularios del catálogo: asuntos parecidos por diseño (cada alta es otra persona)
+            return []
         ya = {v.ticket_id if v.relacionado_id == t.id else v.relacionado_id for v in self._filas(t.id)}
         T = m.Ticket
         candidatos = svc.session.scalars(

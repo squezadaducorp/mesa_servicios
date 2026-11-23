@@ -102,6 +102,7 @@ export interface ExtrasTercera {
   duplicado_de?: { id: number; numero: string } | null;
   avisos?: AvisoDeTicket[];
   seguimiento_url?: string | null;
+  servicio?: import("./cuarta").ServicioTicket | null;
 }
 
 export interface LoteResultado {

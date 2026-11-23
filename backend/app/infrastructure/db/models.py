@@ -89,6 +89,14 @@ class Usuario(Base):
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime)
     eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Verificación en dos pasos (28)
+    dosf_metodo: Mapped[str | None] = mapped_column(String(10))        # APP (Authenticator) | CORREO; NULL = sin activar
+    dosf_secreto: Mapped[str | None] = mapped_column(String(300))      # clave TOTP cifrada
+    dosf_pendiente: Mapped[str | None] = mapped_column(String(300))    # clave TOTP cifrada mientras se escanea el QR
+    dosf_codigos: Mapped[str | None] = mapped_column(Unicode(1500))    # hash de los códigos de respaldo sin usar (JSON)
+    dosf_fecha: Mapped[datetime | None] = mapped_column(DateTime)
+    dosf_ultimo_paso: Mapped[int | None] = mapped_column(BigInteger)   # último periodo TOTP aceptado (no se reutiliza)
+    dosf_exigido_desde: Mapped[datetime | None] = mapped_column(DateTime)
 
     rol: Mapped[Rol] = relationship(lazy="joined")
     area: Mapped[Area | None] = relationship(lazy="joined")
@@ -894,4 +902,190 @@ class AvisoAfectado(Base):
     comentario: Mapped[str | None] = mapped_column(Unicode(500))
     ticket_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
     fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    usuario: Mapped[Usuario] = relationship(lazy="joined")
+
+
+# ======================================================= cuarta ronda (26-28)
+class ServicioCatalogo(Base):
+    """Servicio del catálogo con su propio formulario y las tareas que genera (26)."""
+    __tablename__ = "servicios_catalogo"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    nombre: Mapped[str] = mapped_column(Unicode(120))
+    descripcion: Mapped[str] = mapped_column(Unicode(400))
+    icono: Mapped[str] = mapped_column(String(30), default="servicio")
+    grupo: Mapped[str] = mapped_column(Unicode(30), default="Accesos")
+    categoria_id: Mapped[int] = mapped_column(ForeignKey("categorias.id"))
+    subcategoria_id: Mapped[int] = mapped_column(ForeignKey("subcategorias.id"))
+    plazo_horas: Mapped[int] = mapped_column(Integer, default=8)              # horas hábiles; 0 = usa el SLA de la categoría
+    plazo_texto: Mapped[str | None] = mapped_column(Unicode(40))              # p. ej. «El mismo día»
+    requiere_aprobacion: Mapped[bool] = mapped_column(Boolean, default=False)
+    lo_pide: Mapped[str | None] = mapped_column(Unicode(100))
+    titulo_campos: Mapped[str | None] = mapped_column(Unicode(150))
+    titulo_opciones: Mapped[str | None] = mapped_column(Unicode(150))
+    aviso: Mapped[str | None] = mapped_column(Unicode(500))
+    campos: Mapped[str | None] = mapped_column(UnicodeText)                   # JSON: campos del formulario
+    opciones: Mapped[str | None] = mapped_column(UnicodeText)                 # JSON: casillas que generan tareas
+    orden: Mapped[int] = mapped_column(Integer, default=0)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime)
+
+    categoria: Mapped[Categoria] = relationship(lazy="joined")
+    subcategoria: Mapped[Subcategoria] = relationship(lazy="joined")
+
+
+class TicketSolicitudServicio(Base):
+    __tablename__ = "ticket_solicitudes_servicio"
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), primary_key=True)
+    servicio_id: Mapped[int] = mapped_column(ForeignKey("servicios_catalogo.id"))
+    respuestas: Mapped[str] = mapped_column(UnicodeText)                     # JSON: [{etiqueta, valor}]
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    servicio: Mapped[ServicioCatalogo] = relationship(lazy="joined")
+
+
+class TicketTarea(Base):
+    __tablename__ = "ticket_tareas"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    titulo: Mapped[str] = mapped_column(Unicode(200))
+    responsable_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    estado: Mapped[str] = mapped_column(String(10), default="PENDIENTE")     # PENDIENTE | LISTA
+    orden: Mapped[int] = mapped_column(Integer, default=0)
+    completada_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_completada: Mapped[datetime | None] = mapped_column(DateTime)
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    responsable: Mapped[Usuario | None] = relationship(foreign_keys=[responsable_id], lazy="joined")
+
+
+class Cambio(Base):
+    """Solicitud de cambio TI-FOR-001 (Mesa) o TI-FOR-002 (general) con la evaluación de TI (27)."""
+    __tablename__ = "cambios"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    numero: Mapped[str] = mapped_column(String(20), unique=True)
+    anio: Mapped[int] = mapped_column(Integer)
+    secuencia: Mapped[int] = mapped_column(Integer)
+    formato: Mapped[str] = mapped_column(String(10), default="MESA")         # MESA (TI-FOR-001) | GENERAL (TI-FOR-002)
+    titulo: Mapped[str] = mapped_column(Unicode(200))
+    solicitante_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    telefono: Mapped[str | None] = mapped_column(Unicode(30))
+    tipo_solicitud: Mapped[str] = mapped_column(String(15))
+    aplicacion: Mapped[str | None] = mapped_column(Unicode(150))
+    partes: Mapped[str | None] = mapped_column(Unicode(500))
+    pantalla: Mapped[str | None] = mapped_column(Unicode(200))
+    desde_donde: Mapped[str | None] = mapped_column(String(12))
+    ticket_relacionado: Mapped[str | None] = mapped_column(Unicode(200))
+    situacion_actual: Mapped[str] = mapped_column(UnicodeText)
+    situacion_deseada: Mapped[str] = mapped_column(UnicodeText)
+    justificacion: Mapped[str | None] = mapped_column(UnicodeText)
+    beneficiados: Mapped[str | None] = mapped_column(String(15))
+    prioridad_sugerida: Mapped[str] = mapped_column(String(5), default="MEDIA")
+    # Sección 7 · uso exclusivo de TI
+    clasificacion: Mapped[str | None] = mapped_column(String(15))
+    tipo_cambio: Mapped[str | None] = mapped_column(String(12))              # ESTANDAR | NORMAL | EMERGENCIA
+    impacto: Mapped[str | None] = mapped_column(String(5))
+    probabilidad: Mapped[str | None] = mapped_column(String(5))
+    riesgo: Mapped[str | None] = mapped_column(String(5))
+    esfuerzo: Mapped[str | None] = mapped_column(String(10))
+    prioridad_ti: Mapped[str | None] = mapped_column(String(5))
+    evaluacion: Mapped[str | None] = mapped_column(UnicodeText)
+    plan_implementacion: Mapped[str | None] = mapped_column(UnicodeText)
+    plan_reversion: Mapped[str | None] = mapped_column(UnicodeText)
+    responsable_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    evaluado_por_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_evaluacion: Mapped[datetime | None] = mapped_column(DateTime)
+    ventana_inicio: Mapped[datetime | None] = mapped_column(DateTime)
+    ventana_fin: Mapped[datetime | None] = mapped_column(DateTime)
+    fecha_implementado: Mapped[datetime | None] = mapped_column(DateTime)
+    version_ref: Mapped[str | None] = mapped_column(Unicode(100))
+    resultado: Mapped[str | None] = mapped_column(String(15))                # EXITOSO | CON_PROBLEMAS | REVERTIDO
+    probado_solicitante: Mapped[bool | None] = mapped_column(Boolean)
+    fecha_informado: Mapped[datetime | None] = mapped_column(DateTime)
+    observaciones: Mapped[str | None] = mapped_column(UnicodeText)
+    motivo: Mapped[str | None] = mapped_column(Unicode(1000))                # rechazo o «en espera»
+    estado: Mapped[str] = mapped_column(String(15), default="SOLICITADO")
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime)
+
+    solicitante: Mapped[Usuario] = relationship(foreign_keys=[solicitante_id], lazy="joined")
+    responsable: Mapped[Usuario | None] = relationship(foreign_keys=[responsable_id], lazy="joined")
+    evaluado_por: Mapped[Usuario | None] = relationship(foreign_keys=[evaluado_por_id], lazy="joined")
+
+
+class CambioAprobacion(Base):
+    __tablename__ = "cambio_aprobaciones"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    cambio_id: Mapped[int] = mapped_column(ForeignKey("cambios.id"))
+    rol: Mapped[str] = mapped_column(String(10))                             # JEFE_TI | GERENCIA
+    aprobador_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    estado: Mapped[str] = mapped_column(String(10), default="PENDIENTE")     # PENDIENTE | APROBADO | RECHAZADO | ANULADO
+    comentario: Mapped[str | None] = mapped_column(Unicode(1000))
+    fecha_solicitud: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_respuesta: Mapped[datetime | None] = mapped_column(DateTime)
+    recordado: Mapped[bool] = mapped_column(Boolean, default=False)
+    aprobador: Mapped[Usuario] = relationship(lazy="joined")
+
+
+class CambioHistorial(Base):
+    __tablename__ = "cambio_historial"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    cambio_id: Mapped[int] = mapped_column(ForeignKey("cambios.id"))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    accion: Mapped[str] = mapped_column(String(30))
+    detalle: Mapped[str | None] = mapped_column(Unicode(1000))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    usuario: Mapped[Usuario | None] = relationship(lazy="joined")
+
+
+class CambioAdjunto(Base):
+    __tablename__ = "cambio_adjuntos"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    cambio_id: Mapped[int] = mapped_column(ForeignKey("cambios.id"))
+    nombre_original: Mapped[str] = mapped_column(Unicode(255))
+    ruta: Mapped[str] = mapped_column(Unicode(400))
+    tipo_mime: Mapped[str | None] = mapped_column(String(100))
+    tamano_bytes: Mapped[int] = mapped_column(Integer)
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class CambioCongelamiento(Base):
+    """Periodo sin cambios (cierre de mes, auditoría, temporada alta…)."""
+    __tablename__ = "cambio_congelamientos"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    titulo: Mapped[str] = mapped_column(Unicode(150))
+    inicio: Mapped[datetime] = mapped_column(DateTime)
+    fin: Mapped[datetime] = mapped_column(DateTime)
+    motivo: Mapped[str | None] = mapped_column(Unicode(500))
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class DosfEquipo(Base):
+    """Equipo de confianza: no pide el segundo paso durante N días (28)."""
+    __tablename__ = "dosf_equipos"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    token_hash: Mapped[str] = mapped_column(CHAR(64), unique=True)
+    equipo: Mapped[str | None] = mapped_column(Unicode(300))
+    ip: Mapped[str | None] = mapped_column(String(45))
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_expiracion: Mapped[datetime] = mapped_column(DateTime)
+    revocado: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class DosfDesafio(Base):
+    """Inicio de sesión a medias: la contraseña fue correcta y falta el código (28)."""
+    __tablename__ = "dosf_desafios"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    token_hash: Mapped[str] = mapped_column(CHAR(64), unique=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    proposito: Mapped[str] = mapped_column(String(10))                       # LOGIN | ACTIVAR
+    codigo_hash: Mapped[str | None] = mapped_column(CHAR(64))                # código enviado por correo
+    codigo_expira: Mapped[datetime | None] = mapped_column(DateTime)
+    envios: Mapped[int] = mapped_column(Integer, default=0)
+    intentos: Mapped[int] = mapped_column(Integer, default=0)
+    usado: Mapped[bool] = mapped_column(Boolean, default=False)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_expiracion: Mapped[datetime] = mapped_column(DateTime)
     usuario: Mapped[Usuario] = relationship(lazy="joined")

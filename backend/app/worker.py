@@ -182,6 +182,9 @@ def ciclo_aprobaciones() -> dict:
         if not tomar_bloqueo(session, "aprobaciones", settings.WORKER_INTERVALO_SEG * 3):
             return {"omitido": "otro worker tiene el bloqueo"}
         r = AprobacionService(session).procesar(utcnow())
+        from app.application.services.cambio_service import CambioService
+
+        r["cambios"] = CambioService(session).procesar(utcnow())   # recordatorio a Jefe de TI / Gerencia (27)
         session.commit()
         return r
 
