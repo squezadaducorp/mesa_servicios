@@ -37,6 +37,9 @@ const Cambios = lazy(() => import("./pages/cuarta/Cambios"));
 const CambioNuevo = lazy(() => import("./pages/cuarta/CambioNuevo"));
 const CambioDetalle = lazy(() => import("./pages/cuarta/CambioDetalle"));
 const Seguridad = lazy(() => import("./pages/cuarta/Seguridad"));
+const Problemas = lazy(() => import("./pages/ronda4b/Problemas"));
+const ProblemaDetalle = lazy(() => import("./pages/ronda4b/ProblemaDetalle"));
+const PanelGerencial = lazy(() => import("./pages/ronda4b/PanelGerencial"));
 const SolicitudPublica = lazy(() => import("./pages/SolicitudPublica"));
 const EncuestaPublica = lazy(() => import("./pages/EncuestaPublica"));
 
@@ -103,6 +106,9 @@ export default function App() {
           <Route path="cambios/:id" element={<CambioDetalle />} />
           <Route path="cambios/:id/editar" element={<CambioNuevo />} />
           <Route path="seguridad" element={<Seguridad />} />
+          <Route path="problemas" element={<Requiere permisos={[P.PROBLEMAS, P.KB, P.PANEL]}><Problemas /></Requiere>} />
+          <Route path="problemas/:id" element={<Requiere permisos={[P.PROBLEMAS, P.KB, P.PANEL]}><ProblemaDetalle /></Requiere>} />
+          <Route path="panel" element={<Requiere permisos={[P.PANEL]}><PanelGerencial /></Requiere>} />
           <Route path="admin/servicios" element={<Requiere permisos={[P.SERVICIOS]}><AdminServicios /></Requiere>} />
           <Route path="cambiar-clave" element={<CambiarClave />} />
           <Route path="admin/usuarios" element={<Requiere permisos={[P.USUARIOS]}><Usuarios /></Requiere>} />

@@ -20,14 +20,16 @@ PERMISOS_POR_ROL = {
                    "ticket.editar", "ticket.asignar", "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir",
                    "ticket.comentar", "ticket.adjuntar", "reporte.ver", "dashboard.ver", "datos.exportar", "ia.usar",
                    "kb.gestionar", "respuestas.gestionar", "recurrentes.gestionar", "reportes.programar", "inventario.ver",
-                   "inventario.gestionar", "aprobaciones.gestionar", "avisos.gestionar", "servicios.gestionar", "cambios.gestionar"],
+                   "inventario.gestionar", "aprobaciones.gestionar", "avisos.gestionar", "servicios.gestionar", "cambios.gestionar",
+                   "problemas.gestionar", "panel.ver"],
     "SUPERVISOR": ["ticket.ver_area", "ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.asignar",
                    "ticket.escalar", "ticket.cambiar_estado", "ticket.cerrar", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar",
-                   "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver", "avisos.gestionar"],
+                   "reporte.ver", "dashboard.ver", "ia.usar", "kb.gestionar", "respuestas.gestionar", "inventario.ver", "avisos.gestionar",
+                   "problemas.gestionar"],
     "ANALISTA": ["ticket.ver_asignados", "ticket.ver_propios", "ticket.crear", "ticket.editar", "ticket.escalar", "ticket.cambiar_estado",
                  "ticket.cerrar", "ticket.comentar", "ticket.adjuntar", "ia.usar", "kb.gestionar", "inventario.ver", "ticket.asignar"],
     "CLIENTE": ["ticket.ver_propios", "ticket.crear", "ticket.reabrir", "ticket.comentar", "ticket.adjuntar"],
-    "GERENCIA": ["ticket.ver_todos", "reporte.ver", "dashboard.ver", "datos.exportar", "inventario.ver", "cambios.ver"],
+    "GERENCIA": ["ticket.ver_todos", "reporte.ver", "dashboard.ver", "datos.exportar", "inventario.ver", "cambios.ver", "panel.ver"],
 }
 TODOS_PERMISOS = sorted({p for ps in PERMISOS_POR_ROL.values() for p in ps} | {
     "sistema.administrar", "usuario.administrar", "rol.administrar", "categoria.administrar", "registro.eliminar", "auditoria.ver"})
@@ -122,7 +124,8 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                            ("TICKET_NUEVO_RESPONSABLE", "[{numero}] Ahora lo atiende {responsable}"),
                            ("TICKETS_UNIDOS", "[{numero}] Su solicitud se atiende junto con otras"),
                            ("SEGUIMIENTO_ENLACE", "[{numero}] Enlace para ver el estado de su solicitud"),
-                           ("TAREA_ASIGNADA", "[{numero}] Tarea para usted: {tarea}")):
+                           ("TAREA_ASIGNADA", "[{numero}] Tarea para usted: {tarea}"),
+                           ("PROBLEMA_RESUELTO", "[{numero}] Se corrigió la causa de su incidente")):
         session.add(m.PlantillaCorreo(codigo=codigo, asunto=asunto, cuerpo_html="<p>Hola {destinatario}: {asunto} {comentario} {restante} "
                                       "{ausente} {reemplazo} {creado_por} {motivo} {resultado} {pedido_por} <a href='{url}'>ver</a> <a href='{url_nota_5}'>5</a> "
                                       "<a href='{url_aprobar}'>aprobar</a> <a href='{url_seguimiento}'>seguimiento</a></p>"))
@@ -135,7 +138,7 @@ def sembrar(session: Session, clave: str = CLAVE_DEMO) -> None:
                  ("encuesta.activa", "si"), ("encuesta.aviso_nota_max", "2"), ("seguimiento.activo", "si"),
                  ("seguimiento.dias_vigencia", "30"), ("seguimiento.permitir_responder", "si"),
                  ("cambios.jefe_ti", f"admin@{DOMINIO}"), ("cambios.gerencia", f"gerencia@{DOMINIO}"),
-                 ("cambios.congelar_cierre_mes", "si")):
+                 ("cambios.congelar_cierre_mes", "si"), ("problemas.patron_minimo", "5"), ("problemas.patron_dias", "7")):
         session.add(m.Configuracion(clave=k, valor=v))
     session.commit()
 

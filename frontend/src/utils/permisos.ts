@@ -25,4 +25,6 @@ export const P = {
   SERVICIOS: "servicios.gestionar",
   CAMBIOS: "cambios.gestionar",
   CAMBIOS_VER: "cambios.ver",
+  PROBLEMAS: "problemas.gestionar",
+  PANEL: "panel.ver",
 } as const;

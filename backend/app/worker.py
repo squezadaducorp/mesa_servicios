@@ -170,6 +170,9 @@ def ciclo_reportes() -> dict:
         if not tomar_bloqueo(session, "reportes_programados", settings.WORKER_INTERVALO_SEG * 3):
             return {"omitido": "otro worker tiene el bloqueo"}
         r = ReportesProgramadosService(session).procesar()
+        from app.application.services.panel_service import PanelService
+
+        r["panel"] = PanelService(session).procesar()   # PDF del panel gerencial, primer día hábil del mes (32)
         session.commit()
         return r
 

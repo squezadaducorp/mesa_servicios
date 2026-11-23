@@ -74,6 +74,8 @@ class Permiso(StrEnum):
     SERVICIOS_GESTIONAR = "servicios.gestionar"
     CAMBIOS_GESTIONAR = "cambios.gestionar"
     CAMBIOS_VER = "cambios.ver"
+    PROBLEMAS_GESTIONAR = "problemas.gestionar"
+    PANEL_VER = "panel.ver"
 
 
 class AccionAuditoria(StrEnum):
@@ -125,3 +127,7 @@ class AccionAuditoria(StrEnum):
     DOSF_RESTABLECIDA = "DOSF_RESTABLECIDA"
     DOSF_FALLIDA = "DOSF_FALLIDA"
     DOSF_POLITICA = "DOSF_POLITICA"
+    PROBLEMA_REGISTRADO = "PROBLEMA_REGISTRADO"
+    PROBLEMA_MODIFICADO = "PROBLEMA_MODIFICADO"
+    PROBLEMA_VINCULADO = "PROBLEMA_VINCULADO"
+    PANEL_ENVIO_CONFIGURADO = "PANEL_ENVIO_CONFIGURADO"

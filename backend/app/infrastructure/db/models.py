@@ -1061,6 +1061,79 @@ class CambioCongelamiento(Base):
     fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
+# ------------------------------------------------------- 30 gestión de problemas
+class Problema(Base):
+    """Causa de fondo de varios incidentes: PRB-AAAA-NNN, 5 porqués, error conocido y solución definitiva (30)."""
+    __tablename__ = "problemas"
+    __table_args__ = (UniqueConstraint("anio", "secuencia", name="uq_problemas_secuencia"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    numero: Mapped[str] = mapped_column(String(20), unique=True)
+    anio: Mapped[int] = mapped_column(Integer)
+    secuencia: Mapped[int] = mapped_column(Integer)
+    titulo: Mapped[str] = mapped_column(Unicode(200))
+    descripcion: Mapped[str | None] = mapped_column(UnicodeText)
+    estado: Mapped[str] = mapped_column(String(20), default="DETECTADO")      # DETECTADO | EN_ANALISIS | ERROR_CONOCIDO | SOLUCION_EN_CAMBIO | CERRADO
+    origen: Mapped[str] = mapped_column(String(10), default="MANUAL")         # MANUAL | PATRON
+    categoria_id: Mapped[int | None] = mapped_column(ForeignKey("categorias.id"))
+    subcategoria_id: Mapped[int | None] = mapped_column(ForeignKey("subcategorias.id"))
+    responsable_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    porques: Mapped[str | None] = mapped_column(UnicodeText)                  # JSON [{pregunta, respuesta}]
+    causa_raiz: Mapped[str | None] = mapped_column(Unicode(1000))
+    solucion_definitiva: Mapped[str | None] = mapped_column(Unicode(1000))
+    solucion_temporal: Mapped[str | None] = mapped_column(Unicode(2000))
+    palabras_clave: Mapped[str | None] = mapped_column(Unicode(500))         # para reconocer tickets nuevos parecidos
+    articulo_id: Mapped[int | None] = mapped_column(ForeignKey("kb_articulos.id"))
+    cambio_id: Mapped[int | None] = mapped_column(ForeignKey("cambios.id"))
+    nota_cierre: Mapped[str | None] = mapped_column(Unicode(1000))
+    creado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    fecha_causa: Mapped[datetime | None] = mapped_column(DateTime)             # cuando pasó a «Error conocido»
+    fecha_cierre: Mapped[datetime | None] = mapped_column(DateTime)
+    fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime)
+    responsable: Mapped[Usuario | None] = relationship(foreign_keys=[responsable_id], lazy="joined")
+    categoria: Mapped[Categoria | None] = relationship(lazy="joined")
+    subcategoria: Mapped[Subcategoria | None] = relationship(lazy="joined")
+    cambio: Mapped[Cambio | None] = relationship(lazy="joined")
+
+
+class ProblemaTicket(Base):
+    """Incidente agrupado bajo un problema. `con_solucion`: se respondió con la solución temporal (incidente evitado)."""
+    __tablename__ = "problema_tickets"
+    __table_args__ = (UniqueConstraint("problema_id", "ticket_id", name="uq_probtick"),)
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    problema_id: Mapped[int] = mapped_column(ForeignKey("problemas.id"))
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"))
+    con_solucion: Mapped[bool] = mapped_column(Boolean, default=False)
+    vinculado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    ticket: Mapped[Ticket] = relationship(lazy="joined")
+
+
+class ProblemaDescarte(Base):
+    """«No es esto» en un ticket (problema + ticket) o «Ignorar» un patrón detectado (firma)."""
+    __tablename__ = "problema_descartes"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    problema_id: Mapped[int | None] = mapped_column(ForeignKey("problemas.id"))
+    ticket_id: Mapped[int | None] = mapped_column(ForeignKey("tickets.id"))
+    firma: Mapped[str | None] = mapped_column(String(64))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+# ------------------------------------------------------- 32 panel gerencial (PDF mensual)
+class PanelEnvio(Base):
+    """Cada PDF del panel gerencial enviado por correo (automático el primer día hábil o de prueba)."""
+    __tablename__ = "panel_envios"
+    id: Mapped[int] = mapped_column(BigId, primary_key=True)
+    periodo: Mapped[str] = mapped_column(String(7))                          # AAAA-MM del mes informado
+    archivo: Mapped[str] = mapped_column(Unicode(150))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    destinatarios: Mapped[str] = mapped_column(Unicode(1000))
+    es_prueba: Mapped[bool] = mapped_column(Boolean, default=False)
+    correo_id: Mapped[int | None] = mapped_column(BigId)
+    enviado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+
+
 class DosfEquipo(Base):
     """Equipo de confianza: no pide el segundo paso durante N días (28)."""
     __tablename__ = "dosf_equipos"

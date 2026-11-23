@@ -34,6 +34,7 @@ import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/for
 import TicketDialogos, { estadosDestino, type Dialogo } from "./TicketDialogos";
 import { AlertasTercera, PanelTercera } from "./tercera/TicketTercera";
 import PanelTareas from "./cuarta/PanelTareas";
+import TicketProblemas from "./ronda4b/TicketProblemas";
 import { AdjuntosDeComentario, ArchivosPorEnviar, imagenesDe, nombrarCaptura } from "../components/CapturasComentario";
 
 /** Encuesta de satisfacción: el solicitante califica (y así cierra) un ticket resuelto; luego se muestra la nota. */
@@ -318,6 +319,7 @@ export default function TicketDetalle() {
       )}
 
       <AlertasTercera t={t} onCambio={() => q.refetch()} />
+      {a.has("nota_interna") && <TicketProblemas ticketId={t.id} onCambio={() => q.refetch()} />}
 
       <Paper sx={{ p: { xs: 2, md: 3 }, mb: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
