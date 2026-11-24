@@ -8,8 +8,9 @@
 #   ALERTA_CORREOS=a@x.com,b@x.com  avisa por correo si el respaldo falla (y con RESPALDO_AVISO=siempre, también si sale bien)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+trap 'echo "ERROR en deploy/respaldo.sh (línea $LINENO)" >&2' ERR   # nunca falla en silencio, ni antes de leer el .env
 # Lee solo las variables necesarias (el .env no es un script de bash)
-leer() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
+leer() { { grep -E "^$1=" .env 2>/dev/null || true; } | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
 SA_PASSWORD=$(leer SA_PASSWORD)
 BASE=$(leer DB_NAME); BASE=${BASE:-AducorpMesaServicios}
 TIPO=${1:-completo}
