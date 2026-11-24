@@ -26,7 +26,7 @@ jobs:
     name: Secretos en el código (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Buscar secretos en todo el historial
@@ -46,7 +46,7 @@ jobs:
           - imagen: mesa-web
             contexto: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Construir la imagen igual que en producción
         run: docker build -t ${{ matrix.imagen }}:escaneo ${{ matrix.contexto }}
       - name: Informe completo (todas las severidades)
@@ -85,12 +85,12 @@ jobs:
           mkdir -p resumen
           jq --arg img "${{ matrix.imagen }}" '[.Results[]?.Vulnerabilities[]?] as $v | {imagen: $img, critica: ($v|map(select(.Severity=="CRITICAL"))|length), alta: ($v|map(select(.Severity=="HIGH"))|length), media: ($v|map(select(.Severity=="MEDIUM"))|length), hallazgos: ($v|map(select(.Severity=="CRITICAL" or .Severity=="HIGH"))|unique_by(.VulnerabilityID + .PkgName)|.[:30]|map({id: .VulnerabilityID, severidad: .Severity, paquete: .PkgName, instalada: .InstalledVersion, corregida: (.FixedVersion // ""), titulo: ((.Title // "")|.[:160])}))}' trivy-${{ matrix.imagen }}.json > resumen/resumen-${{ matrix.imagen }}.json
           cat resumen/resumen-${{ matrix.imagen }}.json | head -c 400
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: resumen-${{ matrix.imagen }}
           path: resumen/resumen-${{ matrix.imagen }}.json
           retention-days: 30
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: seguridad-${{ matrix.imagen }}
@@ -114,7 +114,7 @@ jobs:
     # La imagen es de Microsoft: no la podemos parchar nosotros, pero conviene saber cuándo publicar una nueva (cambio estándar)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Imagen usada en docker-compose.yml
         id: img
         run: echo "ref=$(grep -m1 -oE 'mcr.microsoft.com/mssql/server:[^"[:space:]]+' docker-compose.yml)" >> "$GITHUB_OUTPUT"
@@ -144,7 +144,7 @@ jobs:
           mkdir -p resumen
           jq --arg img "sqlserver" '[.Results[]?.Vulnerabilities[]?] as $v | {imagen: $img, critica: ($v|map(select(.Severity=="CRITICAL"))|length), alta: ($v|map(select(.Severity=="HIGH"))|length), media: ($v|map(select(.Severity=="MEDIUM"))|length), hallazgos: ($v|map(select(.Severity=="CRITICAL" or .Severity=="HIGH"))|unique_by(.VulnerabilityID + .PkgName)|.[:30]|map({id: .VulnerabilityID, severidad: .Severity, paquete: .PkgName, instalada: .InstalledVersion, corregida: (.FixedVersion // ""), titulo: ((.Title // "")|.[:160])}))}' trivy-sqlserver.json > resumen/resumen-sqlserver.json
           cat resumen/resumen-sqlserver.json | head -c 400
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: resumen-sqlserver
           path: resumen/resumen-sqlserver.json
