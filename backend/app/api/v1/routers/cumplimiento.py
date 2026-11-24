@@ -1,4 +1,5 @@
-"""Seguridad y cumplimiento ISO 27001: revisión de accesos (38) y clasificación y retención (42)."""
+"""Seguridad y cumplimiento ISO 27001: política de acceso (37), revisión de accesos (38), servidor (40), vulnerabilidades (41)
+y clasificación y retención (42)."""
 from typing import Literal
 
 from fastapi import APIRouter, Depends
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, contexto, requiere
 from app.application.errores import Contexto
+from app.application.services.estado_seguridad_service import EstadoSeguridadService
 from app.application.services.retencion_service import RetencionService
 from app.application.services.revision_acceso_service import RevisionAccesoService
 from app.domain.enums import Permiso
@@ -38,6 +40,41 @@ class RetencionLegalEntrada(BaseModel):
 
 class DepurarEntrada(BaseModel):
     confirmacion: str = Field(max_length=20)
+
+
+class ClavesEntrada(BaseModel):
+    claves_previas: int | None = Field(None, ge=0, le=24)
+    max_intentos: int | None = Field(None, ge=3, le=20)
+    bloqueo_min: int | None = Field(None, ge=5, le=1440)
+    inactividad_min: int | None = Field(None, ge=0, le=480)
+    aviso_bloqueo: bool = True
+
+
+# ---------------------------------------------------------------- 37 política de acceso
+@router.get("/cumplimiento/acceso", summary="Política de acceso y cumplimiento de la verificación en dos pasos")
+def acceso(ctx: Contexto = Depends(ADMIN), session: Session = DbSession):
+    return EstadoSeguridadService(session).acceso()
+
+
+@router.put("/cumplimiento/acceso/claves", summary="Guardar la política de contraseñas y bloqueo")
+def guardar_claves(dto: ClavesEntrada, ctx: Contexto = Depends(ADMIN), session: Session = DbSession):
+    return EstadoSeguridadService(session).guardar_claves(dto.model_dump(), ctx)
+
+
+@router.post("/cumplimiento/acceso/recordar", summary="Recordar por correo a quien no ha activado la verificación obligatoria")
+def recordar(ctx: Contexto = Depends(ADMIN), session: Session = DbSession):
+    return EstadoSeguridadService(session).recordar(ctx)
+
+
+# ---------------------------------------------------------------- 40 servidor y 41 vulnerabilidades
+@router.get("/cumplimiento/servidor", summary="Último informe de endurecimiento del servidor")
+def servidor(ctx: Contexto = Depends(SISTEMA), session: Session = DbSession):
+    return EstadoSeguridadService(session).servidor()
+
+
+@router.get("/cumplimiento/vulnerabilidades", summary="Último escaneo de vulnerabilidades y alertas de Dependabot (GitHub)")
+def vulnerabilidades(refrescar: bool = False, ctx: Contexto = Depends(SISTEMA), session: Session = DbSession):
+    return EstadoSeguridadService(session).vulnerabilidades(refrescar)
 
 
 # ---------------------------------------------------------------- 38 revisión de accesos

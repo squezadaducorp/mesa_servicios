@@ -6,6 +6,11 @@ services:
     environment:
       MSSQL_MEMORY_LIMIT_MB: ${MSSQL_MEMORY_LIMIT_MB:-1536}   # deja memoria para la API, el worker y Caddy
 
+  api:
+    volumes:
+      - adjuntos:/data/adjuntos
+      - ./estado:/data/estado:ro       # informe diario de deploy/nube/verificar-servidor.sh (Seguridad › Servidor)
+
   web:
     ports: !override
       - "127.0.0.1:8080:8080"        # solo Caddy publica hacia internet (puertos 80 y 443)

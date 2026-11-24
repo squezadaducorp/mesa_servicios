@@ -10,3 +10,4 @@ certs/
 teams/*.zip
 usuarios.csv
 .env.base
+estado/
