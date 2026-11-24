@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:5173", "http://localhost:8080"])
     LOG_LEVEL: str = "INFO"
     DOCS_ENABLED: bool = True               # Swagger/ReDoc; puede apagarse en producción
+    # Seguridad y cumplimiento (ISO 27001, mejoras 40 y 41)
+    GITHUB_REPO: str = "squezadaducorp/mesa_servicios"   # repositorio cuyo escaneo se muestra en «Vulnerabilidades»
+    GITHUB_TOKEN_SEGURIDAD: str = ""        # token de solo lectura (Actions, Dependabot alerts, Pull requests); vacío = sin datos
+    SERVIDOR_ESTADO: str = "/data/estado/servidor.json"   # lo escribe deploy/nube/verificar-servidor.sh en el servidor
     # Solo se confía en X-Forwarded-For / X-Real-IP cuando la conexión viene de estos proxies (Nginx)
     TRUSTED_PROXIES: list[str] = Field(default_factory=lambda: ["127.0.0.1/32", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"])
 

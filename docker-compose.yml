@@ -11,6 +11,8 @@ x-api-env: &api-env
   DATABASE_URL: mssql+pyodbc://${DB_APP_USER:-mesa_app}:${DB_APP_PASSWORD:?Defina DB_APP_PASSWORD}@sqlserver:1433/${DB_NAME:-AducorpMesaServicios}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
   JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET}
   DOCS_ENABLED: ${DOCS_ENABLED:-false}
+  GITHUB_REPO: ${GITHUB_REPO:-squezadaducorp/mesa_servicios}
+  GITHUB_TOKEN_SEGURIDAD: ${GITHUB_TOKEN_SEGURIDAD:-}
   AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
   LDAP_URL: ${LDAP_URL:-}
   LDAP_DOMINIO: ${LDAP_DOMINIO:-}

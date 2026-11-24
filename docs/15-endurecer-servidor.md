@@ -382,6 +382,42 @@ Opcional, como higiene: las claves viejas estuvieron en un disco sin cifrar. Se 
 
 Se puede hacer en otra ventana.
 
+## 12. Verificación diaria: pestaña «Servidor» (sin corte)
+
+La Mesa corre dentro de un contenedor y no puede revisar el servidor por sí misma. El script
+`deploy/nube/verificar-servidor.sh` lo revisa en modo **solo lectura** y deja `estado/servidor.json`.
+La API lo lee y lo muestra en **Seguridad y cumplimiento › Servidor**.
+
+Revisa: puerto 22 abierto a internet, disco cifrado, parches pendientes y reinicio, claves fuera del disco, IMDSv2,
+contenedores sin root, CloudTrail y MFA de la cuenta raíz.
+
+### 12.1 Permisos de solo lectura para el rol del servidor
+**IAM › Roles** › el rol del paso 1 › *Add permissions* › **Create inline policy** › **JSON**:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances", "ec2:DescribeSecurityGroups", "ec2:DescribeVolumes", "ec2:GetEbsEncryptionByDefault",
+        "cloudtrail:DescribeTrails", "cloudtrail:GetTrailStatus", "iam:GetAccountSummary"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+Nombre: `verificar-servidor-mesa` › **Create policy**. Sin estos permisos, los controles de AWS salen como «Sin dato».
+
+### 12.2 Programarlo
+```bash
+cd /opt/mesa-servicios
+sudo ./deploy/nube/verificar-servidor.sh instalar      # revisa ahora y lo programa todos los días a las 06:00
+docker compose -f docker-compose.yml -f docker-compose.nube.yml --profile nube up -d api   # monta estado/ en la API
+```
+Para revisar en cualquier momento: `sudo ./deploy/nube/verificar-servidor.sh`.
+
 ## Evidencia para ISO 27001
 
 Guarde capturas de pantalla de cada punto:
@@ -395,5 +431,7 @@ Guarde capturas de pantalla de cada punto:
 | `20auto-upgrades` | A.8.8 |
 | Trail activo | A.8.15 |
 | MFA en la raíz | A.8.5 |
+
+La pestaña **Servidor** de la Mesa resume estos puntos cada día; una captura mensual sirve de evidencia.
 
 Registre los pasos 8 y 9 como **cambio normal** en el registro de cambios de la Mesa.

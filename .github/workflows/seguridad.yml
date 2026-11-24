@@ -69,6 +69,27 @@ jobs:
         if: always()
         run: |
           { echo "### ${{ matrix.imagen }}"; echo '```'; cat trivy-${{ matrix.imagen }}.txt 2>/dev/null | tail -n 80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Resumen para la Mesa (Seguridad y cumplimiento › Vulnerabilidades)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
+        with:
+          image-ref: ${{ matrix.imagen }}:escaneo
+          format: json
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: "0"
+          output: trivy-${{ matrix.imagen }}.json
+          skip-setup-trivy: true
+      - name: Resumir hallazgos
+        run: |
+          mkdir -p resumen
+          jq --arg img "${{ matrix.imagen }}" '[.Results[]?.Vulnerabilities[]?] as $v | {imagen: $img, critica: ($v|map(select(.Severity=="CRITICAL"))|length), alta: ($v|map(select(.Severity=="HIGH"))|length), media: ($v|map(select(.Severity=="MEDIUM"))|length), hallazgos: ($v|map(select(.Severity=="CRITICAL" or .Severity=="HIGH"))|unique_by(.VulnerabilityID + .PkgName)|.[:30]|map({id: .VulnerabilityID, severidad: .Severity, paquete: .PkgName, instalada: .InstalledVersion, corregida: (.FixedVersion // ""), titulo: ((.Title // "")|.[:160])}))}' trivy-${{ matrix.imagen }}.json > resumen/resumen-${{ matrix.imagen }}.json
+          cat resumen/resumen-${{ matrix.imagen }}.json | head -c 400
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resumen-${{ matrix.imagen }}
+          path: resumen/resumen-${{ matrix.imagen }}.json
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -108,3 +129,23 @@ jobs:
       - name: Resumen
         run: |
           { echo "### SQL Server (${{ steps.img.outputs.ref }})"; echo '```'; tail -n 60 trivy-sqlserver.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Resumen para la Mesa (Seguridad y cumplimiento › Vulnerabilidades)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25   # v0.36.0
+        with:
+          image-ref: ${{ steps.img.outputs.ref }}
+          format: json
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          exit-code: "0"
+          output: trivy-sqlserver.json
+          skip-setup-trivy: true
+      - name: Resumir hallazgos
+        run: |
+          mkdir -p resumen
+          jq --arg img "sqlserver" '[.Results[]?.Vulnerabilities[]?] as $v | {imagen: $img, critica: ($v|map(select(.Severity=="CRITICAL"))|length), alta: ($v|map(select(.Severity=="HIGH"))|length), media: ($v|map(select(.Severity=="MEDIUM"))|length), hallazgos: ($v|map(select(.Severity=="CRITICAL" or .Severity=="HIGH"))|unique_by(.VulnerabilityID + .PkgName)|.[:30]|map({id: .VulnerabilityID, severidad: .Severity, paquete: .PkgName, instalada: .InstalledVersion, corregida: (.FixedVersion // ""), titulo: ((.Title // "")|.[:160])}))}' trivy-sqlserver.json > resumen/resumen-sqlserver.json
+          cat resumen/resumen-sqlserver.json | head -c 400
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resumen-sqlserver
+          path: resumen/resumen-sqlserver.json
+          retention-days: 30

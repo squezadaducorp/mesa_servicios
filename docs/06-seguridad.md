@@ -223,6 +223,13 @@ adjuntar en tickets de otra persona.
   Nada se borra solo. Un ticket con **retención legal** (reclamo, auditoría de SENAE) nunca se depura.
 - La anonimización de ex-empleados está pendiente de la opinión de Legal.
 
+### 7.2 Política de acceso, servidor y vulnerabilidades (ISO 27001 A.5.17, A.8.5, A.8.8, A.8.9, A.8.20, A.8.24)
+**Seguridad y cumplimiento** reúne el estado de estos controles:
+
+- **Política de acceso.** Activa la verificación en dos pasos por rol y su plazo de gracia. Ajusta el historial de contraseñas, el bloqueo, el cierre por inactividad y el aviso de bloqueo. Lista las cuentas con privilegios y su estado: activa, pendiente, vencida o exenta. El botón «Recordar a los pendientes» envía un correo a quien aún no la activa.
+- **Servidor.** Muestra el informe diario de `deploy/nube/verificar-servidor.sh` (ver `docs/15-endurecer-servidor.md`, paso 12).
+- **Vulnerabilidades.** Lee de GitHub el último escaneo del flujo «Seguridad», con el resumen de Trivy por imagen, gitleaks y el CI (pip-audit y npm audit). También trae las alertas abiertas de Dependabot con su plazo: crítica 7 días, alta 30 y media 90. Necesita `GITHUB_TOKEN_SEGURIDAD`, un token *fine-grained* de solo lectura de este repositorio con permisos Actions, Dependabot alerts y Pull requests en *Read*. En producción va en el secreto `mesa/produccion`. Sin el token, la pestaña muestra solo la política.
+
 ## 8. Transporte y cabeceras
 
 * **Nginx en modo HTTPS** (`frontend/nginx/https.conf`): TLS 1.2 y 1.3, HTTP/2, HSTS de un año y

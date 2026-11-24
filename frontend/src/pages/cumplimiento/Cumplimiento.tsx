@@ -1,4 +1,5 @@
-/** Seguridad y cumplimiento ISO 27001: revisión de accesos (38), inactividad y retención (42). */
+/** Seguridad y cumplimiento ISO 27001: política de acceso (37), revisión de accesos (38), inactividad, servidor (40),
+ * vulnerabilidades (41) y retención (42). */
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,6 +13,7 @@ import {
   NOMBRE_CLASIFICACION, type CuentaInactiva, type Decision, type ItemRevision, type PendientesAcceso, type ResumenRetencion, type Revision,
 } from "../../api/cumplimiento";
 import { useAuth } from "../../auth/AuthContext";
+import { PoliticaAccesoTab, ServidorTab, VulnerabilidadesTab } from "./EstadoSeguridad";
 import { mensajeError, useAviso } from "../../components/Aviso";
 import { Cargando, Encabezado, ErrorCarga, Vacio } from "../../components/Comunes";
 import { Stack } from "../../components/Pila";
@@ -335,25 +337,31 @@ export default function Cumplimiento() {
   const admin = puede(P.USUARIOS);
   const sistema = puede(P.SISTEMA);
   const pestanas = [
+    { clave: "politica", texto: "Política de acceso", ver: admin },
     { clave: "accesos", texto: "Revisión de accesos", ver: true },
     { clave: "inactividad", texto: "Cuentas sin uso", ver: admin },
+    { clave: "servidor", texto: "Servidor", ver: sistema },
+    { clave: "vulnerabilidades", texto: "Vulnerabilidades", ver: sistema },
     { clave: "retencion", texto: "Clasificación y retención", ver: sistema },
   ].filter((p) => p.ver);
-  const [tab, setTab] = useState(pestanas[0].clave);
+  const [tab, setTab] = useState(admin ? "accesos" : pestanas[0].clave);
   useEffect(() => {
     if (!pestanas.some((p) => p.clave === tab)) setTab(pestanas[0].clave);
   }, [tab, pestanas]);
   return (
     <Box>
       <Encabezado titulo="Seguridad y cumplimiento"
-        subtitulo={admin ? "Controles ISO 27001: revisión de accesos, cuentas sin uso, clasificación y retención" : "Confirme qué accesos necesita su equipo"} />
+        subtitulo={admin ? "Controles ISO 27001: política de acceso, revisión de accesos, servidor, vulnerabilidades, clasificación y retención" : "Confirme qué accesos necesita su equipo"} />
       {pestanas.length > 1 && (
-        <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2 }}>
           {pestanas.map((p) => <Tab key={p.clave} value={p.clave} label={p.texto} />)}
         </Tabs>
       )}
+      {tab === "politica" && <PoliticaAccesoTab />}
       {tab === "accesos" && <RevisionAccesos admin={admin} />}
       {tab === "inactividad" && <Inactividad />}
+      {tab === "servidor" && <ServidorTab />}
+      {tab === "vulnerabilidades" && <VulnerabilidadesTab />}
       {tab === "retencion" && <Retencion />}
     </Box>
   );
