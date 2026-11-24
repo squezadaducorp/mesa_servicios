@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from sqlalchemy import select
 
 from app.application.services.panel_service import PanelService
-from app.application.services.proveedor_service import ProveedorService
+from app.application.services.proveedor_service import ProveedorService, local
 from app.core.security import utcnow
 from app.infrastructure.db import models as m
 from app.infrastructure.db.session import SessionLocal
@@ -167,7 +167,7 @@ def test_resolver_ticket_escalado_cierra_el_caso(client, como):
 
 def test_contrato_por_vencer_avisa_una_vez(client, como):
     ha = como("admin")
-    client.post(f"{API}/proveedores", json={**PROVEEDOR, "contrato_vence": str(date.today() + timedelta(days=20))}, headers=ha)
+    client.post(f"{API}/proveedores", json={**PROVEEDOR, "contrato_vence": str(local(utcnow()).date() + timedelta(days=20))}, headers=ha)
     with SessionLocal() as s:
         assert ProveedorService(s).procesar()["avisos_contrato"] == 1
         s.commit()
