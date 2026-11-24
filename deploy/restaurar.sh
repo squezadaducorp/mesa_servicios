@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 BAK=${1:?Indique el archivo .bak dentro de backups/}
 ADJ=${2:-}
-leer() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
+leer() { { grep -E "^$1=" .env 2>/dev/null || true; } | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
 SA_PASSWORD=$(leer SA_PASSWORD)
 APP_USER=$(leer DB_APP_USER); APP_USER=${APP_USER:-mesa_app}
 BASE=$(leer DB_NAME); BASE=${BASE:-AducorpMesaServicios}

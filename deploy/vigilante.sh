@@ -11,7 +11,7 @@
 # - Prueba manual: ./deploy/vigilante.sh --probar   (envía un correo de prueba)
 set -uo pipefail
 cd "$(dirname "$0")/.."
-leer() { grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
+leer() { { grep -E "^$1=" .env 2>/dev/null || true; } | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
 
 PARA=$(leer ALERTA_CORREOS)
 DOMINIO=$(leer DOMINIO)

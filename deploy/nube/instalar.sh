@@ -61,7 +61,7 @@ sed -i -e '/^DOMINIO=/d' -e "s#^APP_URL=.*#APP_URL=https://$DOMINIO#" \
 echo "DOMINIO=$DOMINIO" >> "$ENVF"
 chmod 600 "$ENVF"
 [ "$ENVF" = .env.base ] && ./deploy/nube/secretos.sh cargar
-leer() { grep -E "^$1=" .env | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
+leer() { { grep -E "^$1=" .env 2>/dev/null || true; } | tail -1 | cut -d= -f2- | sed -e 's/[[:space:]]\+#.*$//' -e 's/^"//' -e 's/"$//'; }
 SA_PASSWORD=$(leer SA_PASSWORD)
 BASE=$(leer DB_NAME); BASE=${BASE:-AducorpMesaServicios}
 
