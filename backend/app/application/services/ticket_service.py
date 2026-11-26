@@ -798,6 +798,43 @@ class TicketService:
         self.auditoria.registrar(ctx, AccionAuditoria.ADJUNTO_DESCARGADO, "ticket", t.id, {"archivo": a.nombre_original})
         return a, self.almacenamiento.ruta(a.ruta_almacenamiento)
 
+    def puede_eliminar_adjuntos(self, u: m.Usuario, t: m.Ticket, acciones: list[str] | None = None) -> tuple[bool, bool]:
+        """(puede borrar los suyos, puede borrar los de cualquiera). Con el ticket cerrado o cancelado nadie borra:
+        el caso queda como respaldo. Quien subió el archivo lo puede quitar mientras pueda adjuntar; la mesa de servicio
+        (administradores) y el supervisor de la categoría quitan cualquiera."""
+        if Estado(t.estado) in (Estado.CERRADO, Estado.CANCELADO):
+            return False, False
+        acciones = self.acciones(u, t) if acciones is None else acciones
+        cualquiera = u.rol.codigo in (Rol.SUPER_ADMIN, Rol.ADMIN_MESA) or (
+            t.categoria.supervisor_id == u.id and u.tiene(Permiso.TICKET_VER_AREA))
+        return cualquiera or "adjuntar" in acciones, cualquiera
+
+    def eliminar_adjunto(self, ticket_id: int, adjunto_id: int, ctx: Contexto) -> None:
+        """Borrado lógico: el archivo deja de verse en el ticket, pero se conserva (retención de 5 años) y queda
+        registrado en el Historial y en la auditoría quién y cuándo lo quitó."""
+        u = ctx.usuario
+        t = self.obtener(ticket_id, u)
+        a = self.session.get(m.TicketAdjunto, adjunto_id)
+        if a is None or a.ticket_id != t.id or a.eliminado:
+            raise NoEncontrado("Adjunto no encontrado")
+        if a.comentario_id and not self.ve_internos(u, t):
+            c = self.session.get(m.TicketComentario, a.comentario_id)
+            if c is not None and c.es_interno:
+                raise NoEncontrado("Adjunto no encontrado")
+        if Estado(t.estado) in (Estado.CERRADO, Estado.CANCELADO):
+            raise ReglaNegocio("El ticket está cerrado: sus archivos se conservan como respaldo y no se pueden eliminar")
+        propios, cualquiera = self.puede_eliminar_adjuntos(u, t)
+        if not (cualquiera or (propios and a.subido_por == u.id)):
+            raise Prohibido("Solo quien subió el archivo, el supervisor de la categoría o la mesa de servicio pueden eliminarlo")
+        ahora = utcnow()
+        a.eliminado = True
+        subido = f" (subido por {a.usuario.nombre})" if a.subido_por != u.id and a.usuario else ""
+        self._hist(t, u, "ADJUNTO_ELIMINADO", None, None, None, f"{a.nombre_original}{subido}", ahora)
+        self.auditoria.registrar(ctx, AccionAuditoria.ADJUNTO_ELIMINADO, "ticket", t.id,
+                                 {"numero": t.numero, "adjunto_id": a.id, "archivo": a.nombre_original, "sha256": a.hash_sha256,
+                                  "subido_por": a.subido_por})
+        t.fecha_actualizacion = ahora
+
     # ======================================================= SLA y eliminación
     def excepcion_sla(self, ticket_id: int, dto: s.ExcepcionSlaEntrada, ctx: Contexto) -> m.Ticket:
         u = ctx.usuario
@@ -932,8 +969,11 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
     comentarios = svc.repo.comentarios(t.id, incluir_internos=lectura)
     visibles = {c.id for c in comentarios}
     adjuntos = svc.repo.adjuntos(t.id)
+    acciones = svc.acciones(u, t)
+    borra_propios, borra_todos = svc.puede_eliminar_adjuntos(u, t, acciones)
     archivo = lambda a: {"id": a.id, "nombre_original": a.nombre_original, "tipo_mime": a.tipo_mime,  # noqa: E731
-                         "tamano_bytes": a.tamano_bytes, "usuario": resumen(a.usuario), "fecha": a.fecha, "comentario_id": a.comentario_id}
+                         "tamano_bytes": a.tamano_bytes, "usuario": resumen(a.usuario), "fecha": a.fecha, "comentario_id": a.comentario_id,
+                         "puede_eliminar": borra_todos or (borra_propios and a.subido_por == u.id)}
     historial = svc.repo.historial(t.id) if lectura else [h for h in svc.repo.historial(t.id) if h.accion in (
         "CREACION", "CAMBIO_ESTADO", "CIERRE", "REAPERTURA", "VISUALIZADOR", "ESCALAMIENTO_PROVEEDOR")]
     vis = VisualizadorService(svc.session)
@@ -980,7 +1020,7 @@ def a_detalle(svc: TicketService, t: m.Ticket, u: m.Usuario) -> dict:
             for e in (svc.repo.escalamientos(t.id) if lectura else [])
         ],
         "copias": [{"correo": c.correo, "origen": c.origen} for c in svc.repo.copias(t.id)] if lectura else [],
-        "acciones": svc.acciones(u, t),
+        "acciones": acciones,
         "solo_lectura_participante": participante,
         "encuesta": encuesta_salida(EncuestaService(svc.session).de_ticket(t.id)),
         "creado_por": resumen(t.creado_por),

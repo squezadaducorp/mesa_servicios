@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Alert, Avatar, Box, Button, Chip, Divider, FormControlLabel, IconButton, Link, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem,
+  Alert, Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Divider, FormControlLabel, IconButton, Link, List, ListItem, ListItemIcon, ListItemText, Menu, MenuItem,
   Paper, Rating, Stack, Switch, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -10,6 +10,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import DownloadIcon from "@mui/icons-material/Download";
+import CloseIcon from "@mui/icons-material/Close";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import LockIcon from "@mui/icons-material/Lock";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
@@ -23,7 +24,7 @@ import MenuBookIcon from "@mui/icons-material/MenuBook";
 import EventRepeatIcon from "@mui/icons-material/EventRepeat";
 import AddPhotoIcon from "@mui/icons-material/AddPhotoAlternateOutlined";
 import { api, del, descargar, get, patch, post, put } from "../api/client";
-import type { RespuestaParaTicket, Riesgo, TextoIa, TicketDetalle as Ticket } from "../api/types";
+import type { Adjunto, RespuestaParaTicket, Riesgo, TextoIa, TicketDetalle as Ticket } from "../api/types";
 import MenuRespuestas from "../components/MenuRespuestas";
 import { IconoEquipo } from "./admin/Inventario";
 import { mensajeError, useAviso } from "../components/Aviso";
@@ -107,6 +108,7 @@ const ACCION_HISTORIAL: Record<string, string> = {
   EDICION: "Editó",
   COMENTARIO: "Comentó",
   ADJUNTO: "Adjuntó",
+  ADJUNTO_ELIMINADO: "Eliminó un archivo adjunto",
   CIERRE: "Cerró",
   REAPERTURA: "Reabrió",
   SLA: "SLA",
@@ -241,6 +243,17 @@ export default function TicketDetalle() {
     onSuccess: (n) => {
       if (n) actualizar(n);
       avisar("Archivo adjuntado");
+    },
+    onError: (e) => avisar(mensajeError(e), "error"),
+  });
+
+  const [porEliminar, setPorEliminar] = useState<Adjunto | null>(null);
+  const eliminarAdjunto = useMutation({
+    mutationFn: (x: Adjunto) => del<Ticket>(`/tickets/${id}/adjuntos/${x.id}`),
+    onSuccess: (n) => {
+      actualizar(n);
+      setPorEliminar(null);
+      avisar("Archivo eliminado. Queda registrado en el Historial.");
     },
     onError: (e) => avisar(mensajeError(e), "error"),
   });
@@ -591,13 +604,25 @@ export default function TicketDetalle() {
                       <ListItem
                         key={x.id}
                         secondaryAction={
-                          <IconButton
-                            onClick={() => descargar(`/tickets/${id}/adjuntos/${x.id}`, undefined, x.nombre_original).catch((e) => avisar(mensajeError(e), "error"))}
-                            aria-label={`Descargar ${x.nombre_original}`}
-                          >
-                            <DownloadIcon />
-                          </IconButton>
+                          <Stack direction="row" spacing={0.5}>
+                            <Tooltip title="Descargar">
+                              <IconButton
+                                onClick={() => descargar(`/tickets/${id}/adjuntos/${x.id}`, undefined, x.nombre_original).catch((e) => avisar(mensajeError(e), "error"))}
+                                aria-label={`Descargar ${x.nombre_original}`}
+                              >
+                                <DownloadIcon />
+                              </IconButton>
+                            </Tooltip>
+                            {x.puede_eliminar && (
+                              <Tooltip title="Eliminar">
+                                <IconButton color="error" onClick={() => setPorEliminar(x)} aria-label={`Eliminar ${x.nombre_original}`}>
+                                  <CloseIcon />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
                         }
+                        sx={{ pr: t.adjuntos.some((y) => y.puede_eliminar) ? 12 : undefined }}
                       >
                         <ListItemIcon>
                           <InsertDriveFileIcon />
@@ -875,6 +900,21 @@ export default function TicketDetalle() {
         <DialogoEscalarProveedor t={t} abierto={escalarProv} onCerrar={() => setEscalarProv(false)}
           onListo={() => { q.refetch(); qc.invalidateQueries({ queryKey: ["tickets"] }); }} />
       )}
+      <Dialog open={!!porEliminar} onClose={() => !eliminarAdjunto.isPending && setPorEliminar(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>¿Eliminar este archivo?</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ wordBreak: "break-word" }}>
+            Se quitará <b>{porEliminar?.nombre_original}</b> del ticket. En el Historial quedará registrado quién lo eliminó y cuándo.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPorEliminar(null)} disabled={eliminarAdjunto.isPending}>Cancelar</Button>
+          <Button color="error" variant="contained" disabled={eliminarAdjunto.isPending}
+            onClick={() => porEliminar && eliminarAdjunto.mutate(porEliminar)}>
+            {eliminarAdjunto.isPending ? "Eliminando…" : "Eliminar"}
+          </Button>
+        </DialogActions>
+      </Dialog>
       <TicketDialogos ticket={t} abierto={dialogo} estadoInicial={estadoInicial} onCerrar={() => setDialogo(null)} ejecutar={ejecutar} />
     </>
   );
