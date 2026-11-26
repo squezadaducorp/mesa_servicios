@@ -44,6 +44,7 @@ import { BannerAvisosGenerales } from "./AvisosGenerales";
 import { AvisosSuperiores, DialogoAusencia } from "./Disponibilidad";
 import { useAuth } from "../auth/AuthContext";
 import { useConteoNotificaciones } from "../api/hooks";
+import AvisoComentarios, { ControlesAviso } from "./AvisoComentarios";
 import { get, post } from "../api/client";
 import type { Notificacion } from "../api/types";
 import { P } from "../utils/permisos";
@@ -105,7 +106,7 @@ export const ICONO_SEVERIDAD: Record<string, ReactNode> = {
   INFO: <InfoIcon sx={{ color: "primary.main" }} fontSize="small" />,
 };
 
-function CampanaNotificaciones() {
+function CampanaNotificaciones({ usuarioId }: { usuarioId: number }) {
   const [ancla, setAncla] = useState<HTMLElement | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -122,6 +123,7 @@ function CampanaNotificaciones() {
   const n = conteo.data?.no_leidas ?? 0;
   return (
     <>
+      <AvisoComentarios usuarioId={usuarioId} noLeidas={conteo.data?.no_leidas} />
       <Tooltip title="Notificaciones">
         <IconButton color="inherit" onClick={(e) => setAncla(e.currentTarget)} aria-label={`${n} notificaciones sin leer`}>
           <Badge badgeContent={n} color="error" max={99}>
@@ -144,6 +146,12 @@ function CampanaNotificaciones() {
           <Typography variant="caption" sx={{ color: "text.secondary" }}>
             {n} sin leer
           </Typography>
+        </Box>
+        <Box sx={{ px: 2, pb: 1, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Typography variant="caption" sx={{ color: "text.secondary" }}>
+            Avisos de comentarios
+          </Typography>
+          <ControlesAviso />
         </Box>
         <Divider />
         <List dense sx={{ maxHeight: 420, overflow: "auto", py: 0 }}>
@@ -306,7 +314,7 @@ export default function Layout() {
           {!escritorio && <Box component="img" src="/logo-aducorp.png" alt="ADUCORP" sx={{ height: 30 }} />}
           <Box sx={{ flex: 1 }} />
           <CronometroBarra activo={puede(P.VER_TODOS) || puede(P.VER_AREA) || puede(P.VER_ASIGNADOS)} />
-          <CampanaNotificaciones />
+          {usuario && <CampanaNotificaciones usuarioId={usuario.id} />}
           <Button
             color="inherit"
             onClick={(e) => setMenuUsuario(e.currentTarget)}

@@ -345,3 +345,25 @@ def test_tickets_en_los_que_participe_solo_lectura(client, como):
     assert client.post(f"{url}/estado", json={"estado": "EN_PROCESO"}, headers=david).status_code == 403
     assert client.post(f"{url}/comentarios", json={"texto": "hola"}, headers=david).status_code == 403
     assert client.get(url, headers=denisse).status_code == 404
+
+
+def test_responsable_recibe_comentarios_de_otros_del_equipo(client, como):
+    """Si comenta un supervisor o la mesa (público o nota interna), el responsable recibe aviso; si comenta él, no."""
+    t = crear_ticket(client, como("maria.andrade"))
+    url = f"{API}/tickets/{t['id']}"
+    analista = como("david.medina")
+    assert client.get(url, headers=analista).json()["responsable"]
+
+    def avisos():
+        return [n for n in client.get(f"{API}/notificaciones", headers=analista).json() if n["tipo"] == "COMENTARIO"]
+
+    antes = len(avisos())
+    assert client.post(f"{url}/comentarios", json={"texto": "Revisa la partida", "es_interno": True},
+                       headers=como("supervisor.tecnico")).status_code == 201
+    assert client.post(f"{url}/comentarios", json={"texto": "Ya lo vemos"}, headers=como("mesa.servicios")).status_code == 201
+    nuevos = avisos()[: len(avisos()) - antes]
+    assert len(nuevos) == 2
+    assert any("nota interna" in n["titulo"] for n in nuevos) and any("comentario de" in n["titulo"] for n in nuevos)
+    # Su propio comentario no le genera aviso
+    assert client.post(f"{url}/comentarios", json={"texto": "Atendiendo"}, headers=analista).status_code == 201
+    assert len(avisos()) == antes + 2
