@@ -10,7 +10,7 @@ export function useConteoNotificaciones(habilitado: boolean) {
   return useQuery({
     queryKey: ["notificaciones", "conteo"],
     queryFn: () => get<{ no_leidas: number }>("/notificaciones/conteo"),
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
     enabled: habilitado,
   });
 }

@@ -704,6 +704,11 @@ class TicketService:
                 self._hist(t, u, "REANUDACION", None, None, None, "El solicitante respondió; SLA reanudado", ahora)
             self.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: nuevo comentario", f"{u.nombre}: {texto[:200]}", t)
         else:
+            if t.responsable and t.responsable_id != u.id:
+                # Comenta otra persona del equipo (supervisor, mesa, tarea): el responsable se entera, también de notas internas
+                que = "nota interna" if dto.es_interno else "comentario"
+                self.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: {que} de {u.nombre}",
+                                     f"{u.nombre}: {texto[:200]}", t)
             if not dto.es_interno:
                 self.sla.registrar_primera_respuesta(t, ahora)
                 self.notif.notificar([t.solicitante], "COMENTARIO", f"{t.numero}: respuesta del equipo", f"{u.nombre}: {texto[:200]}", t)
