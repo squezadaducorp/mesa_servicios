@@ -131,3 +131,24 @@ def avisos_publicos(session: Session = DbSession):
 
     svc = AvisoService(session)
     return [svc.salida_publica(a) for a in svc.activos(None, publico=True)]
+
+
+# ------------------------------------------------- base de conocimiento: enlace para compartir
+@router.get("/articulos/{articulo_id}/{llave}", summary="Artículo externo publicado, desde el enlace para compartir (sin cuenta)")
+def articulo_publico(articulo_id: int, llave: str, session: Session = DbSession) -> dict:
+    from app.application.services.conocimiento_service import ConocimientoService
+
+    svc = ConocimientoService(session)
+    return svc.salida_publica(svc.publico(articulo_id, llave))
+
+
+@router.get("/articulos/{articulo_id}/{llave}/imagenes/{imagen_id}", summary="Imagen de un artículo compartido (sin cuenta)")
+def imagen_articulo_publico(articulo_id: int, llave: str, imagen_id: int, session: Session = DbSession):
+    from fastapi.responses import FileResponse
+
+    from app.application.services.conocimiento_service import ConocimientoService
+    from app.domain.archivos import mime_descarga
+
+    img, ruta = ConocimientoService(session).imagen_publica(articulo_id, llave, imagen_id)
+    return FileResponse(ruta, media_type=mime_descarga(img.tipo_mime), filename=img.nombre_original, content_disposition_type="inline",
+                        headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})

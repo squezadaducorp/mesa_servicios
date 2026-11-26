@@ -20,7 +20,7 @@ done
 
 if [ "${SOLO_DEMO:-false}" != "true" ]; then
   ejecutar master /database/00_crear_base.sql
-  for s in 01_tablas 02_vistas 03_procedimientos 04_triggers 05_datos_iniciales 07_microsoft365 08_formulario_web 09_copias_correo 10_mejoras_post_piloto 11_segunda_ronda 12_tercera_ronda 13_acuse_seguimiento 14_cuarta_ronda 15_visualizadores_articulos 16_problemas_panel 17_tiempo_proveedores 18_seguridad_iso 19_cumplimiento_iso; do
+  for s in 01_tablas 02_vistas 03_procedimientos 04_triggers 05_datos_iniciales 07_microsoft365 08_formulario_web 09_copias_correo 10_mejoras_post_piloto 11_segunda_ronda 12_tercera_ronda 13_acuse_seguimiento 14_cuarta_ronda 15_visualizadores_articulos 16_problemas_panel 17_tiempo_proveedores 18_seguridad_iso 19_cumplimiento_iso 20_imagenes_articulos; do
     ejecutar "$BASE" "/database/$s.sql"
   done
 fi

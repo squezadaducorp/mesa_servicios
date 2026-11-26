@@ -708,6 +708,21 @@ class KbArticulo(Base):
     autor: Mapped[Usuario | None] = relationship(foreign_keys=[actualizado_por], lazy="joined")
 
 
+class KbImagen(Base):
+    """Imagen de un paso de la solución de un artículo; se referencia en el texto con [imagen:ID]."""
+    __tablename__ = "kb_imagenes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    articulo_id: Mapped[int | None] = mapped_column(ForeignKey("kb_articulos.id"))   # nulo mientras el artículo no se guarda
+    nombre_original: Mapped[str] = mapped_column(Unicode(255))
+    ruta_almacenamiento: Mapped[str] = mapped_column(Unicode(400))
+    tipo_mime: Mapped[str] = mapped_column(String(100))
+    tamano_bytes: Mapped[int] = mapped_column(BigInteger)
+    hash_sha256: Mapped[str] = mapped_column(CHAR(64))
+    subido_por: Mapped[int] = mapped_column(ForeignKey("usuarios.id"))
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    eliminado: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class KbTicketVisto(Base):
     __tablename__ = "kb_ticket_vistos"
     ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), primary_key=True)

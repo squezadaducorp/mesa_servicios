@@ -23,7 +23,7 @@ export function imagenesDe(dt: DataTransfer | null): File[] {
   return Array.from(dt?.files ?? []).filter((f) => f.type.startsWith("image/"));
 }
 
-function useUrlObjeto(fuente: Blob | (() => Promise<Blob>) | null) {
+export function useUrlObjeto(fuente: Blob | (() => Promise<Blob>) | null) {
   const [url, setUrl] = useState<string>();
   useEffect(() => {
     let vivo = true;
@@ -64,7 +64,7 @@ function Miniatura({ url, nombre, onAbrir, alto = 120 }: { url?: string; nombre:
   );
 }
 
-function Visor({ url, nombre, onCerrar, onDescargar }: { url?: string; nombre: string; onCerrar: () => void; onDescargar?: () => void }) {
+export function Visor({ url, nombre, onCerrar, onDescargar }: { url?: string; nombre: string; onCerrar: () => void; onDescargar?: () => void }) {
   return (
     <Dialog open onClose={onCerrar} maxWidth="xl">
       <Stack direction="row" sx={{ alignItems: "center", px: 2, py: 1, gap: 1 }}>
