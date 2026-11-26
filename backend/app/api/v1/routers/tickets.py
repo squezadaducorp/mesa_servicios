@@ -212,6 +212,14 @@ def descargar(ticket_id: int, adjunto_id: int, vista: bool = Query(False, descri
     return FileResponse(ruta, media_type=mime_descarga(a.tipo_mime), filename=a.nombre_original, content_disposition_type="attachment")
 
 
+@router.delete("/{ticket_id}/adjuntos/{adjunto_id}", response_model=s.TicketDetalle,
+               summary="Eliminar adjunto (borrado lógico; queda en el Historial)")
+def eliminar_adjunto(ticket_id: int, adjunto_id: int, ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    svc = TicketService(session)
+    svc.eliminar_adjunto(ticket_id, adjunto_id, ctx)
+    return _detalle(svc, ticket_id, ctx)
+
+
 @router.post("/{ticket_id}/excepcion-sla", response_model=s.TicketDetalle, summary="Registrar excepción de SLA (extensión o exclusión)")
 def excepcion_sla(ticket_id: int, dto: s.ExcepcionSlaEntrada, ctx: Contexto = Depends(contexto), session: Session = DbSession):
     svc = TicketService(session)

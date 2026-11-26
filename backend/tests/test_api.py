@@ -168,6 +168,53 @@ def test_adjuntos(client, como):
 
 
 
+def test_eliminar_adjunto(client, como):
+    """Quien subió el archivo (o la mesa / supervisor) lo quita; queda en el Historial y la auditoría; con el ticket cerrado no."""
+    sol, analista, admin = como("maria.andrade"), como("david.medina"), como("admin")
+    t = crear_ticket(client, sol)
+    url = f"{API}/tickets/{t['id']}/adjuntos"
+    d = client.post(url, files={"archivo": ("equivocado.pdf", b"%PDF-1.4 a", "application/pdf")}, headers=sol).json()
+    d = client.post(url, files={"archivo": ("correcto.pdf", b"%PDF-1.4 b", "application/pdf")}, headers=sol).json()
+    equivocado, correcto = (next(a for a in d["adjuntos"] if a["nombre_original"] == n) for n in ("equivocado.pdf", "correcto.pdf"))
+    assert equivocado["puede_eliminar"] and correcto["puede_eliminar"]
+
+    # Un analista que no lo subió no puede quitarlo
+    vista = client.get(f"{API}/tickets/{t['id']}", headers=analista)
+    if vista.status_code == 200:
+        assert not any(a["puede_eliminar"] for a in vista.json()["adjuntos"])
+    assert client.delete(f"{url}/{equivocado['id']}", headers=analista).status_code in (403, 404)
+
+    r = client.delete(f"{url}/{equivocado['id']}", headers=sol)
+    assert r.status_code == 200, r.text
+    assert [a["nombre_original"] for a in r.json()["adjuntos"]] == ["correcto.pdf"]
+    assert client.get(f"{url}/{equivocado['id']}", headers=sol).status_code == 404
+    assert client.delete(f"{url}/{equivocado['id']}", headers=sol).status_code == 404
+    with SessionLocal() as s:
+        a = s.get(m.TicketAdjunto, equivocado["id"])
+        assert a.eliminado   # borrado lógico: el registro y el archivo se conservan
+        h = s.scalars(select(m.TicketHistorial).where(m.TicketHistorial.ticket_id == t["id"],
+                                                      m.TicketHistorial.accion == "ADJUNTO_ELIMINADO")).all()
+        assert len(h) == 1 and h[0].detalle == "equivocado.pdf"
+        assert s.scalar(select(m.Auditoria).where(m.Auditoria.accion == "ADJUNTO_ELIMINADO")) is not None
+
+    # La mesa de servicio puede quitar el archivo de otra persona; con el ticket cerrado nadie puede
+    d = client.post(url, files={"archivo": ("otro.pdf", b"%PDF-1.4 c", "application/pdf")}, headers=sol).json()
+    otro = next(a for a in d["adjuntos"] if a["nombre_original"] == "otro.pdf")
+    with SessionLocal() as s:
+        s.get(m.Ticket, t["id"]).estado = "CERRADO"
+        s.commit()
+    d = client.get(f"{API}/tickets/{t['id']}", headers=admin).json()
+    assert not any(a["puede_eliminar"] for a in d["adjuntos"])
+    assert client.delete(f"{url}/{otro['id']}", headers=admin).status_code == 422
+    with SessionLocal() as s:
+        s.get(m.Ticket, t["id"]).estado = "EN_PROCESO"
+        s.commit()
+    r = client.delete(f"{url}/{otro['id']}", headers=admin)
+    assert r.status_code == 200 and [a["nombre_original"] for a in r.json()["adjuntos"]] == ["correcto.pdf"]
+    hist = [h for h in r.json()["historial"] if h["accion"] == "ADJUNTO_ELIMINADO"]
+    assert hist[-1]["detalle"] == "otro.pdf (subido por María Fernanda Andrade)"
+
+
 def test_comentario_con_capturas(client, como):
     """Capturas de pantalla dentro del comentario; las de notas internas no las ve el solicitante."""
     import json

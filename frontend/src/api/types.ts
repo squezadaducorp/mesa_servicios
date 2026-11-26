@@ -223,6 +223,8 @@ export interface Adjunto {
   usuario: UsuarioResumen;
   fecha: string;
   comentario_id?: number | null;
+  /** Quien lo subió, el supervisor de la categoría o la mesa de servicio, mientras el ticket no esté cerrado. */
+  puede_eliminar?: boolean;
 }
 
 export interface Historial {

@@ -419,6 +419,7 @@ class AdjuntoSalida(Modelo):
     usuario: UsuarioResumen
     fecha: datetime
     comentario_id: int | None = None
+    puede_eliminar: bool = False
 
 
 ComentarioSalida.model_rebuild()
