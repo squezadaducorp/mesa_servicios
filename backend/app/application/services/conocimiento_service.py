@@ -1,7 +1,10 @@
 """Base de conocimiento: artículos con soluciones frecuentes que se sugieren antes de crear un ticket."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.application.errores import Contexto, NoEncontrado, Prohibido, ReglaNegocio
 from app.application.schemas import mejoras2 as s
 from app.application.services.auditoria_service import AuditoriaService
+from app.core.config import settings
 from app.core.security import utcnow
 from app.domain.enums import AccionAuditoria, Permiso, Rol
 from app.infrastructure.ai.local import normalizar
@@ -43,8 +47,33 @@ def exigir_sin_internos(session: Session, texto: str) -> None:
             raise ReglaNegocio(f"La respuesta enlaza el artículo interno «{a.titulo}». Envíe una versión externa o quite el enlace.")
 
 
+# Solución con formato: [b]…[/b], [i]…[/i], [u]…[/u], [color=#RRGGBB]…[/color] e imágenes [imagen:ID] dentro de cada paso.
+MARCA_IMAGEN = re.compile(r"\[imagen:(\d+)\]")
+MARCA_FORMATO = re.compile(r"\[/?(?:b|i|u|color(?:=#[0-9a-fA-F]{6})?)\]")
+EXT_IMAGENES = {"png", "jpg", "jpeg", "gif"}
+MAX_IMAGENES = 40
+
+
+def texto_plano(texto: str | None) -> str:
+    """El texto sin marcas de formato ni de imágenes (para buscar y para los extractos)."""
+    return MARCA_FORMATO.sub("", MARCA_IMAGEN.sub(" ", texto or ""))
+
+
+def imagenes_en(texto: str | None) -> list[int]:
+    return list(dict.fromkeys(int(x) for x in MARCA_IMAGEN.findall(texto or "")))
+
+
+def llave_publica(articulo_id: int) -> str:
+    """Llave del enlace para compartir: sin ella no se puede recorrer la base adivinando números."""
+    return hmac.new(settings.JWT_SECRET.encode(), f"kb-publico:{articulo_id}".encode(), hashlib.sha256).hexdigest()[:20]
+
+
+def es_compartible(a: m.KbArticulo) -> bool:
+    return a.estado == "PUBLICADO" and a.visibilidad == "EXTERNO" and not a.eliminado
+
+
 def palabras(texto: str | None) -> set[str]:
-    return {p for p in normalizar(texto or "").split() if len(p) > 2 and p not in PALABRAS_VACIAS}
+    return {p for p in normalizar(texto_plano(texto)).split() if len(p) > 2 and p not in PALABRAS_VACIAS}
 
 
 def util_pct(a: m.KbArticulo) -> int | None:
@@ -53,7 +82,7 @@ def util_pct(a: m.KbArticulo) -> int | None:
 
 
 def extracto(texto: str, largo: int = 180) -> str:
-    plano = re.sub(r"\s+", " ", texto or "").strip()
+    plano = re.sub(r"\s+", " ", texto_plano(texto)).strip()
     return plano if len(plano) <= largo else plano[: largo - 1].rstrip() + "…"
 
 
@@ -107,7 +136,31 @@ class ConocimientoService:
             "ticket_origen_numero": origen.numero if origen else None, "util_si": a.util_si, "util_no": a.util_no,
             "actualizado_por": a.autor.nombre if a.autor else None, "fecha_actualizacion": a.fecha_actualizacion,
             "fecha_creacion": a.fecha_creacion, "puede_editar": self.puede_editar(u),
+            "enlace_publico": f"/ayuda/{a.id}/{llave_publica(a.id)}" if es_compartible(a) and es_personal(u) else None,
         }
+
+    # ------------------------------------------------- enlace público (sin cuenta)
+    def publico(self, articulo_id: int, llave: str, contar: bool = True) -> m.KbArticulo:
+        """Artículo externo y publicado abierto desde el enlace compartido. Si pasa a interno o se archiva, el enlace deja de funcionar."""
+        a = self.session.get(m.KbArticulo, articulo_id)
+        if a is None or not es_compartible(a) or not hmac.compare_digest(llave or "", llave_publica(articulo_id)):
+            raise NoEncontrado("El artículo no existe o ya no está disponible")
+        if contar:
+            a.vistas += 1
+        return a
+
+    def salida_publica(self, a: m.KbArticulo) -> dict:
+        return {"id": a.id, "titulo": a.titulo, "categoria": a.categoria.nombre if a.categoria else None, "sintoma": a.sintoma,
+                "solucion": a.solucion, "nota": a.nota, "fecha_actualizacion": a.fecha_actualizacion or a.fecha_creacion}
+
+    def imagen_publica(self, articulo_id: int, llave: str, imagen_id: int) -> tuple[m.KbImagen, Path]:
+        from app.application.services.ticket_service import TicketService
+
+        a = self.publico(articulo_id, llave, contar=False)
+        img = self.session.get(m.KbImagen, imagen_id)
+        if img is None or img.eliminado or img.articulo_id != a.id:
+            raise NoEncontrado("Imagen no encontrada")
+        return img, TicketService(self.session).almacenamiento.ruta(img.ruta_almacenamiento)
 
     # ----------------------------------------------------------------- listar
     def listar(self, u: m.Usuario, texto: str | None, categoria_id: int | None, estado: str | None) -> list[m.KbArticulo]:
@@ -202,7 +255,18 @@ class ConocimientoService:
         return [{"id": a.id, "nombre": a.titulo} for a in filas]
 
     # ------------------------------------------------------------ administrar
-    def _validar(self, dto: s.KbEntrada) -> None:
+    def _validar(self, dto: s.KbEntrada, u: m.Usuario | None = None, articulo_id: int | None = None) -> None:
+        ids = imagenes_en(dto.solucion)
+        if len(ids) > MAX_IMAGENES:
+            raise ReglaNegocio(f"La solución tiene más de {MAX_IMAGENES} imágenes")
+        for iid in ids:
+            img = self.session.get(m.KbImagen, iid)
+            ok = img is not None and not img.eliminado and (
+                (img.articulo_id is None and u is not None and img.subido_por == u.id)
+                or (img.articulo_id is not None and img.articulo_id == articulo_id)
+                or (img.articulo_id is not None and u is not None and self._ve_articulo(img.articulo_id, u)))
+            if not ok:
+                raise ReglaNegocio("Una de las imágenes del paso a paso ya no existe. Quítela y vuelva a subirla.")
         if dto.categoria_id and self.session.get(m.Categoria, dto.categoria_id) is None:
             raise ReglaNegocio("Categoría no válida")
         if dto.subcategoria_id:
@@ -220,7 +284,7 @@ class ConocimientoService:
         u = ctx.usuario
         if not self.puede_editar(u):
             raise Prohibido("No tiene permiso para editar la base de conocimiento")
-        self._validar(dto)
+        self._validar(dto, u, articulo_id)
         if dto.estado == "PUBLICADO" and dto.visibilidad == "EXTERNO" and not self.puede_publicar_externo(u):
             raise Prohibido("Los artículos externos los publica un supervisor. Guárdelo como borrador para que lo revise.")
         ahora = utcnow()
@@ -236,6 +300,7 @@ class ConocimientoService:
             setattr(a, k, v.strip() if isinstance(v, str) else v)
         a.actualizado_por, a.fecha_actualizacion = u.id, ahora
         self.session.flush()
+        self._vincular_imagenes(a, u)
         if a.articulo_relacionado_id and a.articulo_relacionado_id != a.id:
             rel = self.session.get(m.KbArticulo, a.articulo_relacionado_id)
             if rel.articulo_relacionado_id is None:   # el vínculo queda en los dos sentidos
@@ -243,6 +308,63 @@ class ConocimientoService:
         self.auditoria.registrar(ctx, AccionAuditoria.KB_MODIFICADO, "kb_articulo", a.id, {"titulo": a.titulo, "estado": a.estado})
         self.session.refresh(a)
         return a
+
+    # ------------------------------------------------------------- imágenes
+    def _ve_articulo(self, articulo_id: int, u: m.Usuario) -> bool:
+        return self.session.scalar(self._visibles(u, True).where(m.KbArticulo.id == articulo_id)) is not None
+
+    def _vincular_imagenes(self, a: m.KbArticulo, u: m.Usuario) -> None:
+        """Las imágenes citadas en la solución quedan ligadas al artículo (y heredan su visibilidad);
+        las que se quitaron del texto se dan de baja. Si se copió una imagen de otro artículo, se crea una copia propia."""
+        texto = a.solucion
+        for iid in imagenes_en(texto):
+            img = self.session.get(m.KbImagen, iid)
+            if img.articulo_id is None:
+                img.articulo_id = a.id
+            elif img.articulo_id != a.id:
+                copia = m.KbImagen(articulo_id=a.id, nombre_original=img.nombre_original, ruta_almacenamiento=img.ruta_almacenamiento,
+                                   tipo_mime=img.tipo_mime, tamano_bytes=img.tamano_bytes, hash_sha256=img.hash_sha256,
+                                   subido_por=u.id, fecha=utcnow())
+                self.session.add(copia)
+                self.session.flush()
+                texto = texto.replace(f"[imagen:{iid}]", f"[imagen:{copia.id}]")
+        a.solucion = texto
+        usadas = set(imagenes_en(texto))
+        for img in self.session.scalars(select(m.KbImagen).where(m.KbImagen.articulo_id == a.id, m.KbImagen.eliminado == False)):
+            if img.id not in usadas:
+                img.eliminado = True
+        self.session.flush()
+
+    def subir_imagen(self, nombre: str, tipo_mime: str, contenido: bytes, ctx: Contexto) -> m.KbImagen:
+        """Imagen para un paso de la solución (botón «Imagen» o Ctrl+V). Se valida igual que un adjunto de ticket."""
+        from app.application.services.ticket_service import TicketService
+
+        u = ctx.usuario
+        if not self.puede_editar(u):
+            raise Prohibido("No tiene permiso para editar la base de conocimiento")
+        tickets = TicketService(self.session)
+        max_mb, _ = tickets.reglas_adjuntos()
+        extension = tickets.validar_archivo(nombre, contenido, max_mb, EXT_IMAGENES)
+        ruta, sha = tickets.almacenamiento.guardar(contenido, extension)
+        img = m.KbImagen(nombre_original=Path(nombre).name[:255], ruta_almacenamiento=ruta,
+                         tipo_mime=(tipo_mime if tipo_mime.startswith("image/") else f"image/{extension.replace('jpg', 'jpeg')}")[:100],
+                         tamano_bytes=len(contenido), hash_sha256=sha, subido_por=u.id, fecha=utcnow())
+        self.session.add(img)
+        self.session.flush()
+        return img
+
+    def imagen(self, imagen_id: int, u: m.Usuario) -> tuple[m.KbImagen, Path]:
+        """Una imagen se ve con los mismos permisos que su artículo; antes de guardarlo, solo quien la subió."""
+        from app.application.services.ticket_service import TicketService
+
+        img = self.session.get(m.KbImagen, imagen_id)
+        if img is None or img.eliminado:
+            raise NoEncontrado("Imagen no encontrada")
+        if img.articulo_id is not None:
+            self.obtener(img.articulo_id, u)
+        elif img.subido_por != u.id:
+            raise NoEncontrado("Imagen no encontrada")
+        return img, TicketService(self.session).almacenamiento.ruta(img.ruta_almacenamiento)
 
     def eliminar(self, articulo_id: int, ctx: Contexto) -> None:
         if not self.puede_editar(ctx.usuario):

@@ -45,6 +45,7 @@ const ControlTiempo = lazy(() => import("./pages/ronda4c/ControlTiempo"));
 const Proveedores = lazy(() => import("./pages/ronda4c/Proveedores"));
 const SolicitudPublica = lazy(() => import("./pages/SolicitudPublica"));
 const EncuestaPublica = lazy(() => import("./pages/EncuestaPublica"));
+const ArticuloPublico = lazy(() => import("./pages/ArticuloPublico"));
 
 function Protegida({ children }: { children: ReactNode }) {
   const { usuario, cargando } = useAuth();
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="/auth/entra" element={<EntraRetorno />} />
         <Route path="/solicitud" element={<SolicitudPublica />} />
         <Route path="/encuesta" element={<EncuestaPublica />} />
+        <Route path="/ayuda/:id/:llave" element={<ArticuloPublico />} />
         <Route path="/seguimiento" element={<SeguimientoPublico />} />
         <Route path="/seguimiento/:id/:llave" element={<SeguimientoPublico />} />
         <Route

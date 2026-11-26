@@ -607,6 +607,7 @@ export interface KbArticulo extends KbResumen {
   puede_publicar_externo?: boolean;
   articulo_relacionado_id?: number | null;
   articulo_relacionado?: string | null;
+  enlace_publico?: string | null;
 }
 
 export interface RespuestaRapida {

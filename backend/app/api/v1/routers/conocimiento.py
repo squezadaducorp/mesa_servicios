@@ -1,7 +1,8 @@
 """Base de conocimiento: artículos de autoayuda que se sugieren antes de crear un ticket."""
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import DbSession, contexto
@@ -9,6 +10,8 @@ from app.application.errores import Contexto
 from app.application.schemas import esquemas as es
 from app.application.schemas import mejoras2 as s
 from app.application.services.conocimiento_service import ConocimientoService, resumen
+from app.core.config import settings
+from app.domain.archivos import mime_descarga
 
 router = APIRouter(prefix="/conocimiento", tags=["Base de conocimiento"])
 
@@ -32,6 +35,20 @@ def sugerir(dto: s.KbSugerirEntrada, ctx: Contexto = Depends(contexto), session:
 @router.post("/desde-ticket", summary="Borrador de artículo a partir de un ticket resuelto (no se guarda)")
 def desde_ticket(dto: s.KbDesdeTicket, ctx: Contexto = Depends(contexto), session: Session = DbSession) -> dict:
     return ConocimientoService(session).borrador_desde_ticket(dto.ticket_id, ctx)
+
+
+@router.post("/imagenes", status_code=201, summary="Subir una imagen para un paso de la solución (se cita en el texto con [imagen:ID])")
+async def subir_imagen(archivo: UploadFile = File(...), ctx: Contexto = Depends(contexto), session: Session = DbSession) -> dict:
+    contenido = await archivo.read(settings.ADJUNTOS_MAX_MB * 1024 * 1024 + 1)
+    img = ConocimientoService(session).subir_imagen(archivo.filename or "imagen.png", archivo.content_type or "", contenido, ctx)
+    return {"id": img.id, "nombre": img.nombre_original, "marca": f"[imagen:{img.id}]"}
+
+
+@router.get("/imagenes/{imagen_id}", summary="Ver una imagen de un artículo (con los mismos permisos del artículo)")
+def ver_imagen(imagen_id: int, ctx: Contexto = Depends(contexto), session: Session = DbSession):
+    img, ruta = ConocimientoService(session).imagen(imagen_id, ctx.usuario)
+    return FileResponse(ruta, media_type=mime_descarga(img.tipo_mime), filename=img.nombre_original, content_disposition_type="inline",
+                        headers={"Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/{articulo_id}", response_model=s.KbSalida, summary="Leer un artículo (suma una vista)")

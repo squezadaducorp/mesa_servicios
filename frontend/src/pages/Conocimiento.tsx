@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert, Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, InputAdornment, Link,
-  List, ListItemButton, ListItemText, MenuItem, Paper, Stack, Tab, Tabs, TextField, Typography,
+  List, ListItemButton, ListItemText, MenuItem, Paper, Stack, Tab, Tabs, TextField, Tooltip, Typography,
 } from "@mui/material";
 import PublicIcon from "@mui/icons-material/Public";
 import LockIcon from "@mui/icons-material/Lock";
@@ -11,6 +11,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutlined";
+import LinkIcon from "@mui/icons-material/Link";
 import VisibilityIcon from "@mui/icons-material/VisibilityOutlined";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ThumbUpAltOutlinedIcon from "@mui/icons-material/ThumbUpAltOutlined";
@@ -24,6 +25,7 @@ import { Cargando, Encabezado, ErrorCarga, Vacio } from "../components/Comunes";
 import { fecha } from "../utils/formato";
 import { P } from "../utils/permisos";
 import { marca } from "../theme";
+import { EditorPasos, Pasos } from "../components/PasosArticulo";
 
 type Borrador = Omit<Partial<KbArticulo>, "visibilidad"> & { titulo: string; solucion: string; visibilidad: KbArticulo["visibilidad"] | null };
 
@@ -64,21 +66,8 @@ function TarjetaVisibilidad({ valor, elegido, onElegir }: { valor: "EXTERNO" | "
   );
 }
 
-/** Pasos numerados: cada línea de la solución es un paso. */
-export function Pasos({ texto }: { texto: string }) {
-  const lineas = texto.split("\n").map((l) => l.replace(/^\s*\d+[.)-]\s*/, "").trim()).filter(Boolean);
-  if (lineas.length <= 1) return <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{texto}</Typography>;
-  return (
-    <>
-      {lineas.map((t, i) => (
-        <Stack key={i} direction="row" spacing={1} sx={{ mb: 0.8 }}>
-          <Typography variant="body2" sx={{ color: marca.azul, fontWeight: 700 }}>{i + 1}.</Typography>
-          <Typography variant="body2">{t}</Typography>
-        </Stack>
-      ))}
-    </>
-  );
-}
+// Los pasos (con formato e imágenes) se muestran con el componente compartido
+export { Pasos } from "../components/PasosArticulo";
 
 function Editor({ inicial, onCerrar }: { inicial: Borrador; onCerrar: (guardado?: KbArticulo) => void }) {
   const cat = useCatalogos();
@@ -128,7 +117,7 @@ function Editor({ inicial, onCerrar }: { inicial: Borrador; onCerrar: (guardado?
           {a.ticket_origen_numero && <Alert severity="info">Borrador a partir del ticket {a.ticket_origen_numero}. Revise el texto antes de publicarlo.</Alert>}
           <TextField label="Título (como lo diría quien tiene el problema)" required {...campo("titulo")} />
           <TextField label="Síntoma" multiline minRows={2} {...campo("sintoma")} />
-          <TextField label="Solución" required multiline minRows={5} helperText="Escriba un paso por línea; se muestran numerados." {...campo("solucion")} />
+          <EditorPasos valor={a.solucion} onCambio={(solucion) => setA((x) => ({ ...x, solucion }))} />
           <TextField label="Nota o advertencia (opcional)" {...campo("nota")} />
           <TextField label="Palabras clave" helperText="Separadas por coma: ayudan a que se sugiera al crear tickets." {...campo("palabras_clave")} />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
@@ -255,6 +244,15 @@ export default function Conocimiento() {
   const a = articulo.data;
   const todos = lista.data ?? [];
   const visibles = vista === "TODOS" ? todos : todos.filter((x) => x.visibilidad === vista);
+  const copiarEnlace = async (x: KbArticulo) => {
+    const enlace = window.location.origin + (x.enlace_publico ?? `/conocimiento?articulo=${x.id}`);
+    try {
+      await navigator.clipboard.writeText(enlace);
+      avisar(x.enlace_publico ? "Enlace copiado: cualquiera puede abrirlo, sin iniciar sesión" : "Enlace copiado: solo lo abre el personal de Aducorp con su sesión");
+    } catch {
+      window.prompt("Copie el enlace del artículo:", enlace);
+    }
+  };
   const versionExterna = (x: KbArticulo) => setEditando({
     ...VACIO, titulo: x.titulo, categoria_id: x.categoria_id, subcategoria_id: x.subcategoria_id, palabras_clave: x.palabras_clave ?? "",
     sintoma: x.sintoma ?? "", visibilidad: "EXTERNO", articulo_relacionado_id: x.id, articulo_relacionado: x.titulo,
@@ -321,6 +319,13 @@ export default function Conocimiento() {
                 {personal && <ChipVisibilidad v={a.visibilidad} />}
                 {a.estado !== "PUBLICADO" && <Chip size="small" label={a.estado === "BORRADOR" ? "Borrador" : "Archivado"} color="warning" variant="outlined" />}
                 <Box sx={{ flex: 1 }} />
+                {personal && (
+                  <Tooltip title={a.enlace_publico ? "Para enviar a cualquier usuario: se abre sin iniciar sesión"
+                    : a.visibilidad === "INTERNO" ? "Artículo interno: el enlace solo lo abre el personal de Aducorp con su sesión"
+                      : "Aún no está publicado: el enlace solo lo abre quien escribe artículos"}>
+                    <Button size="small" startIcon={<LinkIcon />} onClick={() => copiarEnlace(a)}>Copiar enlace</Button>
+                  </Tooltip>
+                )}
                 {a.puede_editar && (
                   <>
                     <Button size="small" startIcon={<EditIcon />} onClick={() => setEditando(a)}>Editar</Button>

@@ -56,6 +56,7 @@ class KbSalida(KbResumen):
     puede_publicar_externo: bool = False
     articulo_relacionado_id: int | None = None
     articulo_relacionado: str | None = None
+    enlace_publico: str | None = None   # ruta /ayuda/… para compartir (solo externos publicados, solo para el personal)
 
 
 class KbSugerirEntrada(BaseModel):
