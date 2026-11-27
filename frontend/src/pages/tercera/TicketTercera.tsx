@@ -17,7 +17,7 @@ import CheckIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import ShareIcon from "@mui/icons-material/Share";
 import HowToRegIcon from "@mui/icons-material/HowToReg";
-import { TituloTarjeta } from "../../components/TituloTarjeta";
+import { TarjetaDesplegable, TituloTarjeta } from "../../components/TituloTarjeta";
 import { del, get, post } from "../../api/client";
 import type { TicketDetalle as Ticket } from "../../api/types";
 import type { PosibleDuplicado, TicketCorto, Vinculo } from "../../api/tercera";
@@ -207,9 +207,9 @@ export function PanelVinculos({ t, onCambio }: { t: Ticket; onCambio: () => void
   const avisos = t.avisos ?? [];
   if (!puede && vinculos.length === 0 && avisos.length === 0) return null;
   return (
-        <Paper sx={{ p: 2.5 }}>
-          <TituloTarjeta icono={<LinkIcon />} titulo="Tickets vinculados"
-            accion={puede && !agregar && <Button size="small" onClick={() => setAgregar(true)}>+ Vincular</Button>} />
+        <TarjetaDesplegable id="vinculos" icono={<LinkIcon />} titulo="Tickets vinculados"
+          resumen={vinculos.length + avisos.length || "Ninguno"}
+          accion={puede && !agregar && <Button size="small" onClick={() => setAgregar(true)}>+ Vincular</Button>}>
           {agregar && (
             <Stack spacing={1} sx={{ mb: 1.5 }}>
               <Stack direction="row" spacing={1}>
@@ -254,7 +254,7 @@ export function PanelVinculos({ t, onCambio }: { t: Ticket; onCambio: () => void
               <Typography variant="body2"><b>{a.codigo}</b> · {a.titulo} · {a.estado_nombre}</Typography>
             </Box>
           ))}
-        </Paper>
+        </TarjetaDesplegable>
   );
 }
 
@@ -288,8 +288,7 @@ export function PanelSeguimiento({ t }: { t: Ticket }) {
   const avisar = useAviso();
   if (!t.seguimiento_url) return null;
   return (
-        <Paper sx={{ p: 2.5 }}>
-          <TituloTarjeta icono={<ShareIcon />} titulo="Seguimiento del solicitante" mb={1} />
+        <TarjetaDesplegable id="seguimiento" icono={<ShareIcon />} titulo="Seguimiento del solicitante">
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             El acuse y cada correo del ticket le llevan este enlace para ver el estado y responder sin iniciar sesión. No muestra notas internas.
           </Typography>
@@ -297,6 +296,6 @@ export function PanelSeguimiento({ t }: { t: Ticket }) {
             onClick={() => navigator.clipboard?.writeText(t.seguimiento_url!).then(() => avisar("Enlace copiado"), () => avisar("No se pudo copiar", "error"))}>
             Copiar enlace
           </Button>
-        </Paper>
+        </TarjetaDesplegable>
   );
 }

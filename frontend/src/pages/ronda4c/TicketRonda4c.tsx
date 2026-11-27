@@ -17,7 +17,7 @@ import { del, get, post, put } from "../../api/client";
 import type { TicketDetalle as Ticket } from "../../api/types";
 import type { AvisosCorreo, CasoProveedor, ProveedorParaTicket, Visualizador } from "../../api/ronda4c";
 import { mensajeError, useAviso } from "../../components/Aviso";
-import { TituloTarjeta } from "../../components/TituloTarjeta";
+import { TarjetaDesplegable } from "../../components/TituloTarjeta";
 import { fecha, fechaHora } from "../../utils/formato";
 
 export const NOMBRE_AVISOS: Record<AvisosCorreo, string> = { TODO: "Todo", ESTADO: "Estado y cierre", NINGUNO: "Solo campana" };
@@ -114,8 +114,7 @@ export function PanelVisualizadores({ t, onCambio }: { t: Ticket; onCambio: (n: 
   });
   if (!gestiona && !t.visualizadores?.length) return null;
   return (
-    <Paper sx={{ p: 2.5 }}>
-      <TituloTarjeta icono={<VisibilityIcon />} titulo="Visualizadores" mb={1} />
+    <TarjetaDesplegable id="visualizadores" icono={<VisibilityIcon />} titulo="Visualizadores" resumen={t.visualizadores.length || "Ninguno"}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
         Personas de Aducorp que siguen el ticket desde la Mesa. Lo ven y pueden comentar, pero no lo atienden.
       </Typography>
@@ -173,7 +172,7 @@ export function PanelVisualizadores({ t, onCambio }: { t: Ticket; onCambio: (n: 
           </Stack>
         </>
       )}
-    </Paper>
+    </TarjetaDesplegable>
   );
 }
 
