@@ -745,8 +745,7 @@ export default function TicketDetalle() {
             </Typography>
           </Paper>
 
-          <Paper sx={{ p: 2.5 }}>
-            <TituloTarjeta icono={<InfoOutlinedIcon />} titulo="Información" mb={0.5} />
+          <TarjetaDesplegable id="informacion" icono={<InfoOutlinedIcon />} titulo="Información" resumen={t.solicitante_nombre}>
             <Typography variant="overline" sx={{ color: "text.secondary", lineHeight: 2 }}>Solicitante</Typography>
             <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 2 }}>
               <Dato etiqueta="Nombre" valor={t.solicitante_nombre} />
@@ -764,38 +763,8 @@ export default function TicketDetalle() {
               <Dato etiqueta="Asignación" valor={fechaHora(t.fecha_asignacion)} />
               <Dato etiqueta="Cierre" valor={fechaHora(t.fecha_cierre)} />
             </Box>
-          </Paper>
+          </TarjetaDesplegable>
 
-
-          <PanelAprobacion t={t} />
-
-          {t.servicio && <PanelTareas ticketId={t.id} s={t.servicio} onCambio={() => q.refetch()} />}
-
-          {t.equipo && (
-            <Paper sx={{ p: 2.5 }}>
-              <TituloTarjeta icono={<DevicesIcon />} titulo="Equipo" mb={1} />
-              <Stack direction="row" spacing={1.2} sx={{ alignItems: "center" }}>
-                <IconoEquipo tipo={t.equipo.tipo} />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }}>{t.equipo.codigo}</Typography>
-                  <Typography variant="caption" color="text.secondary">{t.equipo.marca_modelo}</Typography>
-                </Box>
-              </Stack>
-              {t.equipo.aviso && <Alert severity="warning" sx={{ mt: 1.5 }}>{t.equipo.aviso}</Alert>}
-            </Paper>
-          )}
-
-          {!!t.kb_vistos?.length && (
-            <Paper sx={{ p: 2.5 }}>
-              <TituloTarjeta icono={<MenuBookIcon />} titulo="Ya revisó estos artículos" mb={1} />
-              <Typography variant="caption" color="text.secondary">El solicitante los leyó antes de crear el ticket y no le sirvieron.</Typography>
-              {t.kb_vistos.map((k) => (
-                <Typography key={k.id} variant="body2" sx={{ mt: 0.8 }}>
-                  • <Link component={RouterLink} to={`/conocimiento?articulo=${k.id}`}>{k.nombre}</Link>
-                </Typography>
-              ))}
-            </Paper>
-          )}
 
           <PanelSeguimiento t={t} />
 
@@ -883,6 +852,36 @@ export default function TicketDetalle() {
             </Stack>
           </TarjetaDesplegable>
         )}
+
+          <PanelAprobacion t={t} />
+
+          {t.servicio && <PanelTareas ticketId={t.id} s={t.servicio} onCambio={() => q.refetch()} />}
+
+          {t.equipo && (
+            <Paper sx={{ p: 2.5 }}>
+              <TituloTarjeta icono={<DevicesIcon />} titulo="Equipo" mb={1} />
+              <Stack direction="row" spacing={1.2} sx={{ alignItems: "center" }}>
+                <IconoEquipo tipo={t.equipo.tipo} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }}>{t.equipo.codigo}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t.equipo.marca_modelo}</Typography>
+                </Box>
+              </Stack>
+              {t.equipo.aviso && <Alert severity="warning" sx={{ mt: 1.5 }}>{t.equipo.aviso}</Alert>}
+            </Paper>
+          )}
+
+          {!!t.kb_vistos?.length && (
+            <Paper sx={{ p: 2.5 }}>
+              <TituloTarjeta icono={<MenuBookIcon />} titulo="Ya revisó estos artículos" mb={1} />
+              <Typography variant="caption" color="text.secondary">El solicitante los leyó antes de crear el ticket y no le sirvieron.</Typography>
+              {t.kb_vistos.map((k) => (
+                <Typography key={k.id} variant="body2" sx={{ mt: 0.8 }}>
+                  • <Link component={RouterLink} to={`/conocimiento?articulo=${k.id}`}>{k.nombre}</Link>
+                </Typography>
+              ))}
+            </Paper>
+          )}
         </Stack>
       </Box>
 
