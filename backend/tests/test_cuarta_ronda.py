@@ -142,7 +142,7 @@ def test_cambio_normal_riesgo_medio_pasa_por_gerencia(client, como):
     g = client.get(f"{API}/cambios/{c['id']}", headers=hg).json()
     assert "aprobar" in g["acciones"]
     assert client.post(f"{API}/cambios/{c['id']}/responder", json={"aprobar": False}, headers=hg).status_code == 422
-    p = client.post(f"{API}/cambios/{c['id']}/responder", json={"aprobar": True}, headers=hg).json()
+    p = client.post(f"{API}/cambios/{c['id']}/responder", json={"aprobar": True, "comentario": "Aprobado por Gerencia"}, headers=hg).json()
     assert p["estado"] == "PROGRAMADO"
 
     cal = client.get(f"{API}/cambios/calendario", params={"desde": proximo_sabado().date().isoformat()}, headers=ha).json()
@@ -151,9 +151,9 @@ def test_cambio_normal_riesgo_medio_pasa_por_gerencia(client, como):
     assert lista["resumen"]["programados"] == 1
     assert client.get(f"{API}/cambios", headers=como("carlos.torres")).json()["cambios"] == []   # no es suyo
 
-    i = client.post(f"{API}/cambios/{c['id']}/implementar", json={"version_ref": "PR #36"}, headers=ha).json()
+    i = client.post(f"{API}/cambios/{c['id']}/implementar", json={"version_ref": "PR #36", "comentario": "Instalado sin novedades"}, headers=ha).json()
     assert i["estado"] == "EN_REVISION"
-    f = client.post(f"{API}/cambios/{c['id']}/revision", json={"resultado": "EXITOSO", "probado_solicitante": True}, headers=ha).json()
+    f = client.post(f"{API}/cambios/{c['id']}/revision", json={"resultado": "EXITOSO", "probado_solicitante": True, "observaciones": "Funciona bien"}, headers=ha).json()
     assert f["estado"] == "IMPLEMENTADO" and f["resultado"] == "EXITOSO"
     assert client.get(f"{API}/cambios", headers=ha).json()["resumen"]["exitosos_pct"] == 100
 

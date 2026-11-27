@@ -177,6 +177,8 @@ class ProblemaService:
             raise ReglaNegocio("Estado no válido")
         if estado == p.estado:
             return p
+        if len((nota or "").strip()) < 5:
+            raise ReglaNegocio("Indique el motivo del cambio de estado")
         ahora = utcnow()
         if estado in ("ERROR_CONOCIDO", "SOLUCION_EN_CAMBIO", "CERRADO") and not p.causa_raiz:
             raise ReglaNegocio("Registre la causa raíz antes de avanzar")

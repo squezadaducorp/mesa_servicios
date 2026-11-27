@@ -164,7 +164,8 @@ class AprobacionService:
                 actual = t.estado
                 svc.sla.pausar(t, Estado.POR_APROBAR, None, ahora)
                 t.estado = Estado.POR_APROBAR
-                svc._hist(t, None, "CAMBIO_ESTADO", "estado", actual, Estado.POR_APROBAR, ahora=ahora)
+                svc._hist(t, None, "CAMBIO_ESTADO", "estado", actual, Estado.POR_APROBAR,
+                          f"Automático: la solicitud requiere la aprobación de {destino.nombre}", ahora)
             svc._hist(t, None, "APROBACION", "aprobacion", None, "PENDIENTE",
                       f"Nivel {nivel}: espera la aprobación de {destino.nombre}" + (f" (reemplazo de {original.nombre})" if original else ""), ahora)
             self.session.flush()
@@ -215,7 +216,7 @@ class AprobacionService:
         self.auditoria.registrar(ctx, AccionAuditoria.APROBACION_RESPONDIDA, "ticket", t.id,
                                  {"numero": t.numero, "nivel": fila.nivel, "resultado": fila.estado, "comentario": comentario})
         if not aprobar:
-            svc._aplicar_estado(t, Estado.POR_APROBAR, Estado.CANCELADO, u, ctx, ahora)
+            svc._aplicar_estado(t, Estado.POR_APROBAR, Estado.CANCELADO, u, ctx, ahora, motivo=f"Solicitud rechazada por {u.nombre}: {comentario}")
             svc._agregar_comentario(t, u, f"Solicitud rechazada por {u.nombre}: {comentario}", False, "COMENTARIO", None, ahora)
             self._resultado(svc, t, u, "rechazada", comentario)
             return fila
@@ -230,7 +231,8 @@ class AprobacionService:
         """Aprobado en todos los niveles: pasa a Nuevo (el SLA se reanuda) y se asigna como cualquier ticket."""
         from app.application.services.catalogo_servicio_service import CatalogoServicioService
 
-        svc._aplicar_estado(t, Estado.POR_APROBAR, Estado.NUEVO, u, ctx, ahora)
+        svc._aplicar_estado(t, Estado.POR_APROBAR, Estado.NUEVO, u, ctx, ahora,
+                            motivo=f"Solicitud aprobada por {u.nombre}" if u else "Automático: solicitud aprobada")
         responsable = t.responsable or svc.ia.sugerir_responsable(t.categoria)
         if responsable:
             svc._asignar(t, responsable, None, "AUTOMATICA", "Asignación automática tras la aprobación", ctx, ahora)

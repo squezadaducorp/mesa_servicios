@@ -58,13 +58,13 @@ def test_ciclo_de_vida_error_conocido_y_cierre_avisa(client, como):
                                                "palabras_clave": "vpn se desconecta"}, headers=hs).json()
     base = {"titulo": p["titulo"], "palabras_clave": "vpn se desconecta"}
     # Sin causa no puede ser error conocido
-    r = client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "ERROR_CONOCIDO"}, headers=hs)
+    r = client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "ERROR_CONOCIDO", "nota": "Motivo de prueba"}, headers=hs)
     assert r.status_code == 422 or r.status_code == 400
     analisis = {**base, "porques": [{"pregunta": "¿Por qué se desconecta?", "respuesta": "El firewall corta sesiones a los 10 min"}],
                 "causa_raiz": "Tiempo de sesión del firewall muy corto", "solucion_temporal": "Reconectar la VPN desde el ícono de la bandeja."}
     p = client.put(f"{API}/problemas/{p['id']}", json=analisis, headers=hs).json()
     assert p["estado"] == "EN_ANALISIS" and p["porques"][0]["respuesta"].startswith("El firewall")
-    p = client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "ERROR_CONOCIDO"}, headers=hs).json()
+    p = client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "ERROR_CONOCIDO", "nota": "Motivo de prueba"}, headers=hs).json()
     assert p["estado"] == "ERROR_CONOCIDO" and p["fecha_causa"]
     # Publicar la solución temporal en la base de conocimiento
     p = client.post(f"{API}/problemas/{p['id']}/publicar", headers=hs).json()
@@ -89,11 +89,11 @@ def test_ciclo_de_vida_error_conocido_y_cierre_avisa(client, como):
     assert client.get(f"{API}/problemas", headers=hs).json()["resumen"]["evitados_mes"] == 1
 
     # Solución en cambio exige un CAM
-    assert client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "SOLUCION_EN_CAMBIO"}, headers=hs).status_code == 422
+    assert client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "SOLUCION_EN_CAMBIO", "nota": "Motivo de prueba"}, headers=hs).status_code == 422
     # Cerrar avisa a la solicitante (una sola vez aunque tenga dos tickets)
     p = client.put(f"{API}/problemas/{p['id']}", json={**analisis, "solucion_definitiva": "Se amplió la sesión del firewall a 8 horas"},
                    headers=hs).json()
-    p = client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "CERRADO", "avisar": True}, headers=hs).json()
+    p = client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "CERRADO", "nota": "Motivo de prueba", "avisar": True}, headers=hs).json()
     assert p["estado"] == "CERRADO" and p["impacto"]["incidentes"] == 2 and p["impacto"]["evitados"] == 1
     with SessionLocal() as s:
         avisos = [c for c in s.scalars(select(m.ColaCorreo).where(m.ColaCorreo.plantilla == "PROBLEMA_RESUELTO"))]
@@ -105,7 +105,7 @@ def test_no_es_esto_y_permisos(client, como):
     p = client.post(f"{API}/problemas", json={"titulo": "La VPN se desconecta", "palabras_clave": "vpn"}, headers=hs).json()
     client.put(f"{API}/problemas/{p['id']}", json={"titulo": p["titulo"], "palabras_clave": "vpn", "causa_raiz": "Firewall",
                                                    "solucion_temporal": "Reconectar la VPN."}, headers=hs)
-    client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "ERROR_CONOCIDO"}, headers=hs)
+    client.post(f"{API}/problemas/{p['id']}/estado", json={"estado": "ERROR_CONOCIDO", "nota": "Motivo de prueba"}, headers=hs)
     t = ticket_vpn(client, hm, 1)
     assert client.get(f"{API}/problemas/ticket/{t['id']}", headers=ha).json()["coincidencias"]
     assert client.post(f"{API}/problemas/{p['id']}/descartar/{t['id']}", headers=ha).json()["coincidencias"] == []

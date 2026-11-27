@@ -68,7 +68,7 @@ de estos controles están en `backend/tests/test_seguridad.py` (10 casos) y `bac
 
 | Control | Detalle | Dónde se ajusta |
 |---|---|---|
-| Verificación en dos pasos obligatoria | Administradores y Supervisores; plazo de gracia con aviso en pantalla y luego se exige al entrar | *Administración › Seguridad* (`seguridad.2fa_admin`, `seguridad.2fa_dias_gracia`) |
+| Verificación en dos pasos obligatoria | Todos los roles (desde el 27-nov-2026, script 21); 14 días de gracia desde el siguiente ingreso, con aviso en pantalla, y luego se exige al entrar. La cuenta de emergencia queda exenta | *Seguridad y cumplimiento › Política de acceso* (`seguridad.2fa_admin`, `seguridad.2fa_analistas`, `seguridad.2fa_opcional_otros`, `seguridad.2fa_dias_gracia`) |
 | Historial de contraseñas | No se repiten las últimas N (incluida la actual); tabla `usuario_claves_previas` con hash bcrypt | `seguridad.claves_previas` (5) |
 | Contraseñas obvias | Se rechazan si contienen el nombre de la empresa, palabras típicas, secuencias o el nombre/correo de la persona (`core/security.py`, sin consultar internet) | — |
 | Aviso de bloqueo | Correo a la persona con IP, navegador y hora de desbloqueo; auditoría `CUENTA_BLOQUEADA` | `seguridad.aviso_bloqueo` |
@@ -165,8 +165,10 @@ adjuntar en tickets de otra persona.
 - **Revisión trimestral:** el worker la abre el día 1 de los meses de `accesos.meses_revision` (marzo, junio, septiembre y diciembre).
   Guarda una foto de cada cuenta activa con su rol, último ingreso y alertas: más de 60 días sin entrar, nunca entró, rol de
   administración, sin verificación en dos pasos, supervisor sin personal o sin jefe registrado.
-- Cada **jefe directo** (`usuarios.supervisor_id`) recibe un correo y marca *Mantener*, *Ajustar* o *Dar de baja* en
-  *Seguridad y cumplimiento*. Las cuentas sin jefe las revisa TI. Tres días antes del plazo (`accesos.dias_plazo`, 15) se recuerda.
+- La revisa el **Coordinador de Sistemas** (`accesos.revisor_correo`, por defecto squezada@aducorp.com.ec), no los jefes
+  directos: recibe un correo con todas las cuentas y marca *Mantener*, *Ajustar* o *Dar de baja* en *Seguridad y cumplimiento*.
+  Su propia cuenta la revisa otro administrador; si el correo no es de una cuenta activa, todo queda para TI. Tres días antes
+  del plazo (`accesos.dias_plazo`, 15) se recuerda. Los jefes directos siguen aprobando solicitudes del catálogo.
 - TI **aprueba el acta**: las bajas se aplican (la cuenta se desactiva y se cierran sus sesiones; nunca se borra) y el PDF va a
   `accesos.informe_correo` (squezada@aducorp.com.ec).
 - **Cuentas sin uso:** a los `accesos.dias_inactividad` días (90) sin entrar, la cuenta se desactiva. La persona y su jefe reciben

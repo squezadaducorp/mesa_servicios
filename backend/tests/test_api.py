@@ -91,7 +91,7 @@ def test_ciclo_completo_con_pausa(client, como):
     cliente, analista = como("maria.andrade"), como("david.medina")
     t = crear_ticket(client, cliente)
     url = f"{API}/tickets/{t['id']}"
-    r = client.post(f"{url}/estado", json={"estado": "EN_PROCESO"}, headers=analista)
+    r = client.post(f"{url}/estado", json={"estado": "EN_PROCESO", "comentario": "Motivo de prueba"}, headers=analista)
     assert r.json()["estado"] == "EN_PROCESO" and r.json()["fecha_primera_respuesta"]
     r = client.post(f"{url}/estado", json={"estado": "PENDIENTE_CLIENTE"}, headers=analista)
     assert r.status_code == 422   # exige comentario
@@ -105,10 +105,10 @@ def test_ciclo_completo_con_pausa(client, como):
     vista_cliente = client.get(url, headers=cliente).json()
     assert all(not c["es_interno"] for c in vista_cliente["comentarios"])
     assert "nota_interna" not in vista_cliente["acciones"]
-    r = client.post(f"{url}/estado", json={"estado": "RESUELTO"}, headers=analista)
+    r = client.post(f"{url}/estado", json={"estado": "RESUELTO", "comentario": "Motivo de prueba"}, headers=analista)
     assert r.json()["estado"] == "RESUELTO" and r.json()["sla_resolucion_cumplido"] is not None
     # El solicitante confirma el cierre y luego reabre
-    r = client.post(f"{url}/cerrar", json={}, headers=cliente)
+    r = client.post(f"{url}/cerrar", json={"comentario": "Cierre de prueba"}, headers=cliente)
     assert r.json()["estado"] == "CERRADO"
     r = client.post(f"{url}/reabrir", json={"motivo": "El problema persiste"}, headers=cliente)
     assert r.json()["estado"] == "EN_PROCESO" and r.json()["reaperturas"] == 1
@@ -116,9 +116,36 @@ def test_ciclo_completo_con_pausa(client, como):
     assert {"CREACION", "ASIGNACION", "CIERRE", "REAPERTURA"} <= set(acciones)
 
 
+def test_cada_cambio_de_estado_exige_motivo_y_queda_en_historial(client, como):
+    cliente, analista = como("maria.andrade"), como("david.medina")
+    t = crear_ticket(client, cliente)
+    url = f"{API}/tickets/{t['id']}"
+    r = client.post(f"{url}/estado", json={"estado": "EN_PROCESO"}, headers=analista)
+    assert r.status_code == 422 and "motivo" in r.json()["detail"]
+    assert client.post(f"{url}/estado", json={"estado": "EN_PROCESO", "comentario": "ok"}, headers=analista).status_code == 422
+    r = client.post(f"{url}/estado", json={"estado": "EN_PROCESO", "comentario": "Reviso el equipo"}, headers=analista)
+    assert r.status_code == 200
+    # En proceso: el motivo queda como nota interna (el solicitante no la ve)
+    assert not any("Reviso el equipo" in c["texto"] for c in client.get(url, headers=cliente).json()["comentarios"])
+    r = client.post(f"{url}/estado", json={"estado": "RESUELTO", "comentario": "Se reinstaló el controlador"}, headers=analista)
+    assert any(c["texto"] == "Se reinstaló el controlador" for c in client.get(url, headers=cliente).json()["comentarios"])
+    assert client.post(f"{url}/cerrar", json={}, headers=cliente).status_code == 422
+    # Respuesta rápida: el motivo va solo al historial
+    client.post(f"{url}/reabrir", json={"motivo": "Volvió a fallar"}, headers=cliente)
+    r = client.post(f"{url}/estado", json={"estado": "PENDIENTE_CLIENTE", "comentario": "Respuesta rápida «Pedir captura»",
+                                           "solo_historial": True}, headers=analista)
+    assert r.status_code == 200
+    historial = client.get(url, headers=analista).json()["historial"]
+    cambios = [h for h in historial if h["accion"] in ("CAMBIO_ESTADO", "REAPERTURA")]
+    assert all(h["detalle"] for h in cambios)
+    detalles = {h["detalle"] for h in cambios}
+    assert {"Reviso el equipo", "Se reinstaló el controlador", "Volvió a fallar", "Respuesta rápida «Pedir captura»"} <= detalles
+    assert not any("Pedir captura" in c["texto"] for c in client.get(url, headers=cliente).json()["comentarios"])
+
+
 def test_transicion_invalida(client, como):
     t = crear_ticket(client, como("maria.andrade"))
-    r = client.post(f"{API}/tickets/{t['id']}/estado", json={"estado": "CERRADO"}, headers=como("david.medina"))
+    r = client.post(f"{API}/tickets/{t['id']}/estado", json={"estado": "CERRADO", "comentario": "Motivo de prueba"}, headers=como("david.medina"))
     assert r.status_code == 422
 
 
@@ -389,7 +416,7 @@ def test_tickets_en_los_que_participe_solo_lectura(client, como):
     assert client.get(url, headers=juan).json()["solo_lectura_participante"] is False
 
     # Y el backend rechaza las acciones aunque se intenten directamente
-    assert client.post(f"{url}/estado", json={"estado": "EN_PROCESO"}, headers=david).status_code == 403
+    assert client.post(f"{url}/estado", json={"estado": "EN_PROCESO", "comentario": "Motivo de prueba"}, headers=david).status_code == 403
     assert client.post(f"{url}/comentarios", json={"texto": "hola"}, headers=david).status_code == 403
     assert client.get(url, headers=denisse).status_code == 404
 

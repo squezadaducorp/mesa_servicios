@@ -198,7 +198,8 @@ class AvisoService:
                         svc._asignar(t, u, u, "MANUAL", f"Resuelto con el aviso {a.codigo}", ctx, ahora)
                     svc._agregar_comentario(t, u, f"Resuelto junto con el aviso general «{a.titulo}»: {dto.texto.strip()}", False,
                                             "COMENTARIO", None, ahora)
-                    svc._aplicar_estado(t, Estado(t.estado), Estado.RESUELTO, u, ctx, ahora)
+                    svc._aplicar_estado(t, Estado(t.estado), Estado.RESUELTO, u, ctx, ahora,
+                                        motivo=f"Resuelto junto con el aviso general «{a.titulo}»")
                     resueltos += 1
         if dto.avisar:
             self._avisar_afectados(a, dto.texto.strip())

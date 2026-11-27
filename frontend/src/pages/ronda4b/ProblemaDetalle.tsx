@@ -63,7 +63,7 @@ export default function ProblemaDetalle() {
   const [f, setF] = useState<{ porques: Porque[]; causa_raiz: string; solucion_definitiva: string; solucion_temporal: string; palabras_clave: string;
     responsable_id: number | ""; cambio_id: number | ""; titulo: string; descripcion: string } | null>(null);
   const [ticket, setTicket] = useState("");
-  const [cerrar, setCerrar] = useState(false);
+  const [cerrar, setCerrar] = useState<{ estado: EstadoProblema; nombre: string } | null>(null);   // todo cambio de estado pide motivo
   const [nota, setNota] = useState("");
   const [avisarSolicitantes, setAvisarSolicitantes] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +90,7 @@ export default function ProblemaDetalle() {
       if (p!.estado !== "CERRADO") await put<Detalle>(`/problemas/${id}`, cuerpo());   // guarda lo escrito antes de avanzar
       return post<Detalle>(`/problemas/${id}/estado`, e);
     },
-    onSuccess: (d) => { listo(d); setCerrar(false); avisar(`Problema: ${d.estado_nombre}`); }, onError: fallo,
+    onSuccess: (d) => { listo(d); setCerrar(null); setNota(""); avisar(`Problema: ${d.estado_nombre}`); }, onError: fallo,
   });
   const publicar = useMutation({
     mutationFn: async () => { await put<Detalle>(`/problemas/${id}`, cuerpo()); return post<Detalle>(`/problemas/${id}/publicar`); },
@@ -124,12 +124,12 @@ export default function ProblemaDetalle() {
         {p.gestor && (
           <Stack direction="row" justifyContent="flex-end" sx={{ gap: 1, mt: 2, flexWrap: "wrap" }}>
             {p.estado === "CERRADO" ? (
-              <Button onClick={() => estado.mutate({ estado: "EN_ANALISIS" })}>Reabrir</Button>
+              <Button onClick={() => setCerrar({ estado: "EN_ANALISIS", nombre: "Reabrir" })}>Reabrir</Button>
             ) : (
               <>
                 <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>Guardar análisis</Button>
-                {siguiente && <Button variant="outlined" onClick={() => estado.mutate({ estado: siguiente.e })} disabled={estado.isPending}>Pasar a «{siguiente.t}»</Button>}
-                <Button variant="contained" onClick={() => setCerrar(true)}>Cerrar problema</Button>
+                {siguiente && <Button variant="outlined" onClick={() => setCerrar({ estado: siguiente.e, nombre: `Pasar a «${siguiente.t}»` })} disabled={estado.isPending}>Pasar a «{siguiente.t}»</Button>}
+                <Button variant="contained" onClick={() => setCerrar({ estado: "CERRADO", nombre: "Cerrar" })}>Cerrar problema</Button>
               </>
             )}
           </Stack>
@@ -242,18 +242,22 @@ export default function ProblemaDetalle() {
         </Stack>
       </Box>
 
-      <Dialog open={cerrar} onClose={() => setCerrar(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Cerrar {p.numero}</DialogTitle>
+      <Dialog open={!!cerrar} onClose={() => setCerrar(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{cerrar?.nombre} {p.numero}</DialogTitle>
         <DialogContent dividers>
-          {!f.solucion_definitiva.trim() && <Alert severity="info" sx={{ mb: 2 }}>Sin solución definitiva escrita: indique en la nota por qué se cierra.</Alert>}
-          <TextField fullWidth multiline minRows={2} label="Nota de cierre" value={nota} onChange={(e) => setNota(e.target.value)} />
-          <FormControlLabel sx={{ mt: 1 }} control={<Checkbox checked={avisarSolicitantes} onChange={(e) => setAvisarSolicitantes(e.target.checked)} />}
-            label={`Avisar por correo a las personas afectadas (${p.impacto.personas})`} />
+          {cerrar?.estado === "CERRADO" && !f.solucion_definitiva.trim() && <Alert severity="info" sx={{ mb: 2 }}>Sin solución definitiva escrita: indique en la nota por qué se cierra.</Alert>}
+          <TextField fullWidth multiline minRows={2} required label={cerrar?.estado === "CERRADO" ? "Nota de cierre (obligatoria)" : "Motivo del cambio (obligatorio)"}
+            value={nota} onChange={(e) => setNota(e.target.value)} />
+          {cerrar?.estado === "CERRADO" && (
+            <FormControlLabel sx={{ mt: 1 }} control={<Checkbox checked={avisarSolicitantes} onChange={(e) => setAvisarSolicitantes(e.target.checked)} />}
+              label={`Avisar por correo a las personas afectadas (${p.impacto.personas})`} />
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCerrar(false)}>Cancelar</Button>
-          <Button variant="contained" disabled={estado.isPending} onClick={() => estado.mutate({ estado: "CERRADO", nota: nota || undefined, avisar: avisarSolicitantes })}>
-            Cerrar problema
+          <Button onClick={() => setCerrar(null)}>Cancelar</Button>
+          <Button variant="contained" disabled={estado.isPending || nota.trim().length < 5}
+            onClick={() => cerrar && estado.mutate({ estado: cerrar.estado, nota: nota.trim(), avisar: cerrar.estado === "CERRADO" && avisarSolicitantes })}>
+            {cerrar?.estado === "CERRADO" ? "Cerrar problema" : "Guardar"}
           </Button>
         </DialogActions>
       </Dialog>

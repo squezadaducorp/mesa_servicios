@@ -36,6 +36,26 @@ MAX_ARCHIVOS_COMENTARIO = 10
 
 ROLES_ATIENDEN = {Rol.ANALISTA, Rol.SUPERVISOR, Rol.ADMIN_MESA, Rol.SUPER_ADMIN}
 
+# Motivo obligatorio en cada cambio de estado: estos los ve el solicitante; en los demás queda como nota interna.
+ESTADOS_MOTIVO_PUBLICO = {Estado.PENDIENTE_CLIENTE, Estado.RESUELTO, Estado.CERRADO, Estado.CANCELADO}
+MIN_MOTIVO = 5
+NOMBRES_ESTADO = {
+    Estado.POR_APROBAR: "Por aprobar", Estado.NUEVO: "Nuevo", Estado.ASIGNADO: "Asignado", Estado.EN_PROCESO: "En proceso",
+    Estado.PENDIENTE_CLIENTE: "Pendiente cliente", Estado.ESCALADO: "Escalado", Estado.RESUELTO: "Resuelto",
+    Estado.CERRADO: "Cerrado", Estado.CANCELADO: "Cancelado",
+}
+
+
+def nombre_estado(e) -> str:
+    return NOMBRES_ESTADO.get(Estado(e), str(e))
+
+
+def exigir_motivo(texto: str | None) -> str:
+    motivo = (texto or "").strip()
+    if len(motivo) < MIN_MOTIVO:
+        raise ReglaNegocio("Indique el motivo del cambio de estado")
+    return motivo
+
 
 def limites_dia_utc(desde, hasta) -> tuple[datetime | None, datetime | None]:
     """Convierte fechas locales (Ecuador) a límites UTC [desde 00:00, hasta+1 00:00)."""
@@ -343,7 +363,8 @@ class TicketService:
         t.fecha_asignacion = ahora
         if t.estado == Estado.NUEVO:
             t.estado = Estado.ASIGNADO
-            self._hist(t, por, "CAMBIO_ESTADO", "estado", Estado.NUEVO, Estado.ASIGNADO, ahora=ahora)
+            self._hist(t, por, "CAMBIO_ESTADO", "estado", Estado.NUEVO, Estado.ASIGNADO,
+                       f"Asignado a {nuevo.nombre}" + (f": {motivo}" if motivo else ""), ahora)
         self.session.add(m.TicketAsignacion(ticket_id=t.id, responsable_anterior_id=anterior.id if anterior else None,
                                             responsable_nuevo_id=nuevo.id, asignado_por=por.id if por else None, tipo=tipo, motivo=motivo, fecha=ahora))
         self._hist(t, por, "ASIGNACION", "responsable", anterior.nombre if anterior else None, nuevo.nombre, motivo, ahora)
@@ -424,14 +445,19 @@ class TicketService:
             self._validar_responsable(u.id)
             self._asignar(t, u, u, "REASIGNACION" if t.responsable_id else "MANUAL", "Aceptado desde Microsoft Teams", ctx, utcnow(), teams=False)
         if Estado(t.estado) != Estado.EN_PROCESO:
-            self._aplicar_estado(t, Estado(t.estado), Estado.EN_PROCESO, u, ctx, utcnow())
+            self._aplicar_estado(t, Estado(t.estado), Estado.EN_PROCESO, u, ctx, utcnow(), motivo="Aceptado desde Microsoft Teams")
         return t
 
     # ========================================================== cambiar estado
-    def cambiar_estado(self, ticket_id: int, nuevo: str, comentario: str | None, ctx: Contexto, *, accion: str = "cambiar_estado") -> m.Ticket:
+    def cambiar_estado(self, ticket_id: int, nuevo: str, comentario: str | None, ctx: Contexto, *, accion: str = "cambiar_estado",
+                       solo_historial: bool = False) -> m.Ticket:
+        """Todo cambio de estado lleva motivo (queda en el Historial). Para el solicitante (Pendiente Cliente, Resuelto,
+        Cancelado) el motivo se publica como comentario; en los demás queda como nota interna.
+        `solo_historial`: el motivo no se publica (p. ej. lo aplica una respuesta rápida que ya se envió como comentario)."""
         u = ctx.usuario
         t = self.obtener(ticket_id, u)
         self._exigir(u, t, accion)
+        motivo = exigir_motivo(comentario)
         actual, destino = Estado(t.estado), Estado(nuevo)
         try:
             validar_transicion(actual, destino)
@@ -443,18 +469,20 @@ class TicketService:
             raise Prohibido("No tiene permiso para reabrir el ticket")
         if destino in (Estado.ASIGNADO, Estado.EN_PROCESO) and t.responsable_id is None:
             raise ReglaNegocio("Asigne un responsable antes de iniciar la atención")
-        if destino in (Estado.PENDIENTE_CLIENTE, Estado.CANCELADO) and not (comentario or "").strip():
-            raise ReglaNegocio("Indique un comentario para el solicitante")
         if destino in (Estado.RESUELTO, Estado.CERRADO):
             self.exigir_sin_bloqueos(t)
         if actual == Estado.POR_APROBAR:
             AprobacionService(self.session).anular(t, f"Ticket cancelado por {u.nombre}")
         ahora = utcnow()
-        self._aplicar_estado(t, actual, destino, u, ctx, ahora)
-        if comentario and comentario.strip():
-            c = self._agregar_comentario(t, u, comentario.strip(), False, "COMENTARIO", None, ahora)
+        self._aplicar_estado(t, actual, destino, u, ctx, ahora, motivo=motivo)
+        if solo_historial:
+            return t
+        if destino in ESTADOS_MOTIVO_PUBLICO:
+            c = self._agregar_comentario(t, u, motivo, False, "COMENTARIO", None, ahora)
             if self.es_gestor(u, t):
-                c.copia_a = unir(self.responder_por_correo(t, u, comentario.strip(), self.copias(t)))
+                c.copia_a = unir(self.responder_por_correo(t, u, motivo, self.copias(t)))
+        else:
+            self._agregar_comentario(t, u, f"Cambio a {nombre_estado(destino)}: {motivo}", True, "COMENTARIO", None, ahora)
         return t
 
     def correo_solicitante(self, codigo: str, t: m.Ticket, *, cc: list[str] | None = None, **extra) -> bool:
@@ -540,8 +568,11 @@ class TicketService:
         t.fecha_actualizacion = ahora
         return t
 
-    def _aplicar_estado(self, t: m.Ticket, actual: Estado, destino: Estado, u: m.Usuario | None, ctx: Contexto, ahora: datetime) -> None:
+    def _aplicar_estado(self, t: m.Ticket, actual: Estado, destino: Estado, u: m.Usuario | None, ctx: Contexto, ahora: datetime,
+                        motivo: str | None = None) -> None:
+        """`motivo` queda en el Historial y en Auditoría. Los cambios que hace el sistema llevan un motivo automático."""
         reapertura = es_reapertura(actual, destino)
+        motivo = (motivo or "").strip() or f"Automático: {nombre_estado(actual)} → {nombre_estado(destino)}"
         # 1) Reloj SLA
         if reapertura:
             self.sla.reabrir(t, ahora)
@@ -569,10 +600,10 @@ class TicketService:
         t.estado = destino
         t.fecha_actualizacion = ahora
         self._hist(t, u, "REAPERTURA" if reapertura else "CIERRE" if destino == Estado.CERRADO else "CAMBIO_ESTADO",
-                   "estado", actual, destino, ahora=ahora)
+                   "estado", actual, destino, motivo[:1000], ahora)
         accion = (AccionAuditoria.REAPERTURA if reapertura else AccionAuditoria.CIERRE if destino == Estado.CERRADO
                   else AccionAuditoria.CAMBIO_ESTADO)
-        self.auditoria.registrar(ctx, accion, "ticket", t.id, {"numero": t.numero, "de": actual, "a": destino})
+        self.auditoria.registrar(ctx, accion, "ticket", t.id, {"numero": t.numero, "de": actual, "a": destino, "motivo": motivo})
         # 3) Avisos
         solicitante = t.solicitante
         if destino == Estado.CERRADO:
@@ -635,25 +666,26 @@ class TicketService:
         u = ctx.usuario
         t = self.obtener(ticket_id, u)
         self._exigir(u, t, "cerrar")
+        motivo = exigir_motivo(comentario)
         ahora = utcnow()
-        if comentario and comentario.strip():
-            self._agregar_comentario(t, u, comentario.strip(), False, "COMENTARIO", None, ahora)
-        if t.estado not in (Estado.RESUELTO, Estado.CERRADO):
+        if t.estado == Estado.CERRADO:
+            raise ReglaNegocio("El ticket ya está cerrado")
+        if t.estado != Estado.RESUELTO:
             if t.responsable_id is None:
                 raise ReglaNegocio("Asigne un responsable antes de cerrar el ticket")
             self.exigir_sin_bloqueos(t)
-            self._aplicar_estado(t, Estado(t.estado), Estado.RESUELTO, u, ctx, ahora)
-        if t.estado == Estado.CERRADO:
-            raise ReglaNegocio("El ticket ya está cerrado")
-        self._aplicar_estado(t, Estado.RESUELTO, Estado.CERRADO, u, ctx, ahora)
+            self._aplicar_estado(t, Estado(t.estado), Estado.RESUELTO, u, ctx, ahora, motivo=motivo)
+        self._aplicar_estado(t, Estado.RESUELTO, Estado.CERRADO, u, ctx, ahora, motivo=motivo)
+        self._agregar_comentario(t, u, motivo, False, "COMENTARIO", None, ahora)
         return t
 
     def reabrir(self, ticket_id: int, motivo: str, ctx: Contexto) -> m.Ticket:
         u = ctx.usuario
         t = self.obtener(ticket_id, u)
         self._exigir(u, t, "reabrir")
+        motivo = exigir_motivo(motivo)
         ahora = utcnow()
-        self._aplicar_estado(t, Estado(t.estado), Estado.EN_PROCESO, u, ctx, ahora)
+        self._aplicar_estado(t, Estado(t.estado), Estado.EN_PROCESO, u, ctx, ahora, motivo=motivo)
         self._agregar_comentario(t, u, f"Reapertura: {motivo}", False, "COMENTARIO", None, ahora)
         return t
 
@@ -700,7 +732,8 @@ class TicketService:
         if es_solicitante:
             # Respuesta del cliente: el SLA se reanuda automáticamente
             if t.estado == Estado.PENDIENTE_CLIENTE:
-                self._aplicar_estado(t, Estado.PENDIENTE_CLIENTE, Estado.EN_PROCESO, None, ctx, ahora)
+                self._aplicar_estado(t, Estado.PENDIENTE_CLIENTE, Estado.EN_PROCESO, None, ctx, ahora,
+                                     motivo="Automático: el solicitante respondió")
                 self._hist(t, u, "REANUDACION", None, None, None, "El solicitante respondió; SLA reanudado", ahora)
             self.notif.notificar([t.responsable], "COMENTARIO", f"{t.numero}: nuevo comentario", f"{u.nombre}: {texto[:200]}", t)
         else:

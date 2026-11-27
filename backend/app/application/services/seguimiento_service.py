@@ -136,7 +136,8 @@ class SeguimientoService:
         for a in archivos:
             svc.guardar_adjunto(t, autor, a.nombre, a.tipo_mime, a.contenido, ctx)
         if t.estado == Estado.PENDIENTE_CLIENTE:
-            svc._aplicar_estado(t, Estado.PENDIENTE_CLIENTE, Estado.EN_PROCESO, None, ctx, ahora)
+            svc._aplicar_estado(t, Estado.PENDIENTE_CLIENTE, Estado.EN_PROCESO, None, ctx, ahora,
+                                motivo="Automático: el solicitante respondió desde el enlace de seguimiento")
             svc._hist(t, None, "REANUDACION", None, None, None, "El solicitante respondió desde el enlace de seguimiento; SLA reanudado", ahora)
         aviso = texto[:200] or f"Adjuntó {len(archivos)} archivo(s)"
         svc.notif.notificar([t.responsable or svc._supervisor(t)], "COMENTARIO", f"{t.numero}: respuesta del solicitante",

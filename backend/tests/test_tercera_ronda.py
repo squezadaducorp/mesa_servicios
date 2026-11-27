@@ -252,7 +252,7 @@ def test_seguimiento_sin_cuenta(client, como):
     hr = como(resp)
     client.post(f"{API}/tickets/{t.id}/comentarios", json={"texto": "Envíenos la póliza vigente."}, headers=hr)
     client.post(f"{API}/tickets/{t.id}/comentarios", json={"texto": "Nota secreta del equipo", "es_interno": True}, headers=hr)
-    client.post(f"{API}/tickets/{t.id}/estado", json={"estado": "EN_PROCESO"}, headers=hr)
+    client.post(f"{API}/tickets/{t.id}/estado", json={"estado": "EN_PROCESO", "comentario": "Motivo de prueba"}, headers=hr)
     client.post(f"{API}/tickets/{t.id}/estado", json={"estado": "PENDIENTE_CLIENTE", "comentario": "Esperamos la póliza"}, headers=hr)
 
     v = client.get(f"{API}/publico/seguimiento/{t.id}", params={"t": llave}).json()

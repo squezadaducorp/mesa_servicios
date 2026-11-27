@@ -129,7 +129,7 @@ def asignar(ticket_id: int, dto: s.AsignarEntrada, ctx: Contexto = Depends(conte
 @router.post("/{ticket_id}/estado", response_model=s.TicketDetalle, summary="Cambiar estado")
 def cambiar_estado(ticket_id: int, dto: s.EstadoEntrada, ctx: Contexto = Depends(contexto), session: Session = DbSession):
     svc = TicketService(session)
-    svc.cambiar_estado(ticket_id, dto.estado, dto.comentario, ctx)
+    svc.cambiar_estado(ticket_id, dto.estado, dto.comentario, ctx, solo_historial=dto.solo_historial)
     return _detalle(svc, ticket_id, ctx)
 
 

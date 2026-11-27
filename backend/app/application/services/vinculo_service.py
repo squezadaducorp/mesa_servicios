@@ -214,7 +214,7 @@ class VinculoService:
                 AprobacionService(self.session).anular(d, f"Unido a {principal.numero}")
             d.sla_excluido = True
             svc._agregar_comentario(d, u, f"Se unió como duplicado de {principal.numero}. {mensaje}", False, "COMENTARIO", None, ahora)
-            svc._aplicar_estado(d, Estado(d.estado), Estado.CANCELADO, u, ctx, ahora)
+            svc._aplicar_estado(d, Estado(d.estado), Estado.CANCELADO, u, ctx, ahora, motivo=f"Unido como duplicado de {principal.numero}")
             svc._hist(d, u, "UNION", "duplicado_de", None, principal.numero, "Cerrado como duplicado; no cuenta en el SLA", ahora)
             if avisar:
                 svc.notif.correo_directo("TICKETS_UNIDOS", d.correo, d.solicitante_nombre, principal, duplicado=d.numero, comentario=mensaje)

@@ -169,13 +169,13 @@ function Evaluacion({ c, op, onListo }: { c: Cambio; op: OpcionesCambio; onListo
         <TextField size="small" type="datetime-local" label="Ventana: fin" value={e.ventana_fin} onChange={(x) => set("ventana_fin", x.target.value)}
           slotProps={{ inputLabel: { shrink: true } }} />
       </Box>
-      <TextField fullWidth size="small" label="Comentario (obligatorio si rechaza o deja en espera)" value={e.comentario}
+      <TextField fullWidth size="small" label="Motivo de la decisión (obligatorio)" required value={e.comentario}
         onChange={(x) => set("comentario", x.target.value)} sx={{ mt: 2 }} />
       {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
       <Stack direction="row" justifyContent="flex-end" sx={{ gap: 1, mt: 2, flexWrap: "wrap" }}>
-        <Button color="error" onClick={() => { setError(null); enviar.mutate("RECHAZAR"); }} disabled={enviar.isPending}>Rechazar</Button>
-        <Button onClick={() => { setError(null); enviar.mutate("EN_ESPERA"); }} disabled={enviar.isPending}>Dejar en espera</Button>
-        <Button variant="contained" onClick={() => { setError(null); enviar.mutate("APROBAR"); }} disabled={enviar.isPending}>
+        <Button color="error" onClick={() => { setError(null); enviar.mutate("RECHAZAR"); }} disabled={enviar.isPending || e.comentario.trim().length < 5}>Rechazar</Button>
+        <Button onClick={() => { setError(null); enviar.mutate("EN_ESPERA"); }} disabled={enviar.isPending || e.comentario.trim().length < 5}>Dejar en espera</Button>
+        <Button variant="contained" onClick={() => { setError(null); enviar.mutate("APROBAR"); }} disabled={enviar.isPending || e.comentario.trim().length < 5}>
           Aprobar evaluación
         </Button>
       </Stack>
@@ -243,13 +243,13 @@ function Aprobaciones({ c, onListo }: { c: Cambio; onListo: () => void }) {
       </Alert>
       {c.acciones.includes("aprobar") && (
         <>
-          <TextField fullWidth size="small" multiline minRows={2} label="Comentario (obligatorio si rechaza)" value={comentario}
+          <TextField fullWidth size="small" multiline minRows={2} label="Motivo de la decisión (obligatorio)" required value={comentario}
             onChange={(e) => setComentario(e.target.value)} sx={{ mt: 2 }} />
           {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
           <Stack direction="row" sx={{ gap: 1.5, mt: 1.5 }}>
-            <Button fullWidth variant="contained" color="success" startIcon={<CheckCircleIcon />} disabled={responder.isPending}
+            <Button fullWidth variant="contained" color="success" startIcon={<CheckCircleIcon />} disabled={responder.isPending || comentario.trim().length < 5}
               onClick={() => { setError(null); responder.mutate(true); }}>Aprobar</Button>
-            <Button fullWidth variant="outlined" color="error" startIcon={<CancelIcon />} disabled={responder.isPending}
+            <Button fullWidth variant="outlined" color="error" startIcon={<CancelIcon />} disabled={responder.isPending || comentario.trim().length < 5}
               onClick={() => { setError(null); responder.mutate(false); }}>Rechazar</Button>
           </Stack>
         </>
@@ -298,11 +298,11 @@ function DialogoImplementar({ c, onCerrar }: { c: Cambio; onCerrar: (ok: boolean
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>Queda «En revisión» hasta que TI registre la revisión posterior.</Typography>
         <Stack sx={{ gap: 2 }}>
           <TextField label="Versión o referencia (opcional)" value={v.version_ref} onChange={(e) => setV({ ...v, version_ref: e.target.value })} />
-          <TextField label="Notas de la implementación" multiline minRows={2} value={v.comentario} onChange={(e) => setV({ ...v, comentario: e.target.value })} />
+          <TextField label="Notas de la implementación (obligatorio)" required multiline minRows={2} value={v.comentario} onChange={(e) => setV({ ...v, comentario: e.target.value })} />
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>
-      <DialogActions><Button onClick={() => onCerrar(false)}>Cancelar</Button><Button variant="contained" onClick={() => m.mutate()} disabled={m.isPending}>Implementado</Button></DialogActions>
+      <DialogActions><Button onClick={() => onCerrar(false)}>Cancelar</Button><Button variant="contained" onClick={() => m.mutate()} disabled={m.isPending || v.comentario.trim().length < 5}>Implementado</Button></DialogActions>
     </Dialog>
   );
 }
@@ -326,10 +326,10 @@ function DialogoRevision({ c, onCerrar }: { c: Cambio; onCerrar: (ok: boolean) =
         </RadioGroup>
         <FormControlLabel control={<Checkbox checked={v.probado} onChange={(e) => setV({ ...v, probado: e.target.checked })} />} label="El solicitante lo probó" />
         <FormControlLabel control={<Checkbox checked={v.informado} onChange={(e) => setV({ ...v, informado: e.target.checked })} />} label="Se informó a los usuarios" />
-        <TextField fullWidth multiline minRows={2} label="Observaciones" value={v.observaciones} onChange={(e) => setV({ ...v, observaciones: e.target.value })} sx={{ mt: 1 }} />
+        <TextField fullWidth multiline minRows={2} required label="Observaciones (obligatorio)" value={v.observaciones} onChange={(e) => setV({ ...v, observaciones: e.target.value })} sx={{ mt: 1 }} />
         {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
       </DialogContent>
-      <DialogActions><Button onClick={() => onCerrar(false)}>Cancelar</Button><Button variant="contained" onClick={() => m.mutate()} disabled={m.isPending}>Registrar</Button></DialogActions>
+      <DialogActions><Button onClick={() => onCerrar(false)}>Cancelar</Button><Button variant="contained" onClick={() => m.mutate()} disabled={m.isPending || v.observaciones.trim().length < 5}>Registrar</Button></DialogActions>
     </Dialog>
   );
 }

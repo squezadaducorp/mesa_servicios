@@ -201,6 +201,7 @@ export default function TicketDetalle() {
     onSuccess: async (n) => {
       actualizar(n);
       const destino = usada?.estado_destino;
+      const titulo = usada?.titulo ?? "sin título";
       setTexto("");
       setArchivos([]);
       setInterno(false);
@@ -209,7 +210,7 @@ export default function TicketDetalle() {
       // La respuesta rápida puede además cambiar el estado (p. ej. a Pendiente Cliente)
       if (destino && destino !== n.estado && n.acciones.includes("cambiar_estado") && estadosDestino(n.estado).includes(destino)) {
         try {
-          actualizar(await post<Ticket>(`/tickets/${id}/estado`, { estado: destino, comentario: null }));
+          actualizar(await post<Ticket>(`/tickets/${id}/estado`, { estado: destino, comentario: `Respuesta rápida «${titulo}»`, solo_historial: true }));
           avisar(`El ticket pasó a ${destino === "PENDIENTE_CLIENTE" ? "Pendiente Cliente" : destino === "EN_PROCESO" ? "En Proceso" : "Resuelto"}`);
         } catch (e) {
           avisar(mensajeError(e), "error");
