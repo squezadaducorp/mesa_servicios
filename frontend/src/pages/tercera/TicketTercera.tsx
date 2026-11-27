@@ -16,6 +16,8 @@ import HourglassIcon from "@mui/icons-material/HourglassTop";
 import CheckIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import ShareIcon from "@mui/icons-material/Share";
+import HowToRegIcon from "@mui/icons-material/HowToReg";
+import { TituloTarjeta } from "../../components/TituloTarjeta";
 import { del, get, post } from "../../api/client";
 import type { TicketDetalle as Ticket } from "../../api/types";
 import type { PosibleDuplicado, TicketCorto, Vinculo } from "../../api/tercera";
@@ -180,7 +182,8 @@ const ICONO: Record<string, React.ReactNode> = {
 };
 
 /** Panel lateral: tickets vinculados, avisos generales, aprobaciones y enlace de seguimiento del cliente. */
-export function PanelTercera({ t, onCambio }: { t: Ticket; onCambio: () => void }) {
+/** Tarjeta «Tickets vinculados» del panel lateral. */
+export function PanelVinculos({ t, onCambio }: { t: Ticket; onCambio: () => void }) {
   const avisar = useAviso();
   const [agregar, setAgregar] = useState(false);
   const [relacionado, setRelacionado] = useState("");
@@ -202,16 +205,11 @@ export function PanelTercera({ t, onCambio }: { t: Ticket; onCambio: () => void 
   });
   const vinculos = t.vinculos ?? [];
   const avisos = t.avisos ?? [];
-  const aprob = t.aprobaciones ?? [];
+  if (!puede && vinculos.length === 0 && avisos.length === 0) return null;
   return (
-    <>
-      {(puede || vinculos.length > 0 || avisos.length > 0) && (
         <Paper sx={{ p: 2.5 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-            <LinkIcon sx={{ color: marca.azul }} />
-            <Typography variant="h6" sx={{ flex: 1 }}>Tickets vinculados</Typography>
-            {puede && !agregar && <Button size="small" onClick={() => setAgregar(true)}>+ Vincular</Button>}
-          </Stack>
+          <TituloTarjeta icono={<LinkIcon />} titulo="Tickets vinculados"
+            accion={puede && !agregar && <Button size="small" onClick={() => setAgregar(true)}>+ Vincular</Button>} />
           {agregar && (
             <Stack spacing={1} sx={{ mb: 1.5 }}>
               <Stack direction="row" spacing={1}>
@@ -257,11 +255,16 @@ export function PanelTercera({ t, onCambio }: { t: Ticket; onCambio: () => void 
             </Box>
           ))}
         </Paper>
-      )}
+  );
+}
 
-      {aprob.length > 0 && (
+/** Tarjeta «Aprobación» (solo si el ticket pasó por aprobaciones). */
+export function PanelAprobacion({ t }: { t: Ticket }) {
+  const aprob = t.aprobaciones ?? [];
+  if (aprob.length === 0) return null;
+  return (
         <Paper sx={{ p: 2.5 }}>
-          <Typography variant="h6" sx={{ mb: 1.5 }}>Aprobación</Typography>
+          <TituloTarjeta icono={<HowToRegIcon />} titulo="Aprobación" />
           {aprob.map((x) => (
             <Stack key={x.id} direction="row" spacing={1.2} alignItems="flex-start" sx={{ mb: 1.2 }}>
               <Avatar sx={{ width: 26, height: 26, fontSize: 13, bgcolor: x.estado === "PENDIENTE" ? "#F2C14E" : x.estado === "APROBADO" ? "#2E7D32" : x.estado === "RECHAZADO" ? "#C62828" : "#CFD8E3", color: x.estado === "PENDIENTE" ? "#5A3B00" : "#fff" }}>
@@ -277,14 +280,16 @@ export function PanelTercera({ t, onCambio }: { t: Ticket; onCambio: () => void 
             </Stack>
           ))}
         </Paper>
-      )}
+  );
+}
 
-      {t.seguimiento_url && (
+/** Tarjeta «Seguimiento del solicitante» con el enlace público del ticket. */
+export function PanelSeguimiento({ t }: { t: Ticket }) {
+  const avisar = useAviso();
+  if (!t.seguimiento_url) return null;
+  return (
         <Paper sx={{ p: 2.5 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-            <ShareIcon sx={{ color: marca.azul }} />
-            <Typography variant="h6">Seguimiento del solicitante</Typography>
-          </Stack>
+          <TituloTarjeta icono={<ShareIcon />} titulo="Seguimiento del solicitante" mb={1} />
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             El acuse y cada correo del ticket le llevan este enlace para ver el estado y responder sin iniciar sesión. No muestra notas internas.
           </Typography>
@@ -293,7 +298,5 @@ export function PanelTercera({ t, onCambio }: { t: Ticket; onCambio: () => void 
             Copiar enlace
           </Button>
         </Paper>
-      )}
-    </>
   );
 }

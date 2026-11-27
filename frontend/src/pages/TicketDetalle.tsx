@@ -33,7 +33,12 @@ import { CumplimientoChip, EstadoChip, NOMBRES_NOTA, PrioridadChip, SlaBarra, co
 import { Cargando, ErrorCarga, Vacio } from "../components/Comunes";
 import { duracion, fechaHora, tamanoArchivo, tiempoRelativo } from "../utils/formato";
 import TicketDialogos, { estadosDestino, type Dialogo } from "./TicketDialogos";
-import { AlertasTercera, PanelTercera } from "./tercera/TicketTercera";
+import { AlertasTercera, PanelAprobacion, PanelSeguimiento, PanelVinculos } from "./tercera/TicketTercera";
+import { TituloTarjeta } from "../components/TituloTarjeta";
+import SpeedIcon from "@mui/icons-material/Speed";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import AlternateEmailIcon from "@mui/icons-material/AlternateEmail";
+import DevicesIcon from "@mui/icons-material/DevicesOther";
 import PanelTareas from "./cuarta/PanelTareas";
 import TicketProblemas from "./ronda4b/TicketProblemas";
 import TiempoTrabajado from "./ronda4c/TiempoTrabajado";
@@ -705,11 +710,11 @@ export default function TicketDetalle() {
 
         <Stack spacing={2}>
           <Paper sx={{ p: 2.5 }}>
-            <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-              <Typography variant="h6">SLA</Typography>
-              {t.sla_pausado && <Chip size="small" icon={<PauseCircleIcon />} label="En pausa" color="warning" />}
-              {t.sla_excluido && <Chip size="small" label="Excluido" />}
-            </Stack>
+            <TituloTarjeta icono={<SpeedIcon />} titulo="SLA"
+              accion={<>
+                {t.sla_pausado && <Chip size="small" icon={<PauseCircleIcon />} label="En pausa" color="warning" />}
+                {t.sla_excluido && <Chip size="small" label="Excluido" />}
+              </>} />
             <SlaBarra pct={pct} pausado={t.sla_pausado} />
             <Typography variant="caption" sx={{ color: colorSla(pct), fontWeight: 600 }}>
               {pct >= 100 ? "SLA vencido" : pct >= 90 ? "Crítico: supera el 90 %" : pct >= 75 ? "Próximo a vencer" : "Dentro del plazo"}
@@ -740,53 +745,39 @@ export default function TicketDetalle() {
             </Typography>
           </Paper>
 
-          {a.has("nota_interna") && <TiempoTrabajado tipo="ticket" id={t.id} />}
+          <Paper sx={{ p: 2.5 }}>
+            <TituloTarjeta icono={<InfoOutlinedIcon />} titulo="Información" mb={0.5} />
+            <Typography variant="overline" sx={{ color: "text.secondary", lineHeight: 2 }}>Solicitante</Typography>
+            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 2 }}>
+              <Dato etiqueta="Nombre" valor={t.solicitante_nombre} />
+              <Dato etiqueta="Cargo" valor={t.solicitante_cargo} />
+              <Dato etiqueta="Área" valor={t.area?.nombre} />
+              <Dato etiqueta="Cliente" valor={t.cliente?.nombre} />
+              <Dato etiqueta="Correo" valor={t.correo} />
+              <Dato etiqueta="Teléfono" valor={t.telefono} />
+            </Box>
+            <Divider sx={{ my: 1.5 }} />
+            <Typography variant="overline" sx={{ color: "text.secondary", lineHeight: 2 }}>Atención</Typography>
+            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 2 }}>
+              <Dato etiqueta="Responsable" valor={t.responsable?.nombre ?? "Sin asignar"} />
+              <Dato etiqueta="Canal" valor={t.canal} />
+              <Dato etiqueta="Asignación" valor={fechaHora(t.fecha_asignacion)} />
+              <Dato etiqueta="Cierre" valor={fechaHora(t.fecha_cierre)} />
+            </Box>
+          </Paper>
 
-          {t.servicio && <PanelTareas ticketId={t.id} s={t.servicio} onCambio={() => q.refetch()} />}
-
-          <PanelTercera t={t} onCambio={() => q.refetch()} />
-
-          {t.equipo && (
-            <Paper sx={{ p: 2.5 }}>
-              <Typography variant="h6" sx={{ mb: 1 }}>Equipo</Typography>
-              <Stack direction="row" spacing={1.2} sx={{ alignItems: "center" }}>
-                <IconoEquipo tipo={t.equipo.tipo} />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }}>{t.equipo.codigo}</Typography>
-                  <Typography variant="caption" color="text.secondary">{t.equipo.marca_modelo}</Typography>
-                </Box>
-              </Stack>
-              {t.equipo.aviso && <Alert severity="warning" sx={{ mt: 1.5 }}>{t.equipo.aviso}</Alert>}
-            </Paper>
-          )}
-
-          {!!t.kb_vistos?.length && (
-            <Paper sx={{ p: 2.5 }}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1 }}>
-                <MenuBookIcon color="primary" />
-                <Typography variant="h6">Ya revisó estos artículos</Typography>
-              </Stack>
-              <Typography variant="caption" color="text.secondary">El solicitante los leyó antes de crear el ticket y no le sirvieron.</Typography>
-              {t.kb_vistos.map((k) => (
-                <Typography key={k.id} variant="body2" sx={{ mt: 0.8 }}>
-                  • <Link component={RouterLink} to={`/conocimiento?articulo=${k.id}`}>{k.nombre}</Link>
-                </Typography>
-              ))}
-            </Paper>
-          )}
+          <PanelSeguimiento t={t} />
 
           <PanelVisualizadores t={t} onCambio={actualizar} />
 
           {(a.has("copias") || t.copias.length > 0) && (
             <Paper sx={{ p: 2.5 }}>
-              <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-                <Typography variant="h6">Personas en copia</Typography>
-                {a.has("copias") && editandoCopias === null && (
+              <TituloTarjeta icono={<AlternateEmailIcon />} titulo="Personas en copia" mb={1}
+                accion={a.has("copias") && editandoCopias === null && (
                   <Button size="small" startIcon={<EditIcon />} onClick={() => setEditandoCopias(t.copias.map((c) => c.correo))}>
                     Editar
                   </Button>
-                )}
-              </Stack>
+                )} />
               {editandoCopias === null ? (
                 <>
                   {t.copias.length === 0 ? (
@@ -824,12 +815,43 @@ export default function TicketDetalle() {
             </Paper>
           )}
 
+          <PanelAprobacion t={t} />
+
+          {t.servicio && <PanelTareas ticketId={t.id} s={t.servicio} onCambio={() => q.refetch()} />}
+
+          {t.equipo && (
+            <Paper sx={{ p: 2.5 }}>
+              <TituloTarjeta icono={<DevicesIcon />} titulo="Equipo" mb={1} />
+              <Stack direction="row" spacing={1.2} sx={{ alignItems: "center" }}>
+                <IconoEquipo tipo={t.equipo.tipo} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: "primary.main" }}>{t.equipo.codigo}</Typography>
+                  <Typography variant="caption" color="text.secondary">{t.equipo.marca_modelo}</Typography>
+                </Box>
+              </Stack>
+              {t.equipo.aviso && <Alert severity="warning" sx={{ mt: 1.5 }}>{t.equipo.aviso}</Alert>}
+            </Paper>
+          )}
+
+          {!!t.kb_vistos?.length && (
+            <Paper sx={{ p: 2.5 }}>
+              <TituloTarjeta icono={<MenuBookIcon />} titulo="Ya revisó estos artículos" mb={1} />
+              <Typography variant="caption" color="text.secondary">El solicitante los leyó antes de crear el ticket y no le sirvieron.</Typography>
+              {t.kb_vistos.map((k) => (
+                <Typography key={k.id} variant="body2" sx={{ mt: 0.8 }}>
+                  • <Link component={RouterLink} to={`/conocimiento?articulo=${k.id}`}>{k.nombre}</Link>
+                </Typography>
+              ))}
+            </Paper>
+          )}
+
+          {a.has("nota_interna") && <TiempoTrabajado tipo="ticket" id={t.id} />}
+
+          <PanelVinculos t={t} onCambio={() => q.refetch()} />
+
           {puedeIa && (
             <Paper sx={{ p: 2.5 }}>
-              <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1.5 }}>
-                <AutoAwesomeIcon color="primary" />
-                <Typography variant="h6">Asistente IA</Typography>
-              </Stack>
+              <TituloTarjeta icono={<AutoAwesomeIcon />} titulo="Asistente IA" />
               {riesgo.data && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
@@ -863,24 +885,6 @@ export default function TicketDetalle() {
               </Stack>
             </Paper>
           )}
-
-          <Paper sx={{ p: 2.5 }}>
-            <Typography variant="h6" sx={{ mb: 1 }}>
-              Información
-            </Typography>
-            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 2 }}>
-              <Dato etiqueta="Solicitante" valor={t.solicitante_nombre} />
-              <Dato etiqueta="Cargo" valor={t.solicitante_cargo} />
-              <Dato etiqueta="Área" valor={t.area?.nombre} />
-              <Dato etiqueta="Cliente" valor={t.cliente?.nombre} />
-              <Dato etiqueta="Correo" valor={t.correo} />
-              <Dato etiqueta="Teléfono" valor={t.telefono} />
-              <Dato etiqueta="Responsable" valor={t.responsable?.nombre ?? "Sin asignar"} />
-              <Dato etiqueta="Canal" valor={t.canal} />
-              <Dato etiqueta="Asignación" valor={fechaHora(t.fecha_asignacion)} />
-              <Dato etiqueta="Cierre" valor={fechaHora(t.fecha_cierre)} />
-            </Box>
-          </Paper>
         </Stack>
       </Box>
 

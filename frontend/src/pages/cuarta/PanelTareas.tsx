@@ -5,6 +5,7 @@ import { Stack } from "../../components/Pila";
 import { post } from "../../api/client";
 import type { ServicioTicket } from "../../api/cuarta";
 import { mensajeError, useAviso } from "../../components/Aviso";
+import { TituloTarjeta } from "../../components/TituloTarjeta";
 import { fechaHora } from "../../utils/formato";
 
 /** Tareas del ticket creado desde el catálogo de servicios (mejora 26). */
@@ -18,10 +19,7 @@ export default function PanelTareas({ ticketId, s, onCambio }: { ticketId: numbe
   const listas = s.tareas.filter((x) => x.estado === "LISTA").length;
   return (
     <Paper sx={{ p: 2.5 }}>
-      <Stack direction="row" alignItems="center" sx={{ gap: 1, mb: 0.5 }}>
-        <ChecklistIcon color="primary" fontSize="small" />
-        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Tareas del servicio</Typography>
-      </Stack>
+      <TituloTarjeta icono={<ChecklistIcon />} titulo="Tareas del servicio" mb={0.5} />
       {s.servicio && (
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
           {s.servicio} · plazo {s.plazo}

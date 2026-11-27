@@ -15,6 +15,7 @@ import { Stack } from "../../components/Pila";
 import { del, post, put, get } from "../../api/client";
 import type { RegistroTiempo, TiempoObjeto } from "../../api/ronda4c";
 import { mensajeError, useAviso } from "../../components/Aviso";
+import { TituloTarjeta } from "../../components/TituloTarjeta";
 import { duracionCorta } from "../ronda4b/comun";
 
 export const reloj = (s: number) => {
@@ -118,10 +119,7 @@ export default function TiempoTrabajado({ tipo, id }: { tipo: "ticket" | "proble
   const pctEst = d.estimado_min ? Math.round((100 * totalMin) / d.estimado_min) : null;
   return (
     <Paper sx={{ p: 2.5 }}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1.5 }}>
-        <TimerIcon color="primary" />
-        <Typography variant="h6" sx={{ flex: 1 }}>Tiempo trabajado</Typography>
-      </Stack>
+      <TituloTarjeta icono={<TimerIcon />} titulo="Tiempo trabajado" />
 
       <Box sx={{ bgcolor: "#F2F5FA", borderRadius: 3, p: 2, textAlign: "center" }}>
         {activo ? (
