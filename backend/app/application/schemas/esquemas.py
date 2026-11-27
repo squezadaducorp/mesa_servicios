@@ -745,8 +745,8 @@ class AuditoriaSalida(Modelo):
 
 # ---------------------------------------------------------------------- IA
 class IaEntrada(BaseModel):
-    asunto: str = ""
-    descripcion: str = ""
+    asunto: str = Field("", max_length=200)
+    descripcion: str = Field("", max_length=20000)
     cliente_id: int | None = None
 
 

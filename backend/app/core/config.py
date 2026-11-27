@@ -107,6 +107,8 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = "local"
     ANTHROPIC_API_KEY: str = ""
     AI_MODEL: str = "claude-opus-5-5"
+    AI_LLM_MAX_POR_USUARIO_HORA: int = 60    # pasado el límite se usa el motor local (R14)
+    AI_LLM_MAX_GLOBAL_HORA: int = 600
 
     # Worker
     WORKER_INTERVALO_SEG: int = 60

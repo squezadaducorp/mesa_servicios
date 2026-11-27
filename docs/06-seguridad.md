@@ -272,11 +272,24 @@ adjuntar en tickets de otra persona.
 
 * **`AI_PROVIDER=local` (por defecto):** la clasificación, la prioridad, las respuestas, los
   resúmenes y el riesgo se calculan dentro del servidor. Ningún dato sale de la red.
-* **`AI_PROVIDER=llm`:** el asunto, la descripción, los nombres del solicitante y del cliente y hasta los 10 últimos comentarios del ticket se envían a
-  la API de Anthropic (Claude) por HTTPS. Antes de activarlo:
-  * evalúe la cláusula de confidencialidad con los clientes
-  * use una API key de la organización
-  * limite la salida a internet del contenedor `api` a `api.anthropic.com`
+* **`AI_PROVIDER=llm`:** el asunto, la descripción y hasta los 10 últimos comentarios del ticket se envían a
+  la API de Anthropic (Claude) por HTTPS, **seudonimizados** (matriz TI-REG-IA-001, R11): el nombre del
+  solicitante, del cliente, del responsable y de quien comenta, y los RUC, cédulas, correos y teléfonos
+  que aparezcan en el texto se cambian por marcadores (`[SOLICITANTE]`, `[CLIENTE]`, `[ID_1]`…) que se
+  devuelven a su valor dentro del servidor. Nombres sueltos escritos a mano (por ejemplo solo un
+  apellido) pueden no detectarse. Los tickets `CONFIDENCIAL` nunca se envían.
+  * **Inyección de instrucciones (R13):** el texto del usuario no puede cerrar las etiquetas que lo
+    delimitan, el modelo tiene la regla de tratarlo como dato, y si la salida trae enlaces o señales de
+    manipulación se descarta y se usa el motor local. Las entradas sospechosas y las salidas descartadas
+    quedan en `ia_sugerencias` con `tipo = 'ALERTA'` para revisión.
+  * **Límite de uso (R14):** `AI_LLM_MAX_POR_USUARIO_HORA` (60) y `AI_LLM_MAX_GLOBAL_HORA` (600);
+    pasado el límite se usa el motor local sin error. Configure además el límite de gasto mensual en
+    la consola de Anthropic.
+  * Antes de activarlo:
+    * cumpla las condiciones de la política TI-POL-IA-001 §9 (evaluación de impacto, contrato, aviso versión B, aprobación de Gerencia)
+    * evalúe la cláusula de confidencialidad con los clientes
+    * use una API key de la organización, con retención de datos mínima
+    * limite la salida a internet del contenedor `api` a `api.anthropic.com`
 * **Si la IA falla:** el sistema vuelve automáticamente al motor local. Cada sugerencia queda
   guardada en `ia_sugerencias` con el proveedor que la generó.
 
