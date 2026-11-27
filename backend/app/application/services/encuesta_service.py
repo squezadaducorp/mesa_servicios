@@ -98,7 +98,8 @@ class EncuestaService:
         detalle = f"Calificación del solicitante: {calificacion}/5 ({NOMBRES[calificacion]})" + (f". «{comentario}»" if comentario else "")
         svc._hist(t, u, "ENCUESTA", "calificacion", None, calificacion, detalle[:1000], ahora)
         if t.estado == Estado.RESUELTO:
-            svc._aplicar_estado(t, Estado.RESUELTO, Estado.CERRADO, u, ctx, ahora)   # calificar confirma la solución
+            svc._aplicar_estado(t, Estado.RESUELTO, Estado.CERRADO, u, ctx, ahora,   # calificar confirma la solución
+                                motivo=f"El solicitante calificó la atención ({calificacion}/5) y confirmó la solución")
         if t.responsable:
             svc.notif.notificar([t.responsable], "ENCUESTA", f"{t.numero}: calificación {calificacion}/5",
                                 f"El solicitante calificó la atención de «{t.asunto}».", t, "INFO")

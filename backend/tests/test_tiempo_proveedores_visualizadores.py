@@ -200,7 +200,7 @@ def test_visualizador_ve_comenta_y_recibe_avisos(client, como):
     assert d["es_visualizador"] and "comentar" in d["acciones"] and "dejar_seguir" in d["acciones"]
     assert "cambiar_estado" not in d["acciones"] and "nota_interna" not in d["acciones"] and "calificar" not in d["acciones"]
     assert all(not c["es_interno"] for c in d["comentarios"])
-    assert client.post(f"{API}/tickets/{t['id']}/estado", json={"estado": "EN_PROCESO"}, headers=hl).status_code == 403
+    assert client.post(f"{API}/tickets/{t['id']}/estado", json={"estado": "EN_PROCESO", "comentario": "Motivo de prueba"}, headers=hl).status_code == 403
     assert client.post(f"{API}/tickets/{t['id']}/comentarios", json={"texto": "Nota", "es_interno": True}, headers=hl).status_code == 403
     r = client.post(f"{API}/tickets/{t['id']}/comentarios", json={"texto": "Es urgente: la DAI sale hoy"}, headers=hl)
     assert r.status_code in (200, 201), r.text

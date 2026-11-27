@@ -353,7 +353,8 @@ class AsignarEntrada(BaseModel):
 
 class EstadoEntrada(BaseModel):
     estado: Literal["ASIGNADO", "EN_PROCESO", "PENDIENTE_CLIENTE", "ESCALADO", "RESUELTO", "CERRADO", "CANCELADO"]
-    comentario: str | None = None
+    comentario: str | None = None   # motivo del cambio: obligatorio (mínimo 5 caracteres)
+    solo_historial: bool = False    # el motivo no se publica como comentario (respuesta rápida ya enviada)
 
 
 class EscalarEntrada(BaseModel):

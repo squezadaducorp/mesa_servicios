@@ -218,7 +218,7 @@ export default function Layout() {
     principal.splice(principal.findIndex((i) => i.a === "/tickets/nuevo") + 1 || 3, 0,
       { a: "/aprobaciones", texto: "Por aprobar", icono: <HowToRegIcon />, insignia: aprobaciones.data.pendientes });
   }
-  // Revisión de accesos (38): el jefe que tiene gente por revisar ve el acceso en el menú con su insignia
+  // Revisión de accesos (38): el Coordinador de Sistemas (si no es administrador) ve el acceso en el menú con su insignia
   const accesos = useQuery({
     queryKey: ["accesos", "pendientes"],
     queryFn: () => get<{ revision_id: number | null; pendientes: number }>("/accesos/pendientes"),

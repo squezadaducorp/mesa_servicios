@@ -80,7 +80,7 @@ function RevisionAccesos({ admin }: { admin: boolean }) {
   });
   const abrir = useMutation({
     mutationFn: () => post<Revision>("/accesos/revisiones"),
-    onSuccess: (r) => { setSel(r.id); avisar("Revisión abierta: los jefes recibieron el correo"); refrescar(); },
+    onSuccess: (r) => { setSel(r.id); avisar("Revisión abierta: el Coordinador de Sistemas recibió el correo"); refrescar(); },
     onError: (e) => avisar(mensajeError(e), "error"),
   });
   const aprobarM = useMutation({
@@ -112,7 +112,7 @@ function RevisionAccesos({ admin }: { admin: boolean }) {
               ))}
             </TextField>
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-              Se abre sola el 1 de marzo, junio, septiembre y diciembre. Cada jefe revisa a su gente; las cuentas sin jefe las revisa TI.
+              Se abre sola el 1 de marzo, junio, septiembre y diciembre. La revisa el Coordinador de Sistemas (accesos.revisor_correo); su propia cuenta la revisa otro administrador.
             </Typography>
             {!hayAbierta && <Button variant="outlined" onClick={() => abrir.mutate()} disabled={abrir.isPending}>Abrir revisión ahora</Button>}
             {id && r && !abierta && (
@@ -157,7 +157,7 @@ function RevisionAccesos({ admin }: { admin: boolean }) {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Persona</TableCell><TableCell>Rol</TableCell><TableCell>Jefe directo</TableCell>
+                    <TableCell>Persona</TableCell><TableCell>Rol</TableCell><TableCell>Revisor</TableCell>
                     <TableCell>Último ingreso</TableCell><TableCell>Alertas</TableCell><TableCell>Decisión</TableCell>
                   </TableRow>
                 </TableHead>
@@ -351,7 +351,7 @@ export default function Cumplimiento() {
   return (
     <Box>
       <Encabezado titulo="Seguridad y cumplimiento"
-        subtitulo={admin ? "Controles ISO 27001: política de acceso, revisión de accesos, servidor, vulnerabilidades, clasificación y retención" : "Confirme qué accesos necesita su equipo"} />
+        subtitulo={admin ? "Controles ISO 27001: política de acceso, revisión de accesos, servidor, vulnerabilidades, clasificación y retención" : "Revise los accesos a la Mesa de Servicios"} />
       {pestanas.length > 1 && (
         <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" sx={{ mb: 2 }}>
           {pestanas.map((p) => <Tab key={p.clave} value={p.clave} label={p.texto} />)}

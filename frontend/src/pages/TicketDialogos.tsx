@@ -21,7 +21,9 @@ const TRANSICIONES: Record<string, string[]> = {
   ESCALADO: ["ASIGNADO", "EN_PROCESO", "PENDIENTE_CLIENTE", "RESUELTO", "CANCELADO"],
 };
 export const estadosDestino = (estado: string) => TRANSICIONES[estado] ?? [];
-const REQUIERE_COMENTARIO = ["PENDIENTE_CLIENTE", "CANCELADO"];
+// Todo cambio de estado lleva motivo. En estos lo ve el solicitante; en los demás queda como nota interna.
+const MOTIVO_PUBLICO = ["PENDIENTE_CLIENTE", "RESUELTO", "CANCELADO"];
+export const MIN_MOTIVO = 5;
 
 interface Props {
   ticket: TicketDetalle;
@@ -75,11 +77,13 @@ export default function TicketDialogos({ ticket, abierto, estadoInicial, onCerra
               <DialogContentText variant="body2">El SLA se pausa hasta que el solicitante responda; se reanuda automáticamente con su comentario.</DialogContentText>
             )}
             <TextField
-              label={REQUIERE_COMENTARIO.includes(estado) ? "Comentario para el solicitante (obligatorio)" : "Comentario (opcional)"}
+              label="Motivo del cambio (obligatorio)"
+              helperText={MOTIVO_PUBLICO.includes(estado) ? "El solicitante lo verá como comentario." : "Queda en el Historial y como nota interna (el solicitante no lo ve)."}
               value={v("comentario")}
               onChange={set("comentario")}
               multiline
               minRows={3}
+              required
             />
           </Stack>
         </DialogContent>
@@ -87,7 +91,7 @@ export default function TicketDialogos({ ticket, abierto, estadoInicial, onCerra
           <Button onClick={cerrar}>Cancelar</Button>
           <Button
             variant="contained"
-            disabled={enviando || !estado || (REQUIERE_COMENTARIO.includes(estado) && !v("comentario").trim())}
+            disabled={enviando || !estado || v("comentario").trim().length < MIN_MOTIVO}
             onClick={() => enviar("estado", { estado, comentario: v("comentario") || null })}
           >
             Guardar
@@ -149,11 +153,11 @@ export default function TicketDialogos({ ticket, abierto, estadoInicial, onCerra
       <Dialog open={abierto === "cerrar"} onClose={cerrar} fullWidth maxWidth="sm">
         <DialogTitle>Cerrar ticket</DialogTitle>
         <DialogContent>
-          <TextField label="Comentario de cierre (opcional)" value={v("comentario")} onChange={set("comentario")} multiline minRows={3} fullWidth sx={{ mt: 1 }} />
+          <TextField label="Motivo del cierre (obligatorio)" helperText="El solicitante lo verá como comentario." value={v("comentario")} onChange={set("comentario")} multiline minRows={3} fullWidth required sx={{ mt: 1 }} />
         </DialogContent>
         <DialogActions>
           <Button onClick={cerrar}>Cancelar</Button>
-          <Button variant="contained" color="success" disabled={enviando} onClick={() => enviar("cerrar", { comentario: v("comentario") || null })}>
+          <Button variant="contained" color="success" disabled={enviando || v("comentario").trim().length < MIN_MOTIVO} onClick={() => enviar("cerrar", { comentario: v("comentario") })}>
             Cerrar ticket
           </Button>
         </DialogActions>

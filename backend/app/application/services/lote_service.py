@@ -38,6 +38,8 @@ class LoteService:
             raise ReglaNegocio("Elija la prioridad")
         if dto.accion == "ESTADO" and not dto.estado:
             raise ReglaNegocio("Elija el estado")
+        if dto.accion == "ESTADO" and len((dto.texto or "").strip()) < 5:
+            raise ReglaNegocio("Indique el motivo del cambio de estado")
         if dto.accion == "CATEGORIA" and not (dto.categoria_id and dto.subcategoria_id):
             raise ReglaNegocio("Elija la categoría y la subcategoría")
         if dto.accion == "NOTA" and not (dto.texto or "").strip():

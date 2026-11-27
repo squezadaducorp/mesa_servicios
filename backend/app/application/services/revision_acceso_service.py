@@ -2,8 +2,9 @@
 
 - Campaña trimestral (meses de ``accesos.meses_revision``, por defecto marzo, junio, septiembre y diciembre):
   el worker la abre el día 1 con una foto de cada cuenta activa (rol, último ingreso y alertas).
-  Cada jefe directo (``usuarios.supervisor_id``) marca Mantener, Ajustar o Dar de baja a su gente;
-  las cuentas sin jefe las revisa TI.
+  La revisa el Coordinador de Sistemas (``accesos.revisor_correo``): marca Mantener, Ajustar o Dar de baja cada cuenta.
+  Los jefes directos ya no revisan accesos (siguen aprobando solicitudes del catálogo). Si el correo del revisor no
+  corresponde a una cuenta activa, las cuentas quedan para TI (cualquier administrador).
 - TI aprueba la campaña: las bajas se aplican (la cuenta se desactiva, nunca se borra) y el acta en PDF
   se envía a ``accesos.informe_correo`` como evidencia para la auditoría.
 - Bajas automáticas: tras ``accesos.dias_inactividad`` días sin entrar, con aviso ``accesos.dias_aviso_baja``
@@ -29,9 +30,10 @@ from app.infrastructure.db import models as m
 from app.infrastructure.repositories.repositorios import CatalogoRepository, RefreshTokenRepository
 
 CONFIG = {
+    "accesos.revisor_correo": ("squezada@aducorp.com.ec", "Correo del Coordinador de Sistemas, que revisa todos los accesos en la campaña trimestral"),
     "accesos.informe_correo": ("squezada@aducorp.com.ec", "Correo que recibe el acta de la revisión de accesos y el aviso de bajas por inactividad"),
     "accesos.meses_revision": ("3,6,9,12", "Meses en que se abre la revisión trimestral de accesos (día 1), separados por coma"),
-    "accesos.dias_plazo": ("15", "Días que tienen los jefes para revisar los accesos de su gente"),
+    "accesos.dias_plazo": ("15", "Días que tiene el Coordinador de Sistemas para revisar los accesos"),
     "accesos.dias_alerta": ("60", "Días sin ingresar a partir de los cuales la revisión marca la cuenta"),
     "accesos.bajas_automaticas": ("si", "Desactivar las cuentas que no ingresan en los días configurados (si/no)"),
     "accesos.dias_inactividad": ("90", "Días sin ingresar tras los que se desactiva la cuenta"),
@@ -108,6 +110,14 @@ class RevisionAccesoService:
             adjunto_nombre=adjunto[0] if adjunto else None, adjunto=adjunto[1] if adjunto else None,
         ))
 
+    def revisor(self) -> m.Usuario | None:
+        """Cuenta activa del Coordinador de Sistemas que revisa los accesos (None: lo revisa TI)."""
+        correo = (self.config()["accesos.revisor_correo"] or "").strip().lower()
+        if not correo:
+            return None
+        return self.session.scalar(select(m.Usuario).where(
+            func.lower(m.Usuario.correo) == correo, m.Usuario.activo == True, m.Usuario.eliminado == False))
+
     def _cuentas(self) -> list[m.Usuario]:
         excluidas = _sistema()   # buzón y formulario: no son personas
         return [u for u in self.session.scalars(
@@ -155,19 +165,20 @@ class RevisionAccesoService:
         self.session.add(r)
         self.session.flush()
         cuentas = self._cuentas()
-        activos = {u.id: u for u in cuentas}
         con_equipo = {u.supervisor_id for u in cuentas if u.supervisor_id}
         con_equipo |= set(self.session.scalars(select(m.Categoria.supervisor_id).where(m.Categoria.supervisor_id.is_not(None))))
         exentos = set(_lista(",".join(self._exentos())))
+        revisor = self.revisor()
         for u in cuentas:
-            jefe = activos.get(u.supervisor_id) if u.supervisor_id and u.supervisor_id != u.id else None
+            # jefe_id guarda quién revisa: el Coordinador de Sistemas (su propia cuenta la revisa otro administrador)
+            quien = revisor if revisor is not None and revisor.id != u.id else None
             self.session.add(m.RevisionAccesoItem(
-                revision_id=r.id, usuario_id=u.id, jefe_id=jefe.id if jefe else None, rol=u.rol.nombre[:100],
+                revision_id=r.id, usuario_id=u.id, jefe_id=quien.id if quien else None, rol=u.rol.nombre[:100],
                 ultimo_login=u.ultimo_login, alertas=",".join(self._alertas(u, ahora, con_equipo, exentos)) or None))
         self.session.flush()
         self.auditoria.registrar(ctx or Contexto(ip="worker"), AccionAuditoria.REVISION_ACCESO_ABIERTA, "revision_acceso", r.id,
                                  {"periodo": periodo, "cuentas": len(cuentas)})
-        self._avisar_jefes(r, recordatorio=False)
+        self._avisar_revisor(r, recordatorio=False)
         return r
 
     def _exentos(self) -> list[str]:
@@ -180,7 +191,7 @@ class RevisionAccesoService:
             select(m.RevisionAccesoItem).where(m.RevisionAccesoItem.revision_id == revision_id)
             .order_by(m.RevisionAccesoItem.jefe_id, m.RevisionAccesoItem.id)).unique())
 
-    def _avisar_jefes(self, r: m.RevisionAcceso, recordatorio: bool) -> int:
+    def _avisar_revisor(self, r: m.RevisionAcceso, recordatorio: bool) -> int:
         por_jefe: dict[int | None, list[m.RevisionAccesoItem]] = {}
         for i in self.items(r.id):
             if i.decision is None:
@@ -189,20 +200,20 @@ class RevisionAccesoService:
         enviados = 0
         for jefe_id, lista in por_jefe.items():
             if jefe_id is None:
-                continue   # las cuentas sin jefe las revisa TI desde la Mesa
+                continue   # sin revisor asignado: las revisa TI desde la Mesa
             jefe = lista[0].jefe
             filas = "".join(f"<li>{html.escape(i.usuario.nombre)} · {html.escape(i.rol)}</li>" for i in lista[:30])
             mas = f"<li>… y {len(lista) - 30} más</li>" if len(lista) > 30 else ""
             titulo = "Recordatorio: revise" if recordatorio else "Revise"
             cuerpo = (f"<p>Hola {html.escape(jefe.nombre)}:</p>"
-                      f"<p>Como parte de la revisión trimestral de accesos ({r.periodo}), confirme si estas personas de su equipo "
-                      "deben seguir con su acceso a la Mesa de Servicios tal como está:</p>"
+                      f"<p>Como Coordinador de Sistemas, le corresponde la revisión trimestral de accesos ({r.periodo}). "
+                      f"Confirme si estas {len(lista)} cuentas deben seguir con su acceso a la Mesa de Servicios tal como está:</p>"
                       f"<ul>{filas}{mas}</ul>"
                       f"<p>Tiene hasta el <b>{_local(r.fecha_limite)}</b>. Le toma un par de minutos: "
                       f"<a href=\"{url}\">abrir la revisión de accesos</a>.</p>"
                       "<p style='font-size:12px;color:#5A6577'>Esta revisión es un control de la norma ISO 27001: "
                       "nadie debe conservar accesos que ya no necesita.</p>")
-            self._correo(jefe.correo, f"{titulo} los accesos de su equipo ({r.periodo})", cuerpo, "REVISION_ACCESO")
+            self._correo(jefe.correo, f"{titulo} los accesos de la Mesa de Servicios ({r.periodo})", cuerpo, "REVISION_ACCESO")
             enviados += 1
         return enviados
 
@@ -236,7 +247,7 @@ class RevisionAccesoService:
         todos = self.items(r.id)
         visibles = todos if self.es_admin(u) else [i for i in todos if i.jefe_id == u.id]
         if not visibles and not self.es_admin(u):
-            raise Prohibido("Esta revisión no tiene personas a su cargo")
+            raise Prohibido("La revisión de accesos la hace el Coordinador de Sistemas")
         return {**self._resumen(r, len(todos), sum(1 for i in todos if i.decision)), "items": [self._item(i) for i in visibles]}
 
     def pendientes(self, u: m.Usuario) -> dict:
@@ -264,7 +275,7 @@ class RevisionAccesoService:
         if r.estado != "ABIERTA":
             raise ReglaNegocio("La revisión ya fue aprobada")
         if i.jefe_id != u.id and not self.es_admin(u):
-            raise Prohibido("Solo el jefe directo o TI pueden revisar este acceso")
+            raise Prohibido("Solo el Coordinador de Sistemas o TI pueden revisar este acceso")
         if decision not in DECISIONES:
             raise ReglaNegocio("Decisión no válida")
         comentario = (comentario or "").strip() or None
@@ -346,7 +357,7 @@ class RevisionAccesoService:
             partes.append(Paragraph(f"Observación: {e(r.observacion)}", normal))
         partes.append(Spacer(1, 0.3 * cm))
         dias = self._entero("accesos.dias_alerta")
-        datos = [["Persona", "Rol", "Jefe directo", "Último ingreso", "Alertas", "Decisión", "Comentario", "Revisó"]]
+        datos = [["Persona", "Rol", "Revisor", "Último ingreso", "Alertas", "Decisión", "Comentario", "Revisó"]]
         for i in items:
             alertas = ", ".join(ALERTAS.get(c, c).format(dias=dias) for c in (i.alertas or "").split(",") if c)
             decision = {"MANTENER": "Mantener", "AJUSTAR": "Ajustar", "BAJA": "Dar de baja"}.get(i.decision or "", "Pendiente")
@@ -434,7 +445,7 @@ class RevisionAccesoService:
 
     # ------------------------------------------------------------ worker
     def procesar(self, ahora: datetime | None = None) -> dict:
-        """Una vez al día: abre la campaña del trimestre, recuerda a los jefes y aplica las bajas por inactividad."""
+        """Una vez al día: abre la campaña del trimestre, recuerda al revisor y aplica las bajas por inactividad."""
         ahora = ahora or utcnow()
         hoy = _local(ahora, "%Y-%m-%d")
         marca = self.session.get(m.Configuracion, "accesos.ultimo_proceso")
@@ -454,7 +465,7 @@ class RevisionAccesoService:
             r["revision"] = self.abrir(None, ahora).periodo
         elif abierta is not None and not abierta.recordatorio and ahora >= abierta.fecha_limite - timedelta(days=3):
             abierta.recordatorio = True
-            r["recordatorios"] = self._avisar_jefes(abierta, recordatorio=True)
+            r["recordatorios"] = self._avisar_revisor(abierta, recordatorio=True)
         r["inactividad"] = self.procesar_inactividad(ahora)
         return r
 

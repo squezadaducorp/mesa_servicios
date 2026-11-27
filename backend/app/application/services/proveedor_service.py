@@ -223,7 +223,7 @@ class ProveedorService:
         ahora = utcnow()
         self._cerrar(c, ahora, (solucion or "").strip() or None)
         if t.estado == Estado.ESCALADO:
-            svc._aplicar_estado(t, Estado.ESCALADO, Estado.EN_PROCESO, u, ctx, ahora)
+            svc._aplicar_estado(t, Estado.ESCALADO, Estado.EN_PROCESO, u, ctx, ahora, motivo=f"{c.proveedor.nombre} dio solución al caso")
         texto = f"{c.proveedor.nombre} dio solución" + (f" al caso {c.numero_caso}" if c.numero_caso else "")
         texto += f" en {texto_horas(c.minutos_solucion)} ({'dentro' if c.cumplido else 'fuera'} del plazo de {texto_plazo(c.proveedor.plazo_horas)})."
         if c.solucion:

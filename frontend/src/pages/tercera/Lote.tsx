@@ -36,7 +36,7 @@ function DialogoLote({ accion, tickets, onCerrar }: { accion: Accion; tickets: T
   const categoria = cat.data?.categorias.find((c) => c.id === f.categoria_id);
   const listo =
     (accion === "REASIGNAR" && f.responsable_id) || (accion === "PRIORIDAD" && f.prioridad_id) ||
-    (accion === "ESTADO" && f.estado && (!["PENDIENTE_CLIENTE", "CANCELADO"].includes(f.estado) || f.texto.trim().length >= 3)) ||
+    (accion === "ESTADO" && f.estado && f.texto.trim().length >= 5) ||
     (accion === "CATEGORIA" && f.subcategoria_id) || (accion === "NOTA" && f.texto.trim().length >= 2);
   return (
     <Dialog open onClose={() => onCerrar(!!resultado)} maxWidth="sm" fullWidth>
@@ -75,8 +75,8 @@ function DialogoLote({ accion, tickets, onCerrar }: { accion: Accion; tickets: T
                 <TextField select label="Nuevo estado" value={f.estado} onChange={(e) => setF({ ...f, estado: e.target.value })}>
                   {ESTADOS.map((e) => <MenuItem key={e} value={e}>{NOMBRE_ESTADO[e]}</MenuItem>)}
                 </TextField>
-                <TextField label="Comentario para el solicitante" multiline minRows={2} value={f.texto} onChange={(e) => setF({ ...f, texto: e.target.value })}
-                  helperText="Obligatorio para Pendiente cliente y Cancelado." />
+                <TextField label="Motivo del cambio (obligatorio)" multiline minRows={2} required value={f.texto} onChange={(e) => setF({ ...f, texto: e.target.value })}
+                  helperText="En Pendiente cliente, Resuelto, Cerrado y Cancelado lo ve el solicitante; en En proceso queda como nota interna." />
               </>
             )}
             {accion === "CATEGORIA" && (

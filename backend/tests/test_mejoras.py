@@ -125,8 +125,8 @@ def test_resumen_diario(client, como):
 # ------------------------------------------------------ 1. encuesta
 def resolver(client, como, t):
     url = f"{API}/tickets/{t['id']}"
-    client.post(f"{url}/estado", json={"estado": "EN_PROCESO"}, headers=como("david.medina"))
-    r = client.post(f"{url}/estado", json={"estado": "RESUELTO"}, headers=como("david.medina"))
+    client.post(f"{url}/estado", json={"estado": "EN_PROCESO", "comentario": "Motivo de prueba"}, headers=como("david.medina"))
+    r = client.post(f"{url}/estado", json={"estado": "RESUELTO", "comentario": "Motivo de prueba"}, headers=como("david.medina"))
     assert r.json()["estado"] == "RESUELTO"
     return url
 

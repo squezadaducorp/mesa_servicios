@@ -85,8 +85,8 @@ def test_comentario_copia_y_trazabilidad(client, como):
     assert all(c["copia_a"] == [] for c in client.get(url, headers=como("maria.andrade")).json()["comentarios"])
 
     # El cierre también llega a las copias (en CC del correo al solicitante)
-    client.post(f"{url}/estado", json={"estado": "RESUELTO"}, headers=david)
-    client.post(f"{url}/cerrar", json={}, headers=david)
+    client.post(f"{url}/estado", json={"estado": "RESUELTO", "comentario": "Motivo de prueba"}, headers=david)
+    client.post(f"{url}/cerrar", json={"comentario": "Cierre de prueba"}, headers=david)
     cierre = correos("TICKET_CERRADO")[-1]
     assert cierre.para == "maria.andrade@aducorp.com.ec" and cierre.cc == "jefe@cliente.com, bodega@cliente.com"
 

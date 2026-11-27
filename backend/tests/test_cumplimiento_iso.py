@@ -27,35 +27,45 @@ def _jefe(local_jefe, *locales):
 
 
 # ================================================================== 38 revisión de accesos
-def test_revision_de_accesos_jefe_decide_y_ti_aprueba(client, como):
-    _jefe("supervisor.operativo", "maria.andrade", "luis.paredes")
-    ha, hs = como("admin"), como("supervisor.operativo")
+def _revisor(local):
+    with SessionLocal() as s:
+        s.merge(m.Configuracion(clave="accesos.revisor_correo", valor=local + DOM))
+        s.commit()
+
+
+def test_revision_de_accesos_la_hace_el_coordinador_no_los_jefes(client, como):
+    _jefe("supervisor.operativo", "maria.andrade", "luis.paredes")   # el jefe directo sigue registrado
+    _revisor("supervisor.tecnico")
+    ha, hj, hc = como("admin"), como("supervisor.operativo"), como("supervisor.tecnico")
     r = client.post(f"{API}/accesos/revisiones", headers=ha)
     assert r.status_code == 201, r.text
     rev = r.json()
     assert client.post(f"{API}/accesos/revisiones", headers=ha).status_code == 422   # una abierta a la vez
-    with SessionLocal() as s:   # el jefe recibe el correo con su gente
-        aviso = s.scalar(select(m.ColaCorreo).where(m.ColaCorreo.plantilla == "REVISION_ACCESO"))
-        assert aviso.para == "supervisor.operativo" + DOM and "Luis Alberto Paredes" in aviso.cuerpo_html
+    with SessionLocal() as s:   # un solo correo, al Coordinador de Sistemas, con todas las cuentas
+        avisos = s.scalars(select(m.ColaCorreo).where(m.ColaCorreo.plantilla == "REVISION_ACCESO")).all()
+        assert [a.para for a in avisos] == ["supervisor.tecnico" + DOM]
+        assert "Luis Alberto Paredes" in avisos[0].cuerpo_html and "Coordinador de Sistemas" in avisos[0].cuerpo_html
 
-    p = client.get(f"{API}/accesos/pendientes", headers=hs).json()
-    assert p["pendientes"] == 2 and p["revision_id"] == rev["id"]
-    mios = client.get(f"{API}/accesos/revisiones/{rev['id']}", headers=hs).json()["items"]
-    assert {i["correo"] for i in mios} == {"maria.andrade" + DOM, "luis.paredes" + DOM}
-    assert client.get(f"{API}/accesos/revisiones/{rev['id']}", headers=como("maria.andrade")).status_code == 403
+    # El jefe directo ya no revisa accesos
+    assert client.get(f"{API}/accesos/pendientes", headers=hj).json()["revision_id"] is None
+    assert client.get(f"{API}/accesos/revisiones/{rev['id']}", headers=hj).status_code == 403
+    todos = client.get(f"{API}/accesos/revisiones/{rev['id']}", headers=ha).json()["items"]
+    luis = next(i for i in todos if i["correo"].startswith("luis"))
+    assert client.put(f"{API}/accesos/items/{luis['id']}", json={"decision": "MANTENER"}, headers=hj).status_code == 403
 
+    # El Coordinador ve todas las cuentas menos la suya (esa la revisa otro administrador)
+    p = client.get(f"{API}/accesos/pendientes", headers=hc).json()
+    assert p["revision_id"] == rev["id"] and p["pendientes"] == len(todos) - 1
+    mios = client.get(f"{API}/accesos/revisiones/{rev['id']}", headers=hc).json()["items"]
+    assert len(mios) == len(todos) - 1 and "supervisor.tecnico" + DOM not in {i["correo"] for i in mios}
     maria = next(i for i in mios if i["correo"].startswith("maria"))
-    luis = next(i for i in mios if i["correo"].startswith("luis"))
-    assert client.put(f"{API}/accesos/items/{luis['id']}", json={"decision": "BAJA"}, headers=hs).status_code == 422   # pide motivo
+    assert client.put(f"{API}/accesos/items/{luis['id']}", json={"decision": "BAJA"}, headers=hc).status_code == 422   # pide motivo
     assert client.put(f"{API}/accesos/items/{luis['id']}", json={"decision": "BAJA", "comentario": "Ya no trabaja en ADUCORP"},
-                      headers=hs).status_code == 200
-    assert client.put(f"{API}/accesos/items/{maria['id']}", json={"decision": "MANTENER"}, headers=hs).status_code == 200
-    # Un jefe no decide por gente ajena
-    otro = next(i for i in client.get(f"{API}/accesos/revisiones/{rev['id']}", headers=ha).json()["items"] if i["jefe_id"] is None)
-    assert client.put(f"{API}/accesos/items/{otro['id']}", json={"decision": "MANTENER"}, headers=hs).status_code == 403
+                      headers=hc).status_code == 200
+    assert client.put(f"{API}/accesos/items/{maria['id']}", json={"decision": "MANTENER"}, headers=hc).status_code == 200
 
     r = client.post(f"{API}/accesos/revisiones/{rev['id']}/aprobar", json={}, headers=ha)
-    assert r.status_code == 422 and "Faltan" in r.json()["detail"]   # TI revisa a los que no tienen jefe
+    assert r.status_code == 422 and "Faltan" in r.json()["detail"]
     for i in client.get(f"{API}/accesos/revisiones/{rev['id']}", headers=ha).json()["items"]:
         if i["decision"] is None:
             client.put(f"{API}/accesos/items/{i['id']}", json={"decision": "MANTENER"}, headers=ha)
@@ -68,7 +78,16 @@ def test_revision_de_accesos_jefe_decide_y_ti_aprueba(client, como):
         assert acta.para == "squezada" + DOM and acta.adjunto.startswith(b"%PDF")
     pdf = client.get(f"{API}/accesos/revisiones/{rev['id']}/acta", headers=ha)
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
-    assert client.get(f"{API}/accesos/revisiones", headers=hs).status_code == 403
+    assert client.get(f"{API}/accesos/revisiones", headers=hj).status_code == 403
+
+
+def test_sin_cuenta_del_coordinador_la_revision_queda_para_ti(client, como):
+    _jefe("supervisor.operativo", "maria.andrade")
+    r = client.post(f"{API}/accesos/revisiones", headers=como("admin")).json()   # squezada@ no existe en las pruebas
+    assert all(i["jefe_id"] is None for i in r["items"])
+    assert client.get(f"{API}/accesos/pendientes", headers=como("supervisor.operativo")).json()["revision_id"] is None
+    with SessionLocal() as s:
+        assert s.scalar(select(m.ColaCorreo).where(m.ColaCorreo.plantilla == "REVISION_ACCESO")) is None
 
 
 def test_worker_abre_la_revision_del_trimestre_una_vez(client):

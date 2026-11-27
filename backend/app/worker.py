@@ -91,8 +91,8 @@ def ciclo_cierre_automatico() -> int:
         cerrados = 0
         for t in session.scalars(select(m.Ticket).where(m.Ticket.estado == Estado.RESUELTO, m.Ticket.eliminado == False)).unique():
             if t.fecha_resolucion and svc.sla.cal.minutos_laborables(t.fecha_resolucion, ahora) >= horas * 60:
-                svc._aplicar_estado(t, Estado.RESUELTO, Estado.CERRADO, None, Contexto(ip="worker", equipo=PROPIETARIO), ahora)
-                svc._hist(t, None, "CIERRE", None, None, None, f"Cierre automático tras {horas} h laborables en Resuelto", ahora)
+                svc._aplicar_estado(t, Estado.RESUELTO, Estado.CERRADO, None, Contexto(ip="worker", equipo=PROPIETARIO), ahora,
+                                    motivo=f"Automático: cierre tras {horas} h laborables en Resuelto sin respuesta del solicitante")
                 cerrados += 1
         session.commit()
         return cerrados

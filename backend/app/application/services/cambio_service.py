@@ -72,6 +72,14 @@ def riesgo(impacto: str | None, probabilidad: str | None) -> str | None:
     return MATRIZ.get(impacto or "", {}).get(probabilidad or "")
 
 
+
+def motivo_cambio(texto: str | None) -> str:
+    """Cada cambio de estado del cambio (evaluar, aprobar o rechazar, implementar, revisar) lleva motivo."""
+    motivo = (texto or "").strip()
+    if len(motivo) < 5:
+        raise ReglaNegocio("Indique el motivo del cambio de estado")
+    return motivo
+
 class CambioService:
     def __init__(self, session: Session):
         self.session = session
@@ -232,7 +240,7 @@ class CambioService:
         if "evaluar" not in self.acciones(c, u):
             raise Prohibido("Solo TI evalúa los cambios, antes de aprobarlos")
         ahora = utcnow()
-        comentario = (dto.comentario or "").strip() or None
+        comentario = motivo_cambio(dto.comentario)
         for k in ("clasificacion", "tipo_cambio", "impacto", "probabilidad", "esfuerzo", "prioridad_ti"):
             setattr(c, k, getattr(dto, k))
         for k in ("evaluacion", "plan_implementacion", "plan_reversion"):
@@ -347,9 +355,7 @@ class CambioService:
         fila = self.session.scalar(select(A).where(A.cambio_id == c.id, A.aprobador_id == u.id, A.estado == "PENDIENTE"))
         if fila is None or c.estado != "EN_APROBACION":
             raise ReglaNegocio("No tiene una aprobación pendiente en este cambio")
-        comentario = (comentario or "").strip() or None
-        if not aprobar and not comentario:
-            raise ReglaNegocio("Indique el motivo del rechazo")
+        comentario = motivo_cambio(comentario)
         ahora = utcnow()
         fila.estado, fila.comentario, fila.fecha_respuesta = ("APROBADO" if aprobar else "RECHAZADO"), comentario, ahora
         quien = "Jefe de TI" if fila.rol == "JEFE_TI" else "Gerencia"
@@ -384,6 +390,7 @@ class CambioService:
         c = self.obtener(cambio_id, ctx.usuario)
         if "implementar" not in self.acciones(c, ctx.usuario):
             raise Prohibido("El cambio no está programado o no le corresponde")
+        motivo_cambio(dto.comentario)
         c.estado, c.fecha_implementado = "EN_REVISION", utcnow()
         c.version_ref = (dto.version_ref or "").strip() or c.version_ref
         c.fecha_actualizacion = c.fecha_implementado
@@ -397,7 +404,7 @@ class CambioService:
             raise Prohibido("El cambio no está en revisión posterior")
         ahora = utcnow()
         c.resultado, c.probado_solicitante = dto.resultado, dto.probado_solicitante
-        c.observaciones = (dto.observaciones or "").strip() or None
+        c.observaciones = motivo_cambio(dto.observaciones)
         c.estado = "REVERTIDO" if dto.resultado == "REVERTIDO" else "IMPLEMENTADO"
         if dto.informado:
             c.fecha_informado = ahora
