@@ -41,7 +41,6 @@ import AlternateEmailIcon from "@mui/icons-material/AlternateEmail";
 import DevicesIcon from "@mui/icons-material/DevicesOther";
 import PanelTareas from "./cuarta/PanelTareas";
 import TicketProblemas from "./ronda4b/TicketProblemas";
-import TiempoTrabajado from "./ronda4c/TiempoTrabajado";
 import { ChipClasificacion } from "../components/ClasificacionTicket";
 import {
   BannerProveedor, BannerSeguir, CasosProveedorTicket, ChipComentarioVisualizador, ChipVisualizadores, DialogoEscalarProveedor, PanelVisualizadores,
@@ -706,6 +705,95 @@ export default function TicketDetalle() {
               )}
             </Box>
           </Paper>
+
+          {/* Tarjetas de apoyo bajo los comentarios: 2 columnas tipo mosaico en pantallas medianas, 1 en móvil */}
+          <Box sx={{ columnCount: { xs: 1, md: 2 }, columnGap: 2, "& > .MuiPaper-root": { breakInside: "avoid", mb: 2, display: "inline-block", width: "100%" } }}>
+            <PanelVisualizadores t={t} onCambio={actualizar} />
+
+            {(a.has("copias") || t.copias.length > 0) && (
+              <Paper sx={{ p: 2.5 }}>
+                <TituloTarjeta icono={<AlternateEmailIcon />} titulo="Personas en copia" mb={1}
+                  accion={a.has("copias") && editandoCopias === null && (
+                    <Button size="small" startIcon={<EditIcon />} onClick={() => setEditandoCopias(t.copias.map((c) => c.correo))}>
+                      Editar
+                    </Button>
+                  )} />
+                {editandoCopias === null ? (
+                  <>
+                    {t.copias.length === 0 ? (
+                      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                        Nadie en copia. Agregue correos para que también reciban las respuestas y el cierre del ticket.
+                      </Typography>
+                    ) : (
+                      <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
+                        {t.copias.map((c) => (
+                          <Tooltip key={c.correo} title={ORIGEN_COPIA[c.origen] ?? c.origen}>
+                            <Chip size="small" variant="outlined" label={c.correo} />
+                          </Tooltip>
+                        ))}
+                      </Stack>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <CampoCorreos
+                      etiqueta="Correos en copia"
+                      valor={editandoCopias}
+                      onCambio={setEditandoCopias}
+                      ayuda="Reciben por correo las respuestas al solicitante y el cierre. No ven las notas internas."
+                    />
+                    <Stack direction="row" spacing={1} sx={{ mt: 1.5, justifyContent: "flex-end" }}>
+                      <Button size="small" onClick={() => setEditandoCopias(null)}>
+                        Cancelar
+                      </Button>
+                      <Button size="small" variant="contained" disabled={guardarCopias.isPending} onClick={() => guardarCopias.mutate(editandoCopias)}>
+                        Guardar
+                      </Button>
+                    </Stack>
+                  </>
+                )}
+              </Paper>
+            )}
+
+            <PanelVinculos t={t} onCambio={() => q.refetch()} />
+
+            {puedeIa && (
+              <Paper sx={{ p: 2.5 }}>
+                <TituloTarjeta icono={<AutoAwesomeIcon />} titulo="Asistente IA" />
+                {riesgo.data && (
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                      Riesgo de incumplimiento
+                    </Typography>
+                    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                      <Typography variant="h5" sx={{ color: riesgo.data.riesgo >= 70 ? "error.main" : riesgo.data.riesgo >= 40 ? "warning.main" : "success.main" }}>
+                        {Math.round(riesgo.data.riesgo)} %
+                      </Typography>
+                      <Chip size="small" label={riesgo.data.nivel} />
+                    </Stack>
+                    {riesgo.data.motivos.map((m) => (
+                      <Typography key={m} variant="caption" sx={{ display: "block", color: "text.secondary" }}>
+                        • {m}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+                {(resumen?.texto ?? t.resumen_ia) && (
+                  <Alert severity="info" icon={false} sx={{ mb: 1.5, whiteSpace: "pre-wrap" }}>
+                    {resumen?.texto ?? t.resumen_ia}
+                  </Alert>
+                )}
+                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                  <Button size="small" variant="outlined" onClick={() => resumir.mutate()} disabled={resumir.isPending}>
+                    {resumir.isPending ? "Resumiendo…" : "Resumir ticket"}
+                  </Button>
+                  <Button size="small" variant="outlined" onClick={() => sugerirRespuesta.mutate()} disabled={sugerirRespuesta.isPending}>
+                    Sugerir respuesta
+                  </Button>
+                </Stack>
+              </Paper>
+            )}
+          </Box>
         </Stack>
 
         <Stack spacing={2}>
@@ -768,52 +856,6 @@ export default function TicketDetalle() {
 
           <PanelSeguimiento t={t} />
 
-          <PanelVisualizadores t={t} onCambio={actualizar} />
-
-          {(a.has("copias") || t.copias.length > 0) && (
-            <Paper sx={{ p: 2.5 }}>
-              <TituloTarjeta icono={<AlternateEmailIcon />} titulo="Personas en copia" mb={1}
-                accion={a.has("copias") && editandoCopias === null && (
-                  <Button size="small" startIcon={<EditIcon />} onClick={() => setEditandoCopias(t.copias.map((c) => c.correo))}>
-                    Editar
-                  </Button>
-                )} />
-              {editandoCopias === null ? (
-                <>
-                  {t.copias.length === 0 ? (
-                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                      Nadie en copia. Agregue correos para que también reciban las respuestas y el cierre del ticket.
-                    </Typography>
-                  ) : (
-                    <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.75 }}>
-                      {t.copias.map((c) => (
-                        <Tooltip key={c.correo} title={ORIGEN_COPIA[c.origen] ?? c.origen}>
-                          <Chip size="small" variant="outlined" label={c.correo} />
-                        </Tooltip>
-                      ))}
-                    </Stack>
-                  )}
-                </>
-              ) : (
-                <>
-                  <CampoCorreos
-                    etiqueta="Correos en copia"
-                    valor={editandoCopias}
-                    onCambio={setEditandoCopias}
-                    ayuda="Reciben por correo las respuestas al solicitante y el cierre. No ven las notas internas."
-                  />
-                  <Stack direction="row" spacing={1} sx={{ mt: 1.5, justifyContent: "flex-end" }}>
-                    <Button size="small" onClick={() => setEditandoCopias(null)}>
-                      Cancelar
-                    </Button>
-                    <Button size="small" variant="contained" disabled={guardarCopias.isPending} onClick={() => guardarCopias.mutate(editandoCopias)}>
-                      Guardar
-                    </Button>
-                  </Stack>
-                </>
-              )}
-            </Paper>
-          )}
 
           <PanelAprobacion t={t} />
 
@@ -845,46 +887,7 @@ export default function TicketDetalle() {
             </Paper>
           )}
 
-          {a.has("nota_interna") && <TiempoTrabajado tipo="ticket" id={t.id} />}
 
-          <PanelVinculos t={t} onCambio={() => q.refetch()} />
-
-          {puedeIa && (
-            <Paper sx={{ p: 2.5 }}>
-              <TituloTarjeta icono={<AutoAwesomeIcon />} titulo="Asistente IA" />
-              {riesgo.data && (
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    Riesgo de incumplimiento
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                    <Typography variant="h5" sx={{ color: riesgo.data.riesgo >= 70 ? "error.main" : riesgo.data.riesgo >= 40 ? "warning.main" : "success.main" }}>
-                      {Math.round(riesgo.data.riesgo)} %
-                    </Typography>
-                    <Chip size="small" label={riesgo.data.nivel} />
-                  </Stack>
-                  {riesgo.data.motivos.map((m) => (
-                    <Typography key={m} variant="caption" sx={{ display: "block", color: "text.secondary" }}>
-                      • {m}
-                    </Typography>
-                  ))}
-                </Box>
-              )}
-              {(resumen?.texto ?? t.resumen_ia) && (
-                <Alert severity="info" icon={false} sx={{ mb: 1.5, whiteSpace: "pre-wrap" }}>
-                  {resumen?.texto ?? t.resumen_ia}
-                </Alert>
-              )}
-              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                <Button size="small" variant="outlined" onClick={() => resumir.mutate()} disabled={resumir.isPending}>
-                  {resumir.isPending ? "Resumiendo…" : "Resumir ticket"}
-                </Button>
-                <Button size="small" variant="outlined" onClick={() => sugerirRespuesta.mutate()} disabled={sugerirRespuesta.isPending}>
-                  Sugerir respuesta
-                </Button>
-              </Stack>
-            </Paper>
-          )}
         </Stack>
       </Box>
 
